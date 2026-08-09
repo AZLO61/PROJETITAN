@@ -618,21 +618,40 @@ export function useBoardGeneratorController() {
   }, [setupDone, phase, activePlayerId, titanModes, aiTrigger]);
 
   // ── AUTO-VALIDER PHASES IA ──
+  // FIX (bug hunt) : cet effect lisait `titanState.players` depuis le closure
+  // du composant sans l'avoir dans le tableau de dépendances (warning ESLint
+  // désactivé ci-dessous) — la ref `t` trouvée pouvait donc être un objet
+  // PÉRIMÉ, différent de celui présent dans `prev.players` au moment où
+  // `setTitanState` s'exécutait réellement. `programCards` mute son objet en
+  // entrée : muter l'objet périmé n'avait donc AUCUN effet sur l'état React
+  // réel. Le Titan IA était marqué `phaseValidated = true` sans avoir de
+  // cartes dans `programmed`, ce qui bloquait ensuite silencieusement l'IA en
+  // Phase Action (`if (titan.programmed.length === 0) return;`) et gelait le
+  // passage de tour ("en attente des autres Titans" indéfiniment).
+  // Fix : on lit l'état courant via `aiTitanStateRef.current` (toujours à
+  // jour, cf. le useEffect qui le synchronise plus haut) et on clone le
+  // Titan visé DANS l'updater `setTitanState(prev => ...)` — donc toujours à
+  // partir de `prev`, garanti à jour par React — avant de le muter.
   useEffect(() => {
     if (!setupDone) return;
     if (phase === "action") return; // géré par l'auto-play + markCardPlayed
     if (aiPlayingRef.current) return;
-    titanState.ordreJeu.forEach((id) => {
+    const curTitanState = aiTitanStateRef.current;
+    curTitanState.ordreJeu.forEach((id) => {
       if (titanModes[id] === "ia" && !phaseValidated[id]) {
         if (phase === "programmation") {
-          const t = titanState.players.find((p) => p.id === id);
+          const t = curTitanState.players.find((p) => p.id === id);
           if (t && t.programmed.length < 3 && t.hand.length >= 3) {
             const shuffled = [...t.hand].sort(() => Math.random() - 0.5);
             const chosen = shuffled.slice(0, 3);
-            programCards(id, chosen, titanState.players);
             setTitanState((prev) => ({
               ...prev,
-              players: prev.players.map((p) => ({ ...p, programmed: [...p.programmed], hand: [...p.hand] })),
+              players: prev.players.map((p) => {
+                if (p.id !== id) return p;
+                const clone = { ...p, hand: [...p.hand], programmed: [...p.programmed] };
+                const res = programCards(id, chosen, [clone]);
+                return res.ok ? clone : p; // si programCards refuse, on garde l'état inchangé
+              }),
             }));
           }
         }
