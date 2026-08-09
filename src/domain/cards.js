@@ -1,0 +1,2 @@
+// Semantic facade. Implementation remains centralized to guarantee behavior preservation.
+export { ACTION_CARDS, CARD_LABEL, CARD_FORCE, computeEnergyToutCasser, projectInDirection, resolveToutCasserBatiments, resolveToutCasserBlocs, resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant, resolveGraouhhh, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, resolveBoingBoing, canRage, makeDecisionRequest } from "./gameRules.js";
