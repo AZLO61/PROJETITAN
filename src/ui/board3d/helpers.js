@@ -15,6 +15,7 @@ function makeNumberSprite(number) {
   ctx.fillText(String(number), 32, 34);
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
 
   const material = new THREE.SpriteMaterial({
     map: texture,
