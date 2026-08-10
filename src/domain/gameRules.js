@@ -722,8 +722,10 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0) {
       } else {
         log.push(`${key} : RAGE impossible sur Titan ${targetId} (< 2 ressources en Repaire).`);
       }
-    } else {
+    } else if (canDil(targetId, gameState)) {
       decisions.push(makeDecisionRequest("DIL", titanId, targetId, "Tout Casser"));
+    } else {
+      log.push(`${key} : DIL impossible sur Titan ${targetId} (< 2 couleurs différentes en Repaire).`);
     }
 
     const mode = seuil4 ? "RAGE" : "DIL";
@@ -942,8 +944,10 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
         } else {
           log.push(`${key} : RAGE impossible sur Titan ${occupantId} (< 2 ressources en Repaire).`);
         }
-      } else {
+      } else if (canDil(occupantId, gameState)) {
         decisions.push(makeDecisionRequest("DIL", titanId, occupantId, "Tête en Avant"));
+      } else {
+        log.push(`${key} : DIL impossible sur Titan ${occupantId} (< 2 couleurs différentes en Repaire).`);
       }
       bagarreSet.add(occupantId);
       log.push(`${key} : Titan ${occupantId} percuté (${mode}, énergie ${energie}).`);
@@ -1025,10 +1029,11 @@ function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
     const landing = projectInDirection(t.row, t.col, dr, dc, reculDistance, { board, looseBlocks, titans, log, bagarreSet });
     occupant.cell = landing.row + landing.col;
     bagarreSet.add(t.id);
-    decisions.push(makeDecisionRequest("DIL", titanId, t.id, "Graouhhh"));
+    const dilOk = canDil(t.id, gameState);
+    if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, t.id, "Graouhhh"));
     const fatigue = resolveFatigue(titanId, t.id, mancheNumber, titans);
     log.push(
-      `Titan ${t.id} touché → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · DIL en attente · recule de ${reculDistance} case(s) → ${occupant.cell}` +
+      `Titan ${t.id} touché → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${dilOk ? "DIL en attente" : "DIL impossible (< 2 couleurs différentes en Repaire)"} · recule de ${reculDistance} case(s) → ${occupant.cell}` +
         (landing.hasBounced ? " (après rebond)" : "")
     );
   }
@@ -1282,11 +1287,12 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
     // Boing Boing ne badge PAS de RAGE au Seuil 4 (contrairement à Tout
     // Casser/Tête en Avant) — seul "Tombe sur la case" change
     // mécaniquement. Le sous-cas Titan est donc toujours un DIL.
-    decisions.push(makeDecisionRequest("DIL", titanId, occupantId, "Boing Boing"));
+    const dilOk = canDil(occupantId, gameState);
+    if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, occupantId, "Boing Boing"));
     const fatigue = resolveFatigue(titanId, occupantId, mancheNumber, titans);
     titan.bagarre += bagarreSet.size;
     log.push(
-      `${destKey} : Titan ${occupantId} percuté (énergie ${energie}${seuil4 ? ", Seuil 4" : ""}) → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · DIL en attente · +${bagarreSet.size} Bagarre (Titan ${titanId} → ${titan.bagarre}, FAQ #12) · projeté vers ${target.cell}` +
+      `${destKey} : Titan ${occupantId} percuté (énergie ${energie}${seuil4 ? ", Seuil 4" : ""}) → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${dilOk ? "DIL en attente" : "DIL impossible (< 2 couleurs différentes en Repaire)"} · +${bagarreSet.size} Bagarre (Titan ${titanId} → ${titan.bagarre}, FAQ #12) · projeté vers ${target.cell}` +
         (landing.hasBounced ? " (après rebond)" : "")
     );
     titan.cell = destKey;
@@ -1329,6 +1335,19 @@ function canRage(defenderId, gameState) {
   // FAQ #5 (tranchée) : si Repaire < 2, l'Adrénaline de la cible s'ajoute
   // au compte et devient elle-même une ressource ciblable par RAGE.
   return t.repaire.length + (t.adrenaline || 0) >= 2;
+}
+
+// Bug #9 (tracker) : DIL exige que l'attaquant désigne 2 couleurs
+// DIFFÉRENTES du Repaire du défenseur (cf. ATTACKER_PICK en UI). Si le
+// défenseur n'a pas au moins 2 couleurs distinctes en Repaire, l'action
+// est structurellement impossible à résoudre — jusqu'ici la décision
+// DIL était quand même enfilée dans decisionQueue, ce qui bloquait la
+// partie sur une décision qu'on ne peut jamais valider (le bouton
+// "Valider" reste désactivé indéfiniment, aucune sortie possible).
+// Même garde-fou que canRage() ci-dessus, appliqué au cas DIL.
+function canDil(defenderId, gameState) {
+  const t = gameState.titans.find((x) => x.id === defenderId);
+  return new Set(t.repaire).size >= 2;
 }
 
 function makeDecisionRequest(type, attackerId, defenderId, cardLabel) {
