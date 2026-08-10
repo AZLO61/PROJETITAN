@@ -36,6 +36,16 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(width, height);
+    // Bug #1/#2 (tracker) : depuis three.js r152, une texture couleur
+    // (diffuse/albedo) doit déclarer explicitement colorSpace =
+    // SRGBColorSpace, sinon le renderer la traite comme des données
+    // linéaires — résultat : rendu global assombri ET, sur les sprites
+    // PNG à alpha partiel (Titans), un liseré/voile blanchâtre sur les
+    // pixels semi-transparents (mauvais espace colorimétrique au
+    // blending). outputColorSpace est SRGBColorSpace par défaut sur ces
+    // versions, on le fixe quand même explicitement pour ne plus jamais
+    // dépendre d'une valeur par défaut qui pourrait changer.
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -58,11 +68,11 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     }
     updateCamera();
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.65));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.05);
     dirLight.position.set(6, 10, 4);
     scene.add(dirLight);
-    const fillLight = new THREE.DirectionalLight(0x8899ff, 0.25);
+    const fillLight = new THREE.DirectionalLight(0x8899ff, 0.32);
     fillLight.position.set(-6, 4, -4);
     scene.add(fillLight);
 
@@ -229,6 +239,7 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
       const baseHex = COLOR_HEX_3D[colorKey] ? `#${COLOR_HEX_3D[colorKey].toString(16).padStart(6, "0")}` : "#999999";
       drawFacade(ctx, 128, colorKey, baseHex);
       const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace; // couleur (pas une donnée) → décodage sRGB requis
       texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
       facadeTextureCache.set(colorKey, texture);
       return texture;
@@ -275,6 +286,7 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     function getSpriteTexture(key) {
       if (spriteTextureCache.has(key)) return spriteTextureCache.get(key);
       const texture = new THREE.TextureLoader().load(SPRITE_DATA[key]);
+      texture.colorSpace = THREE.SRGBColorSpace; // PNG couleur (sprite Titan) → décodage sRGB requis, sinon halo blanchâtre au blending alpha
       spriteTextureCache.set(key, texture);
       return texture;
     }
