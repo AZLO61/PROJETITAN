@@ -3,6 +3,7 @@ import HeaderPhase from "./panels/HeaderPhase.jsx";
 import RoundPanels from "./panels/RoundPanels.jsx";
 import BoardPanel from "./panels/BoardPanel.jsx";
 import TitanPanel from "./panels/TitanPanel.jsx";
+import DilRageBanner from "./panels/DilRageBanner.jsx";
 import DecisionPanels from "./panels/DecisionPanels.jsx";
 import ScoringPanel from "./panels/ScoringPanel.jsx";
 
@@ -15,6 +16,9 @@ export default function GameView(vm) {
       maxWidth: 820, margin: "0 auto", boxSizing: "border-box",
     }}>
       <HeaderPhase vm={vm} />
+      {/* Bug #6 : DIL/RAGE juste sous l'en-tête — décision bloquante,
+          ne doit plus être cachée en bas de l'écran après le plateau. */}
+      <DilRageBanner vm={vm} />
       <RoundPanels vm={vm} />
       <BoardPanel vm={vm} />
       <TitanPanel vm={vm} />
