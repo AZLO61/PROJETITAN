@@ -58,10 +58,6 @@ export default function BlockStockBar({ board, looseBlocks }) {
                 transition: "width .3s",
               }} />
             </div>
-            <div style={{
-              width: 10, height: 10, borderRadius: 3,
-              background: COLOR_HEX[c], border: "1px solid rgba(255,255,255,.3)",
-            }} />
           </div>
         );
       })}
