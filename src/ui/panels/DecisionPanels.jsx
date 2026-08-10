@@ -205,95 +205,6 @@ export default function DecisionPanels({ vm }) {
     tcSel
   } = vm;
   return <>
-      {/* ── DÉCISIONS DIL/RAGE ── */}
-      {currentDecision && (
-        <div style={{
-          background: currentDecision.type === "RAGE" ? "rgba(227,35,71,.12)" : "rgba(45,141,245,.12)",
-          border: `1.5px solid ${currentDecision.type === "RAGE" ? "#e32347" : "#2D8DF5"}`,
-          borderRadius: 12, padding: "10px 14px", marginBottom: 12, fontSize: ".78rem",
-        }}>
-          <div style={{ fontFamily: "'Bowlby One', sans-serif", marginBottom: 8, color: currentDecision.type === "RAGE" ? "#ff8fa3" : "#71dbff" }}>
-            {currentDecision.type} — {currentDecision.cardLabel} · T{currentDecision.attackerId} vs T{currentDecision.defenderId}
-            {decisionQueue.length > 1 ? ` (+${decisionQueue.length - 1} en attente)` : ""}
-          </div>
-
-          {currentDecision.type === "DIL" && currentDecision.stage === "ATTACKER_PICK" && (() => {
-            const defender = titanState.players.find((t) => t.id === currentDecision.defenderId);
-            const availableColors = [...new Set(defender.repaire)];
-            return (
-              <div>
-                <p style={{ marginBottom: 6 }}>T{currentDecision.attackerId} désigne 2 couleurs de T{currentDecision.defenderId} :</p>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-                  {availableColors.length === 0 && <span style={{ color: "rgba(255,255,255,.5)" }}>Repaire vide.</span>}
-                  {availableColors.map((c) => (
-                    <button key={c} onClick={() => dilAttackerPick(c)} style={{
-                      background: currentDecision.attackerChoices.includes(c) ? COLOR_HEX[c] : "rgba(255,255,255,.08)",
-                      border: `2px solid ${COLOR_HEX[c]}`, borderRadius: 8, color: "#fff",
-                      padding: "4px 12px", fontSize: ".76rem", cursor: "pointer", fontWeight: 700,
-                    }}>{c}</button>
-                  ))}
-                </div>
-                <button onClick={dilValidateAttackerPick} disabled={currentDecision.attackerChoices.length !== 2}
-                  style={smallBtn(currentDecision.attackerChoices.length === 2, "#2D8DF5", "#1E3A8A")}>
-                  Valider ({currentDecision.attackerChoices.length}/2)
-                </button>
-              </div>
-            );
-          })()}
-
-          {currentDecision.type === "DIL" && currentDecision.stage === "DEFENDER_PICK" && (() => {
-            const defender = titanState.players.find((t) => t.id === currentDecision.defenderId);
-            const canPay = (defender.adrenaline || 0) >= 1;
-            return (
-              <div>
-                <p style={{ marginBottom: 6 }}>T{currentDecision.defenderId} : laquelle perdre ?</p>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {currentDecision.attackerChoices.map((c) => (
-                    <button key={c} onClick={() => resolveDilDefenderPick(c)} style={{
-                      background: COLOR_HEX[c], border: "none", borderRadius: 8, color: "#fff",
-                      padding: "5px 14px", fontSize: ".78rem", fontWeight: 700, cursor: "pointer",
-                    }}>Perdre {c}</button>
-                  ))}
-                  <button onClick={resolveDilCancelWithAdrenaline} disabled={!canPay} style={{
-                    background: canPay ? "rgba(134,255,113,.15)" : "rgba(255,255,255,.08)",
-                    border: `1.5px solid ${canPay ? "#86ff71" : "rgba(255,255,255,.2)"}`,
-                    borderRadius: 8, color: canPay ? "#86ff71" : "rgba(255,255,255,.4)",
-                    padding: "5px 14px", fontSize: ".76rem", cursor: canPay ? "pointer" : "not-allowed",
-                  }}>
-                    Payer 1 💉 ({defender.adrenaline || 0}) → Annuler DIL
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
-
-          {currentDecision.type === "RAGE" && (() => {
-            const defender = titanState.players.find((t) => t.id === currentDecision.defenderId);
-            const showAdrOpt = defender.repaire.length < 2 && (defender.adrenaline || 0) > 0;
-            return (
-              <div>
-                <p style={{ marginBottom: 6 }}>T{currentDecision.attackerId} choisit librement :</p>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {defender.repaire.map((c, i) => (
-                    <button key={i} onClick={() => resolveRagePick(c)} style={{
-                      background: COLOR_HEX[c], border: "none", borderRadius: 8, color: "#fff",
-                      padding: "5px 14px", fontSize: ".78rem", fontWeight: 700, cursor: "pointer",
-                    }}>{c}</button>
-                  ))}
-                  {showAdrOpt && (
-                    <button onClick={resolveRagePickAdrenaline} style={{
-                      background: "rgba(134,255,113,.2)", border: "1.5px solid #86ff71",
-                      borderRadius: 8, color: "#86ff71", padding: "5px 14px", fontSize: ".78rem", fontWeight: 700, cursor: "pointer",
-                    }}>💉 ({defender.adrenaline}) FAQ#5</button>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-      )}
-
-
       {/* ── LOG D'ACTIONS ── */}
       {actionLog.length > 0 && (
         <div style={{
@@ -305,7 +216,24 @@ export default function DecisionPanels({ vm }) {
             <span style={{ color: "rgba(255,255,255,.4)", fontSize: ".65rem" }}>Journal d'actions</span>
             <button onClick={() => setActionLog([])} style={{ background: "none", border: "none", color: "rgba(255,255,255,.3)", cursor: "pointer", fontSize: ".65rem" }}>✕ vider</button>
           </div>
-          {actionLog.map((line, i) => <div key={i} style={{ color: "rgba(255,255,255,.7)" }}>{line}</div>)}
+          {actionLog.map((line, i) => {
+            // Bug #10 (tracker) : code couleur par Titan dans les logs —
+            // on repère le 1er Titan mentionné ("Titan 3", "T2"…) et on
+            // applique sa couleur (TITAN_COLORS) en liseré + texte, pour
+            // repérer d'un coup d'œil qui a fait quoi. Lignes neutres
+            // (sans Titan identifié, ex. résultats de scoring globaux)
+            // gardent le style gris d'origine.
+            const m = line.match(/T(?:itan)?\.?\s*(\d)/);
+            const titanId = m ? m[1] : null;
+            const c = titanId && TITAN_COLORS[titanId] ? TITAN_COLORS[titanId].accent : null;
+            return (
+              <div key={i} style={{
+                color: c || "rgba(255,255,255,.7)",
+                borderLeft: c ? `3px solid ${c}` : "3px solid transparent",
+                paddingLeft: 6,
+              }}>{line}</div>
+            );
+          })}
         </div>
       )}
 
