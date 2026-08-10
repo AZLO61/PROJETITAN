@@ -274,8 +274,18 @@ export function useBoardGeneratorController() {
       phase,
       passifUsed: JSON.parse(JSON.stringify(passifUsed)),
       actionLog: [...actionLog],
+      // Bug #8 (tracker) : "Annuler une carte doit la rendre réellement
+      // disponible, pas juste un rollback visuel". Ces deux valeurs
+      // vivaient hors du snapshot : `waitingNextTitan` restait à `true`
+      // après undo (canPlayCard/getPlayBlockReason le bloquent — la carte
+      // réapparaît dans `programmed` mais reste injouable, "Confirme
+      // Titan suivant" s'affiche quand même), et `cardsPlayedCountRef`
+      // (compteur de rounds, hors state React) n'était jamais restauré,
+      // désynchronisant l'avancement de round au coup suivant.
+      waitingNextTitan,
+      cardsPlayedCount: { ...cardsPlayedCountRef.current },
     }]);
-  }, [state, titanState, looseBlocks, activePlayerId, phase, passifUsed, actionLog]);
+  }, [state, titanState, looseBlocks, activePlayerId, phase, passifUsed, actionLog, waitingNextTitan]);
 
   // Vide l'historique quand le joueur actif change (tour terminé = irréversible)
   const prevActivePlayerRef = useRef(activePlayerId);
@@ -304,6 +314,11 @@ export function useBoardGeneratorController() {
         setJnpMode(false); setJnpSelected([]);
         setDecisionQueue([]);
         setAiPlayingSync(false);
+        // Bug #8 (tracker) : restaurer aussi ce qui vivait hors du
+        // snapshot React classique, sinon la carte réapparaît dans la
+        // main sans être réellement rejouable.
+        setWaitingNextTitan(snap.waitingNextTitan ?? false);
+        cardsPlayedCountRef.current = { ...(snap.cardsPlayedCount || {}) };
       }, 0);
       return prev.slice(0, -1);
     });
