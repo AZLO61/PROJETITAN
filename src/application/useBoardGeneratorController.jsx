@@ -1445,7 +1445,7 @@ export function useBoardGeneratorController() {
                   background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.12)",
                   borderRadius: 10, padding: "10px 14px", flexWrap: "wrap",
                 }}>
-                  <TitanIcon titanId={id} size={30} />
+                  <TitanIcon titanId={id} size={30} variant="border" />
                   <input
                     type="text"
                     value={titanNames[id]}
