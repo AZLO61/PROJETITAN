@@ -439,7 +439,7 @@ export function useBoardGeneratorController() {
     if (titanModes[activePlayerId] !== "ia") return;
     if (aiPlayingRef.current) return;
 
-    const titan = titanState.players.find((t) => t.id === activePlayerId);
+    const titan = aiTitanStateRef.current.players.find((t) => t.id === activePlayerId);
     if (!titan) return;
     if (titan.programmed.length === 0) return;
 
@@ -875,11 +875,23 @@ export function useBoardGeneratorController() {
             setProgCountdown(null);
             setProgSelection((cur) => {
               if (cur.length === 3 && selectedTitanId) {
-                const res = programCards(selectedTitanId, cur, titanState.players);
-                if (res?.log) setActionLog((p) => [...p, ...res.log]);
-                setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-                setPhaseValidated((prev) => ({ ...prev, [selectedTitanId]: true }));
-                setActionLog((p) => [...p, `✅ T${selectedTitanId} programme : ${cur.map((c) => CARD_LABEL[c]).join(", ")}`]);
+                // FIX (bug hunt) : lecture via la ref toujours à jour (jamais
+                // `titanState.players` par closure, cf. le même bug côté IA
+                // plus haut) — évite de muter un objet Titan périmé si
+                // l'état a changé pendant les 5s du compte à rebours.
+                const curPlayers = aiTitanStateRef.current.players;
+                const res = programCards(selectedTitanId, cur, curPlayers);
+                if (res.ok) {
+                  setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+                  setPhaseValidated((prev) => ({ ...prev, [selectedTitanId]: true }));
+                  setActionLog((p) => [...p, `✅ T${selectedTitanId} programme : ${cur.map((c) => CARD_LABEL[c]).join(", ")}`]);
+                } else {
+                  // Échec (ex. état déjà modifié entre-temps) : on informe le
+                  // joueur au lieu de valider silencieusement une phase non
+                  // réellement programmée — ce silence était la cause du gel
+                  // de tour ("en attente des autres Titans").
+                  setActionLog((p) => [...p, `⚠️ Programmation T${selectedTitanId} échouée : ${res.reason}`]);
+                }
               }
               return [];
             });
@@ -1095,7 +1107,7 @@ export function useBoardGeneratorController() {
       board: state.board, titans: titanState.players, looseBlocks,
     });
     if (actuallyUseAdrenaline) attacker.adrenaline -= 1;
-    setActionLog(result.log);
+    setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
     markCardPlayed(selectedTitanId, "tete_en_avant");
     setTeaMode(false);
@@ -1110,7 +1122,7 @@ export function useBoardGeneratorController() {
     const result = resolveGraouhhh(selectedTitanId, direction.dr, direction.dc, mancheNumber, {
       board: state.board, titans: titanState.players, looseBlocks,
     });
-    setActionLog(result.log);
+    setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
     markCardPlayed(selectedTitanId, "graouhhh");
     setLooseBlocks((prev) => ({ ...prev }));
@@ -1143,7 +1155,7 @@ export function useBoardGeneratorController() {
       board: state.board, titans: titanState.players, looseBlocks,
     });
     if (result.applied && actuallyUseAdrenaline) attacker.adrenaline -= 1;
-    setActionLog(result.log);
+    setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
     if (result.applied) { markCardPlayed(selectedTitanId, "boing_boing"); setBbMode(false); setBbDest(null); }
     setState((prev) => ({ ...prev }));
@@ -1164,13 +1176,12 @@ export function useBoardGeneratorController() {
   const jouerMouvementGratuit = useCallback(
     (destKey) => {
       if (!selectedTitanId || !moveReachable.has(destKey) || !canUseMovePassif(selectedTitanId)) return;
-      // Snapshot AVANT mutation
       captureSnapshot();
-      const freshPlayers = JSON.parse(JSON.stringify(titanState.players));
-      const attacker = freshPlayers.find((t) => t.id === selectedTitanId);
-      const actuallyUseAdrenaline = moveAdrenaline && (attacker.adrenaline || 0) >= 1;
-      // Calculer le chemin pour animation case/case
-      const path = getMovePath(attacker.cell, destKey, moveMaxRange, state.board, titansByCell, looseBlocks);
+      const attackerSnap = titanState.players.find((t) => t.id === selectedTitanId);
+      if (!attackerSnap) return;
+      const actuallyUseAdrenaline = moveAdrenaline && (attackerSnap.adrenaline || 0) >= 1;
+      // Calculer le chemin pour animation case/case (lecture seule, sûr même sur un snapshot figé)
+      const path = getMovePath(attackerSnap.cell, destKey, moveMaxRange, state.board, titansByCell, looseBlocks);
       setMoveMode(false);
       setAnimating(true);
       setAnimLabel(`Titan ${selectedTitanId} se déplace…`);
@@ -1178,34 +1189,42 @@ export function useBoardGeneratorController() {
       const steps = path.slice(1); // exclure la case de départ
       let i = 0;
       const titanIdSnap = selectedTitanId;
+
+      // FIX (bug hunt) : la résolution réelle (mutation + coût Adrénaline)
+      // est appliquée ICI, au moment où l'animation se termine, en relisant
+      // l'état LIVE via aiTitanStateRef (toujours synchronisé après chaque
+      // render, même pattern que le flux IA) — jamais via une copie figée
+      // prise avant l'animation. Avant ce fix, `freshPlayers` était cloné en
+      // tout début de fonction puis réinjecté tel quel 1 à plusieurs
+      // secondes plus tard : toute mise à jour concurrente (ex. résolution
+      // DIL/RAGE globale, indépendante du joueur actif, survenant pendant
+      // l'animation) était silencieusement écrasée.
+      const applyFinalMove = () => {
+        setMovingTitanOverride(null);
+        const livePlayers = aiTitanStateRef.current.players;
+        const result = resolveFreeMovement(titanIdSnap, destKey, { titans: livePlayers, board: state.board, looseBlocks });
+        if (actuallyUseAdrenaline) {
+          const a = livePlayers.find((t) => t.id === titanIdSnap);
+          if (a) a.adrenaline -= 1;
+        }
+        setActionLog((prev) => [...prev, ...result.log]);
+        setPassifUsed((prev) => ({ ...prev, [titanIdSnap]: { ...(prev[titanIdSnap] || {}), move: true } }));
+        setTitanState((prev) => ({ ...prev, players: [...prev.players] })); // force re-render, mêmes objets déjà mutés
+        setAnimating(false);
+        setAnimLabel("");
+      };
+
       const tick = () => {
         if (i < steps.length - 1) {
           setMovingTitanOverride({ titanId: titanIdSnap, cell: steps[i] });
           i++;
           setTimeout(tick, 1000);
         } else {
-          // Dernière case = destination finale → appliquer la vraie résolution
-          setMovingTitanOverride(null);
-          const result = resolveFreeMovement(titanIdSnap, destKey, { titans: freshPlayers, board: state.board, looseBlocks });
-          if (actuallyUseAdrenaline) attacker.adrenaline -= 1;
-          setActionLog(result.log);
-          setPassifUsed((prev) => ({ ...prev, [titanIdSnap]: { ...(prev[titanIdSnap] || {}), move: true } }));
-          setTitanState((prev) => ({ ...prev, players: freshPlayers }));
-          setAnimating(false);
-          setAnimLabel("");
+          applyFinalMove();
         }
       };
       if (steps.length > 0) setTimeout(tick, 1000);
-      else {
-        // Fallback direct (même case?)
-        const result = resolveFreeMovement(selectedTitanId, destKey, { titans: freshPlayers, board: state.board, looseBlocks });
-        if (actuallyUseAdrenaline) attacker.adrenaline -= 1;
-        setActionLog(result.log);
-        setPassifUsed((prev) => ({ ...prev, [selectedTitanId]: { ...(prev[selectedTitanId] || {}), move: true } }));
-        setTitanState((prev) => ({ ...prev, players: freshPlayers }));
-        setAnimating(false);
-        setAnimLabel("");
-      }
+      else applyFinalMove(); // fallback direct (même case)
     },
     [selectedTitanId, moveReachable, moveAdrenaline, moveMaxRange, titanState.players, titansByCell, canUseMovePassif, captureSnapshot, state.board, looseBlocks]
   );
@@ -1222,7 +1241,7 @@ export function useBoardGeneratorController() {
       if (!selectedTitanId || !recupPool.has(cellKey) || !canUseRecupPassif(selectedTitanId)) return;
       captureSnapshot();
       const result = resolveRecuperation(selectedTitanId, cellKey, { titans: titanState.players, looseBlocks, board: state.board });
-      setActionLog(result.log);
+      setActionLog((prev) => [...prev, ...result.log]);
       if (result.applied) { setRecupMode(false); setPassifUsed((prev) => ({ ...prev, [selectedTitanId]: { ...(prev[selectedTitanId] || {}), recup: true } })); }
       setLooseBlocks((prev) => ({ ...prev }));
       setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
@@ -1241,7 +1260,7 @@ export function useBoardGeneratorController() {
     if (!selectedTitanId || !canPlayCard("je_ne_partage_pas")) return;
     captureSnapshot();
     const result = resolveJeNePartagePas(selectedTitanId, jnpSelected, { titans: titanState.players, looseBlocks, board: state.board });
-    setActionLog(result.log);
+    setActionLog((prev) => [...prev, ...result.log]);
     if (result.applied) { markCardPlayed(selectedTitanId, "je_ne_partage_pas"); setJnpMode(false); setJnpSelected([]); }
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
@@ -1330,7 +1349,7 @@ export function useBoardGeneratorController() {
     const bonus = tcAdrenaline && (attacker.adrenaline || 0) >= 1 ? 1 : 0;
     if (bonus) attacker.adrenaline -= 1;
     const result = resolveToutCasser(selectedTitanId, { board: state.board, titans: titanState.players, looseBlocks }, bonus);
-    setActionLog(result.log);
+    setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
     markCardPlayed(selectedTitanId, "tout_casser");
     setTcAdrenaline(false);
