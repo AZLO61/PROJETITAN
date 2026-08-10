@@ -208,15 +208,13 @@ export default function BoardPanel({ vm }) {
       {/* ── PANNEAU TITAN SÉLECTIONNÉ ── */}
       {selectedTitan && (
         <div style={{
-          background: (selectedTitan.id === activePlayerId && phase === "action")
-            ? (tcSel ? `linear-gradient(135deg, ${tcSel.accent}44 0%, ${tcSel.accent}22 100%)` : "rgba(255,255,255,.12)")
-            : (tcSel ? `${tcSel.accent}14` : "rgba(255,255,255,.04)"),
-          border: (selectedTitan.id === activePlayerId && phase === "action")
-            ? (tcSel ? `2.5px solid ${tcSel.accent}` : "2.5px solid #FFD93D")
-            : (tcSel ? `1.5px solid ${tcSel.accent}55` : "1.5px solid rgba(255,255,255,.1)"),
-          boxShadow: (selectedTitan.id === activePlayerId && phase === "action")
-            ? (tcSel ? `0 0 0 3px ${tcSel.accent}33, 0 4px 24px ${tcSel.accent}44` : "0 0 0 3px rgba(255,217,61,.3)")
-            : "none",
+          // Panneau d'actions (cartes/passifs) : reste neutre — la
+          // surbrillance "c'est ton tour" ne vit que sur le panneau
+          // ressources (TitanResourceBand), pas ici, pour éviter que
+          // l'œil hésite entre deux zones en glow simultanément.
+          background: tcSel ? `${tcSel.accent}14` : "rgba(255,255,255,.04)",
+          border: tcSel ? `1.5px solid ${tcSel.accent}55` : "1.5px solid rgba(255,255,255,.1)",
+          boxShadow: "none",
           borderRadius: 14, padding: "12px 14px", marginBottom: 12,
           transition: "all .2s",
         }}>
