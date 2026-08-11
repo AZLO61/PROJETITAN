@@ -78,12 +78,14 @@ export default function TitanResourceBand({ titans, selectedTitanId, onSelect, a
                 <span style={{ fontSize: ".58rem", color: "rgba(255,255,255,.3)" }}>Repaire vide</span>
               )}
             </div>
-            {/* Socles + Pistes ADN */}
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: ".58rem", color: "rgba(255,255,255,.55)" }}>
-              <span title={(t.socles || []).length ? `Détail : ${(t.socles || []).join(" + ")}` : "Aucun socle collecté"}>
-                🧱 Socles: {(t.socles || []).reduce((s, v) => s + v, 0)} pts
+            {/* Socles : bug remonté "valeur totale ET unitaire" — le total
+                seul ne suffisait pas, le détail par socle doit être visible
+                directement (pas seulement au survol). */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: ".58rem", color: "rgba(255,255,255,.55)", alignItems: "baseline" }}>
+              <span>
+                🧱 Socles: <strong style={{ color: "#fff" }}>{(t.socles || []).reduce((s, v) => s + v, 0)} pts</strong>
                 {(t.socles || []).length > 0 && (
-                  <span style={{ color: "rgba(255,255,255,.35)" }}> ({(t.socles || []).length})</span>
+                  <span style={{ color: "rgba(255,255,255,.4)" }}> ({t.socles.join("+")})</span>
                 )}
               </span>
               <span>💪 {t.bagarre || 0}</span>
@@ -92,15 +94,26 @@ export default function TitanResourceBand({ titans, selectedTitanId, onSelect, a
                   toujours consultable" : avant, cette info n'apparaissait
                   que dans le panneau détaillé du Titan sélectionné. Elle
                   est maintenant toujours visible ici, quel que soit le
-                  Titan sélectionné, avec le détail des cartes au survol. */}
-              {(t.repos || []).length > 0 && (
-                <span
-                  title={`En Zone Repos (indisponible jusqu'à la Manche suivante) : ${t.repos.map((e) => CARD_LABEL[e.cardId]).join(", ")}`}
-                  style={{ color: "#ff8fa3", fontWeight: 700, cursor: "help" }}
-                >
-                  🎴 Repos: {t.repos.length}
-                </span>
-              )}
+                  Titan sélectionné. Respecte faceUp : les cartes volées en
+                  Phase Repos (faceUp=true, livret V35) affichent leur nom ;
+                  les cartes en Repos via Fatigue (faceUp=false, réservées à
+                  leur propriétaire) restent anonymes dans ce bandeau public. */}
+              {(t.repos || []).length > 0 && (() => {
+                const visibleNames = t.repos.filter((e) => e.faceUp).map((e) => CARD_LABEL[e.cardId]);
+                const hiddenCount = t.repos.length - visibleNames.length;
+                const detail = [
+                  visibleNames.length ? visibleNames.join(", ") : null,
+                  hiddenCount ? `${hiddenCount} carte(s) cachée(s) (Fatigue)` : null,
+                ].filter(Boolean).join(" · ");
+                return (
+                  <span
+                    title={`En Zone Repos (indisponible jusqu'à la Manche suivante) : ${detail}`}
+                    style={{ color: "#ff8fa3", fontWeight: 700, cursor: "help" }}
+                  >
+                    🎴 Repos: {t.repos.length}{visibleNames.length > 0 ? ` (${visibleNames.join(", ")})` : ""}
+                  </span>
+                );
+              })()}
             </div>
           </div>
         );
