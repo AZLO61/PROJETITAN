@@ -209,10 +209,10 @@ export default function RoundPanels({ vm }) {
           Ne démarre qu'une fois que TOUS les Titans ont joué leurs 3 cartes
           de la Manche (jouées ou défaussées cachées). Le Détonateur choisit
           UNE FOIS un sens de rotation, puis la chaîne se résout d'un coup :
-          chaque Titan tire au hasard 1 carte parmi les 3 de son voisin dans
-          ce sens, la révèle publiquement, puis la repose face cachée en
-          Zone Repos (indisponible jusqu'à la Manche suivante). Plus de
-          choix individuel — objectif anti-répétitivité (confirmé Nikola). */}
+          chaque Titan pioche à l'aveugle 1 carte parmi les 3 de son voisin
+          dans ce sens, et la pose FACE VISIBLE en Zone Repos (consultable
+          par tous en permanence jusqu'à la Manche suivante). Plus de choix
+          individuel — objectif anti-répétitivité (confirmé Nikola). */}
       {phase === "repos" && (
         <div style={{
           background: "rgba(227,35,71,.1)", border: "1px solid rgba(227,35,71,.35)",
@@ -233,7 +233,7 @@ export default function RoundPanels({ vm }) {
                 ➡️ Droite
               </button>
               <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.45)" }}>
-                Chaque Titan vole ensuite, au hasard, 1 carte à son voisin dans ce sens — révélée puis reposée face cachée.
+                Chaque Titan vole ensuite, à l'aveugle, 1 carte à son voisin dans ce sens — posée face visible en Zone Repos.
               </span>
             </div>
           ) : (
