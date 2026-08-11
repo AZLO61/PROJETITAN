@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { isBuildingCell, rowFromIndex, rowIndex, socleValue, isSocleMarker, COLOR_HEX } from "../../domain/gameRules.js";
+import { rowFromIndex, rowIndex, socleValue, isSocleMarker, COLOR_HEX } from "../../domain/gameRules.js";
 import {
   COLOR_HEX_3D,
   CELL,
@@ -84,8 +84,13 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     scene.add(groundGroup, buildingGroup, titanGroup, looseGroup, highlightGroup);
 
     // --- Sol 9×9 (statique — la forme du plateau ne change jamais) ---
+    // Bug remonté : les cases bâtiment (sous les socles/bâtiments) avaient
+    // une teinte (BUILDING_BASE) différente des cases couloir (ROAD_COLOR),
+    // créant un "damier" visible sous les constructions. Le livret ne fait
+    // aucune distinction visuelle entre case bâtiment et couloir une fois
+    // construit — seule la présence du bâtiment doit se voir. Toutes les
+    // cases du sol utilisent donc désormais la même couleur de base.
     const ROAD_COLOR = 0x252528;
-    const BUILDING_BASE = 0x2e2d31;
     function jitterColor(hex, range) {
       const c = new THREE.Color(hex);
       const delta = (Math.random() * 2 - 1) * range;
@@ -96,11 +101,10 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     }
     for (let r = 0; r <= 8; r++) {
       for (let c = 1; c <= 9; c++) {
-        const isBldg = isBuildingCell(rowFromIndex(r), c);
         const { x, z } = cellWorld(r, c);
         const geo = new THREE.BoxGeometry(CELL - GAP, 0.08, CELL - GAP);
-        const color = isBldg ? jitterColor(BUILDING_BASE, 0.05) : ROAD_COLOR;
-        const mat = new THREE.MeshStandardMaterial({ color, roughness: isBldg ? 0.85 : 0.95 });
+        const color = jitterColor(ROAD_COLOR, 0.05);
+        const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.95 });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(x, -0.04, z);
         groundGroup.add(mesh);
