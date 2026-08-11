@@ -645,8 +645,15 @@ export default function BoardPanel({ vm }) {
           {/* ── VALIDATION DE PHASE ── */}
           {/* Phase Repos : plus de validation manuelle ni de vol au choix —
               résolution automatique via la bannière "Vol Phase Repos"
-              (sens choisi par le Détonateur), voir plus haut dans la page. */}
-          {phase !== "repos" && (
+              (sens choisi par le Détonateur), voir plus haut dans la page.
+              Phase Action : la validation est 100% automatique via
+              advanceActionRound (voir useBoardGeneratorController) dès que
+              les 3 rounds sont joués par tout le monde — le seul geste que
+              le joueur doit faire entre deux cartes est "▶ Titan suivant".
+              Afficher "✔ Valider ma Phase" ici en plus créait un double
+              effet de validation (bug remonté #boing-boing / passage de
+              titan). */}
+          {phase !== "repos" && phase !== "action" && (
             <div style={{
               display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
               borderTop: "1px dashed rgba(255,255,255,.1)", paddingTop: 8,
