@@ -278,7 +278,7 @@ export default function HeaderPhase({ vm }) {
                   const cardsLeft = activeTitan?.programmed.length ?? 0;
                   const hint = cardsLeft > 0
                     ? `👆 Clique ton Titan sur la grille, puis joue une carte ou utilise un passif`
-                    : `✅ Plus de cartes — clique "Valider ma Phase" pour finir ton tour`;
+                    : `✅ Plus de cartes — clique "▶ Titan suivant" (le passage au round/titan suivant est automatique, pas besoin de "Valider ma Phase" en phase Action)`;
                   return (
                     <div style={{ fontSize: ".65rem", color: "rgba(255,255,255,.6)", marginTop: 2 }}>
                       {hint}
