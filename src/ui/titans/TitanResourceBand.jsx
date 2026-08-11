@@ -1,5 +1,6 @@
 import React from "react";
 import { COULEURS, COLOR_HEX, STOCK_INITIAL } from "../../domain/gameRules.js";
+import { CARD_LABEL } from "../../domain/cards.js";
 import { TITAN_COLORS } from "./constants.js";
 import { TitanIcon } from "./TitanVisuals.jsx";
 // ============================================================
@@ -78,10 +79,28 @@ export default function TitanResourceBand({ titans, selectedTitanId, onSelect, a
               )}
             </div>
             {/* Socles + Pistes ADN */}
-            <div style={{ display: "flex", gap: 6, fontSize: ".58rem", color: "rgba(255,255,255,.55)" }}>
-              <span>🧱 Socles: {(t.socles || []).reduce((s, v) => s + v, 0)}</span>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", fontSize: ".58rem", color: "rgba(255,255,255,.55)" }}>
+              <span title={(t.socles || []).length ? `Détail : ${(t.socles || []).join(" + ")}` : "Aucun socle collecté"}>
+                🧱 Socles: {(t.socles || []).reduce((s, v) => s + v, 0)} pts
+                {(t.socles || []).length > 0 && (
+                  <span style={{ color: "rgba(255,255,255,.35)" }}> ({(t.socles || []).length})</span>
+                )}
+              </span>
               <span>💪 {t.bagarre || 0}</span>
               <span>💥 {t.destruction || 0}</span>
+              {/* Zone Repos — bug remonté "carte enlevée en phase repos pas
+                  toujours consultable" : avant, cette info n'apparaissait
+                  que dans le panneau détaillé du Titan sélectionné. Elle
+                  est maintenant toujours visible ici, quel que soit le
+                  Titan sélectionné, avec le détail des cartes au survol. */}
+              {(t.repos || []).length > 0 && (
+                <span
+                  title={`En Zone Repos (indisponible jusqu'à la Manche suivante) : ${t.repos.map((e) => CARD_LABEL[e.cardId]).join(", ")}`}
+                  style={{ color: "#ff8fa3", fontWeight: 700, cursor: "help" }}
+                >
+                  🎴 Repos: {t.repos.length}
+                </span>
+              )}
             </div>
           </div>
         );
