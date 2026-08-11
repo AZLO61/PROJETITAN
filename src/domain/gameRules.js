@@ -1044,8 +1044,12 @@ function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
   }
 
   if (touched.length >= 2) {
+    // FAQ #11 (livret V35, cas OUVERT) tranchée le 2026-08-11 : le bonus
+    // est plafonné à +1 Adrénaline, quel que soit le nombre de Titans
+    // touchés au-delà de 2 (3 ou 4 Titans touchés ne donnent toujours
+    // que +1, pas +2/+3). Ne pas multiplier par touched.length.
     titan.adrenaline = (titan.adrenaline || 0) + 1;
-    log.push(`Bonus : ${touched.length} Titans touchés (≥2) → +1 Adrénaline fixe (non cumulable, FAQ #11) — Titan ${titanId} stock ${titan.adrenaline}.`);
+    log.push(`Bonus : ${touched.length} Titans touchés (≥2) → +1 Adrénaline fixe et plafonné (FAQ #11 tranchée) — Titan ${titanId} stock ${titan.adrenaline}.`);
   }
 
   return { log, titansTouches: touched.map((t) => t.id), decisions };
@@ -1741,18 +1745,23 @@ function sendCardToOwnRepos(titan, cardId, mancheNumber, faceUp) {
    exactement 3 cartes : playedThisManche + discardedHidden.
 
    Ancienne règle (choix conscient d'1 carte parmi les 3 jouées,
-   visibles) → ABANDONNÉE. Nouvelle règle :
+   visibles) → ABANDONNÉE. Nouvelle règle (confirmée Nikola, session
+   2026-08-11 — alignée sur le livret V35) :
    - Le Détonateur choisit UNE FOIS un sens de rotation (gauche ou
      droite) pour toute la chaîne — pas de choix individuel par Titan.
    - Dans ce sens, chaque Titan vole 1 carte à son voisin immédiat,
-     TIRÉE AU HASARD parmi les 3 cartes de la Manche du voisin
-     (mélange des 3, jouées + défaussées cachées confondues).
-   - La carte tirée est révélée publiquement au moment du tir (tous les
-     joueurs voient laquelle c'est), PUIS reposée face cachée dans la
-     Zone Repos de la victime, indisponible jusqu'à la Manche suivante.
+     TIRÉE FACE CACHÉE / AU HASARD parmi les 3 cartes de la Manche du
+     voisin (mélange des 3, jouées + défaussées cachées confondues) —
+     le voleur ne choisit pas, il pioche à l'aveugle.
+   - La carte tirée est ensuite posée FACE VISIBLE dans la Zone Repos
+     de la victime (visible de tous en permanence, pas seulement au
+     moment du tir), indisponible jusqu'à la Manche suivante.
    - Objectif déclaré (Nikola) : casser la répétitivité des mêmes
      actions d'une Manche à l'autre, sans laisser de lecture tactique
-     sur QUI vole QUOI (le hasard remplace le choix stratégique ici).
+     sur QUI vole QUOI (le hasard remplace le choix stratégique ici) —
+     mais une fois volée, l'identité de la carte reste consultable par
+     tous, contrairement à la Fatigue (voir resolveFatigue) qui reste
+     face cachée et réservée à sa victime.
    - Chaque Titan est victime EXACTEMENT une fois (rotation circulaire
      sur ordreJeu ou son inverse) — aucun chevauchement de pool entre
      deux vols de la même chaîne, résolution séquentielle sûre.
@@ -1781,8 +1790,8 @@ function resolveVolPhaseRepos(mancheNumber, direction, ordreJeu, gameStateTitans
       const idxDiscard = (victim.discardedHidden || []).indexOf(cardId);
       if (idxDiscard !== -1) victim.discardedHidden.splice(idxDiscard, 1);
     }
-    victim.repos.push({ cardId, faceUp: false, returnAtManche: mancheNumber + 1 });
-    log.push(`Vol Phase Repos : Titan ${thiefId} tire au hasard chez Titan ${victimId} → révèle ${CARD_LABEL[cardId]}, puis la repose face cachée en Zone Repos (Titan ${victimId}) jusqu'à la Manche ${mancheNumber + 1}.`);
+    victim.repos.push({ cardId, faceUp: true, returnAtManche: mancheNumber + 1 });
+    log.push(`Vol Phase Repos : Titan ${thiefId} pioche à l'aveugle chez Titan ${victimId} → ${CARD_LABEL[cardId]}, posée face visible en Zone Repos (Titan ${victimId}) jusqu'à la Manche ${mancheNumber + 1}.`);
   }
   return { log };
 }
