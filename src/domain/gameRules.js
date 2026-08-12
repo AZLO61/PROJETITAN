@@ -152,17 +152,26 @@ function generateBoard() {
     for (const c of BUILDING_COLS) allBuildingCells.push({ row: r, col: c });
 
   // 1. Placement Vert : E5 fixe + 1 par quadrant
+  // Bug remonté : 2 Téléporteurs pouvaient tomber sur la même ligne ou la
+  // même colonne (les 4 tirages par quadrant étaient indépendants). Le
+  // livret impose 1 seul Téléporteur par ligne/colonne. Construction
+  // directe (pas de tirage-rejet) : on impose des lignes opposées entre
+  // NO/NE, des lignes opposées entre SO/SE, des colonnes opposées entre
+  // NO/SO, et des colonnes opposées entre NE/SE — le centre E5 ne peut
+  // jamais entrer en conflit puisque les quadrants excluent ligne E et
+  // colonne 5 par construction (voir getQuadrant).
   const center = { row: "E", col: 5 };
-  const quadrants = { NO: [], NE: [], SO: [], SE: [] };
-  for (const cell of allBuildingCells) {
-    const q = getQuadrant(cell.row, cell.col);
-    if (q !== "centre") quadrants[q].push(cell);
-  }
-  const vertCells = [center];
-  for (const q of ["NO", "NE", "SO", "SE"]) {
-    const pick = shuffle(quadrants[q])[0];
-    vertCells.push(pick);
-  }
+  const [rowTop1, rowTop2] = shuffle(["A", "C"]);       // NO / NE
+  const [rowBot1, rowBot2] = shuffle(["G", "I"]);       // SO / SE
+  const [colLeft1, colLeft2] = shuffle([1, 3]);         // NO / SO
+  const [colRight1, colRight2] = shuffle([7, 9]);       // NE / SE
+  const vertCells = [
+    center,
+    { row: rowTop1, col: colLeft1 },  // NO
+    { row: rowTop2, col: colRight1 }, // NE
+    { row: rowBot1, col: colLeft2 },  // SO
+    { row: rowBot2, col: colRight2 }, // SE
+  ];
   const vertKeys = new Set(vertCells.map((c) => c.row + c.col));
 
   // 2. Sac partagé, pioche sans remise
@@ -1224,44 +1233,16 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
   const occupantId = titansByCell[destKey];
   const decisions = [];
 
-  if (stack && stack.length >= 2) {
-    // Amas de béton → écroulement immédiat (règle déjà dans le livret,
-    // section "Cas spécial — Boing Boing sur Amas de béton").
-    const dRow = rowIndex(destRow);
-    const adjCells = [];
-    for (let ddr = -1; ddr <= 1; ddr++) {
-      for (let ddc = -1; ddc <= 1; ddc++) {
-        if (ddr === 0 && ddc === 0) continue;
-        const nr = dRow + ddr;
-        const nc = destCol + ddc;
-        if (nr < 0 || nr > 8 || nc < 1 || nc > 9) continue;
-        adjCells.push(rowFromIndex(nr) + nc);
-      }
-    }
-    const ejected = [...stack]; // bas → sommet
-    looseBlocks[destKey] = [];
-    let idx = 0;
-    for (let i = ejected.length - 1; i >= 0; i--, idx++) {
-      const color = ejected[i];
-      const target = adjCells.length > 0 ? adjCells[idx % adjCells.length] : destKey;
-      if (!looseBlocks[target]) looseBlocks[target] = [];
-      looseBlocks[target].push(color);
-      log.push(`${destKey} : écroulement — bloc ${color} distribué vers ${target}.`);
-    }
-    titan.cell = destKey;
-    log.push(`Titan ${titanId} atterrit en ${destKey} (Amas balayé).`);
-  } else if (stack && stack.length === 1) {
-    const picked = stack.pop();
-    titan.cell = destKey;
-    if (isSocleMarker(picked)) {
-      const val = socleValue(picked);
-      titan.socles.push(val);
-      log.push(`${destKey} : Socle libre (valeur ${val}) ramassé, Titan ${titanId} prend sa place.`);
-    } else {
-      titan.repaire.push(picked);
-      log.push(`${destKey} : bloc libre ${picked} ramassé en Repaire, Titan ${titanId} prend sa place.`);
-    }
-  } else if (occupantId && occupantId !== titanId) {
+  // Bug remonté (session) : l'ordre de test (Amas/Bloc AVANT Titan)
+  // faisait qu'atterrir sur une case contenant À LA FOIS un Titan ET un
+  // débris ramassait le débris automatiquement sans jamais pousser le
+  // Titan occupant — on se retrouvait avec 2 Titans sur la même case
+  // (interdit, cf. matrice de superposition du livret). Le Titan occupant
+  // est désormais TOUJOURS prioritaire : il est poussé normalement, et le
+  // débris éventuellement présent sur la case reste au sol, disponible
+  // pour un "Ramasser" (passif Récupération) ultérieur — pas d'auto-pickup
+  // dans ce cas précis.
+  if (occupantId && occupantId !== titanId) {
     const target = titans.find((t) => t.id === occupantId);
     const dirR = Math.sign(destRowIdx - originRowIdx);
     const dirC = Math.sign(destCol - originCol);
@@ -1301,6 +1282,46 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
     );
     titan.cell = destKey;
     log.push(`Titan ${titanId} prend la place de Titan ${occupantId} en ${destKey}.`);
+    if (stack && stack.length > 0) {
+      log.push(`${destKey} : ${stack.length} débris au sol laissé(s) en place — utilisable ensuite via "Ramasser" (passif Récupération).`);
+    }
+  } else if (stack && stack.length >= 2) {
+    // Amas de béton → écroulement immédiat (règle déjà dans le livret,
+    // section "Cas spécial — Boing Boing sur Amas de béton").
+    const dRow = rowIndex(destRow);
+    const adjCells = [];
+    for (let ddr = -1; ddr <= 1; ddr++) {
+      for (let ddc = -1; ddc <= 1; ddc++) {
+        if (ddr === 0 && ddc === 0) continue;
+        const nr = dRow + ddr;
+        const nc = destCol + ddc;
+        if (nr < 0 || nr > 8 || nc < 1 || nc > 9) continue;
+        adjCells.push(rowFromIndex(nr) + nc);
+      }
+    }
+    const ejected = [...stack]; // bas → sommet
+    looseBlocks[destKey] = [];
+    let idx = 0;
+    for (let i = ejected.length - 1; i >= 0; i--, idx++) {
+      const color = ejected[i];
+      const target = adjCells.length > 0 ? adjCells[idx % adjCells.length] : destKey;
+      if (!looseBlocks[target]) looseBlocks[target] = [];
+      looseBlocks[target].push(color);
+      log.push(`${destKey} : écroulement — bloc ${color} distribué vers ${target}.`);
+    }
+    titan.cell = destKey;
+    log.push(`Titan ${titanId} atterrit en ${destKey} (Amas balayé).`);
+  } else if (stack && stack.length === 1) {
+    const picked = stack.pop();
+    titan.cell = destKey;
+    if (isSocleMarker(picked)) {
+      const val = socleValue(picked);
+      titan.socles.push(val);
+      log.push(`${destKey} : Socle libre (valeur ${val}) ramassé, Titan ${titanId} prend sa place.`);
+    } else {
+      titan.repaire.push(picked);
+      log.push(`${destKey} : bloc libre ${picked} ramassé en Repaire, Titan ${titanId} prend sa place.`);
+    }
   } else {
     titan.cell = destKey;
     log.push(`Titan ${titanId} saute jusqu'à ${destKey} (case libre).`);
@@ -1723,7 +1744,13 @@ function getNonPlayedPool(titan) {
 function sendCardToOwnRepos(titan, cardId, mancheNumber, faceUp) {
   // Retire la carte de sa position actuelle (main ou pool programmé) et
   // la place dans la Zone Repos DE SON PROPRIÉTAIRE, indisponible pour la
-  // Manche en cours + la suivante (retour en main à la Manche mancheNumber+1).
+  // Manche en cours + la suivante en entier (retour en main seulement au
+  // tout début de la Manche mancheNumber+2).
+  // Bug remonté (session) : avec mancheNumber+1 ici, applyRestitution()
+  // — appelée avec mancheNumber+1 dès la toute première transition de
+  // Manche suivant le vol — renvoyait la carte immédiatement, sans
+  // qu'elle ne reste jamais indisponible "pendant la Manche suivante"
+  // comme prévu. +2 corrige ce décalage d'une Manche.
   const handIdx = titan.hand.indexOf(cardId);
   if (handIdx !== -1) {
     titan.hand.splice(handIdx, 1);
@@ -1731,7 +1758,7 @@ function sendCardToOwnRepos(titan, cardId, mancheNumber, faceUp) {
     const progIdx = titan.programmed.indexOf(cardId);
     if (progIdx !== -1) titan.programmed.splice(progIdx, 1);
   }
-  titan.repos.push({ cardId, faceUp, returnAtManche: mancheNumber + 1 });
+  titan.repos.push({ cardId, faceUp, returnAtManche: mancheNumber + 2 });
 }
 
 /* ============================================================
@@ -1790,8 +1817,11 @@ function resolveVolPhaseRepos(mancheNumber, direction, ordreJeu, gameStateTitans
       const idxDiscard = (victim.discardedHidden || []).indexOf(cardId);
       if (idxDiscard !== -1) victim.discardedHidden.splice(idxDiscard, 1);
     }
-    victim.repos.push({ cardId, faceUp: true, returnAtManche: mancheNumber + 1 });
-    log.push(`Vol Phase Repos : Titan ${thiefId} pioche à l'aveugle chez Titan ${victimId} → ${CARD_LABEL[cardId]}, posée face visible en Zone Repos (Titan ${victimId}) jusqu'à la Manche ${mancheNumber + 1}.`);
+    // +2 (et non +1) : la carte doit rester indisponible pendant TOUTE la
+    // Manche suivante, pas juste jusqu'au tout début de celle-ci (même
+    // correctif de timing que sendCardToOwnRepos, voir plus haut).
+    victim.repos.push({ cardId, faceUp: true, returnAtManche: mancheNumber + 2 });
+    log.push(`Vol Phase Repos : Titan ${thiefId} pioche à l'aveugle chez Titan ${victimId} → ${CARD_LABEL[cardId]}, posée face visible en Zone Repos (Titan ${victimId}) jusqu'à la Manche ${mancheNumber + 2}.`);
   }
   return { log };
 }
