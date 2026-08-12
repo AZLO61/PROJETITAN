@@ -8,20 +8,26 @@ const CARD_CONFIG = {
   faut_pas_me_chauffer: { label: "Faut Pas Me Chauffer", force: 3, color1: "#F44336", color2: "#C2185B", icon: "🔥" },
   je_ne_partage_pas: { label: "Je Ne Partage Pas", force: 3, color1: "#2D8DF5", color2: "#1E3A8A", icon: "🤐" },
 };
-export default function CardVisual({ cardId, selected, selectable, played, inRepos, onClick, size = "normal" }) {
+export default function CardVisual({ cardId, selected, selectable, played, inRepos, onClick, size = "normal", accentColor }) {
   const cfg = CARD_CONFIG[cardId];
   if (!cfg) return null;
   const isSmall = size === "small";
   const w = isSmall ? 72 : 100;
   const h = isSmall ? 96 : 134;
   const opacity = played ? 0.35 : inRepos ? 0.45 : selectable === false ? 0.4 : 1;
+  // Bug remonté : la bordure/glow d'une carte sélectionnée en phase
+  // Programmation était toujours vert fixe (#16E08C), sans lien avec le
+  // Titan qui joue. accentColor (couleur du Titan actif) est maintenant
+  // utilisée si fournie ; #16E08C reste le repli par défaut pour les
+  // écrans qui n'ont pas encore de contexte Titan (ex. Repos).
+  const selColor = accentColor || "#16E08C";
   const border = selected
-    ? "2.5px solid #16E08C"
+    ? `2.5px solid ${selColor}`
     : selectable
     ? "2px solid rgba(255,255,255,.45)"
     : "1.5px solid rgba(255,255,255,.12)";
   const boxShadow = selected
-    ? "0 0 14px rgba(22,224,140,.8)"
+    ? `0 0 14px ${selColor}cc`
     : selectable
     ? "0 2px 8px rgba(0,0,0,.4)"
     : "none";
