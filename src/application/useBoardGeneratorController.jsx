@@ -97,6 +97,13 @@ export function useBoardGeneratorController() {
     setTitanState((prev) => {
       const players = prev.players.map((t) => {
         const clone = { ...t, hand: [...t.hand], programmed: [...t.programmed], repos: [...t.repos], playedThisManche: [], discardedHidden: [] };
+        // Bug remonté (session) : playedThisManche/discardedHidden étaient
+        // vidés SANS que les cartes qui n'ont pas été volées en Phase
+        // Repos ne reviennent en main — elles disparaissaient purement et
+        // simplement (perte de 2 cartes par Manche au lieu de 0, en plus
+        // du décalage de timing sur la carte volée). Ces cartes doivent
+        // revenir en main immédiatement, à la fin de la Manche.
+        clone.hand.push(...t.playedThisManche, ...(t.discardedHidden || []));
         const returned = applyRestitution(clone, mancheNumber + 1);
         if (returned.length > 0) {
           /* log absorbed by action log elsewhere */
@@ -875,7 +882,23 @@ export function useBoardGeneratorController() {
 
   const toggleProgCard = useCallback((cardId) => {
     setProgSelection((prev) => {
-      if (prev.includes(cardId)) return prev.filter((c) => c !== cardId); // désélection = annulation
+      if (prev.includes(cardId)) {
+        // Bug remonté : désélectionner UNE carte (y compris pendant le
+        // countdown de 5s une fois les 3 choisies) effaçait TOUTE la
+        // sélection au lieu de retirer seulement celle cliquée. On stoppe
+        // le countdown éventuellement en cours (setProgCountdownTimer en
+        // forme fonctionnelle pour éviter de lire une valeur périmée par
+        // la fermeture de useCallback) et on ne retire que cette carte —
+        // les autres restent sélectionnées, en attente d'une 3e carte.
+        setProgCountdownTimer((timerId) => {
+          if (timerId) {
+            clearInterval(timerId);
+            setProgCountdown(null);
+          }
+          return null;
+        });
+        return prev.filter((c) => c !== cardId); // désélection = annulation de cette carte seule
+      }
       if (prev.length >= 3) return prev;
       const next = [...prev, cardId];
       if (next.length === 3) {
@@ -1021,7 +1044,13 @@ export function useBoardGeneratorController() {
 
     aiNextPlayerRef.current = next;
     setWaitingNextTitan(true);
-    setPassifUsed((prev) => ({ ...prev, [titanId]: { ...(prev[titanId] || {}), recup: false } }));
+    // Bug remonté : le passif "Mouvement gratuit" n'était réinitialisé
+    // nulle part après un round — une fois utilisé, il restait bloqué
+    // pour le reste de la Manche entière au lieu d'être de nouveau
+    // disponible à CHAQUE tour (livret : "ces deux règles s'appliquent à
+    // chaque tour"). Le passif "Récupération" était déjà correctement
+    // remis à false ici ; on aligne "move" sur le même cycle.
+    setPassifUsed((prev) => ({ ...prev, [titanId]: { ...(prev[titanId] || {}), recup: false, move: false } }));
   }, []);
 
   const markCardPlayed = useCallback(
