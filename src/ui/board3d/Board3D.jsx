@@ -684,4 +684,3 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     </div>
   );
 }
-
