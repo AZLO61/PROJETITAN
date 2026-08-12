@@ -1,0 +1,73 @@
+/* Bug #7 (tracker) : base responsive PC / tablette / mobile.
+   Le reste de l'UI est en styles inline (flex/flexWrap déjà en place sur
+   la plupart des panneaux), mais il manquait un socle global : sans
+   box-sizing: border-box, tout padding/border inline s'additionnait à la
+   largeur et provoquait un débordement horizontal (scroll fantôme) sur
+   petit écran ; sans hauteur/largeur explicites sur html/body, certains
+   mobiles laissaient apparaître la couleur de fond du navigateur (blanc)
+   autour de l'appli au lieu du dégradé sombre. */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+  background: #0a0212; /* évite le flash blanc navigateur avant montage React */
+  overflow-x: hidden;  /* aucune section ne doit provoquer de scroll horizontal */
+  -webkit-text-size-adjust: 100%;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Cibles tactiles confortables sur mobile/tablette (recommandation
+   accessibilité ~44px) sans changer la taille visuelle des boutons
+   compacts existants — on agrandit juste la zone cliquable. */
+@media (hover: none) and (pointer: coarse) {
+  button {
+    min-height: 32px;
+  }
+}
+
+/* Petit mobile : on resserre un peu les marges globales pour laisser plus
+   de place au plateau et aux panneaux sans les casser (ils sont déjà en
+   flexWrap, donc ils se réorganisent tout seuls). */
+@media (max-width: 480px) {
+  #root > div {
+    padding: 6px 6px !important;
+    border-radius: 10px !important;
+  }
+}
+
+/* Tablette : légère réduction pour éviter les marges trop généreuses
+   héritées du design desktop. */
+@media (min-width: 481px) and (max-width: 900px) {
+  #root > div {
+    max-width: 100% !important;
+  }
+}
+
+/* Desktop large : le conteneur restait plafonné à 820px (valeur pensée
+   mobile-first) même sur un écran PC grand format — bug remonté "sur PC
+   l'écran ne prend pas toute la taille". Au-delà de 900px on élargit
+   nettement le plateau de jeu (jusqu'à 1400px) : le canvas 3D suit déjà
+   clientWidth de son conteneur (voir Board3D.jsx), donc il en profite
+   automatiquement sans changement de code côté 3D. Le `!important` est
+   nécessaire pour passer devant le style inline maxWidth:820 posé dans
+   GameView.jsx (même technique que les règles mobile/tablette ci-dessus). */
+@media (min-width: 901px) {
+  #root > div {
+    max-width: min(1400px, 96vw) !important;
+    padding: 20px 32px !important;
+  }
+}
+@media (min-width: 1400px) {
+  #root > div {
+    padding: 24px 48px !important;
+  }
+}
