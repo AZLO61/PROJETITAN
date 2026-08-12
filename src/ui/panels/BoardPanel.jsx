@@ -382,13 +382,8 @@ export default function BoardPanel({ vm }) {
                     <div style={{ display: "flex", gap: 6 }}>
                       {progSelection.map((cardId) => (
                         <CardVisual key={cardId} cardId={cardId} selected size="small"
-                          onClick={() => {
-                            // Annuler : stopper le timer et désélectionner
-                            if (progCountdownTimer) clearInterval(progCountdownTimer);
-                            setProgCountdown(null);
-                            setProgCountdownTimer(null);
-                            setProgSelection([]);
-                          }}
+                          accentColor={TITAN_COLORS[selectedTitan.id]?.accent}
+                          onClick={() => toggleProgCard(cardId)}
                         />
                       ))}
                     </div>
@@ -418,6 +413,7 @@ export default function BoardPanel({ vm }) {
                           selectable={progSelection.length < 3 || progSelection.includes(cardId)}
                           onClick={() => toggleProgCard(cardId)}
                           size="small"
+                          accentColor={TITAN_COLORS[selectedTitan.id]?.accent}
                         />
                       ))}
                     </div>
@@ -430,6 +426,69 @@ export default function BoardPanel({ vm }) {
             {phase === "action" && (
               <div>
                 {/* Cartes jouables */}
+                {/* Refonte UI façon DIL/RAGE (demande explicite) : la
+                    sélection de direction pour Graouhhh était un simple
+                    <select> minuscule, sans explication, noyé dans la
+                    liste des cartes. Remplacé par une rose des vents,
+                    bordure épaisse + halo comme DIL/RAGE, phrase claire de
+                    ce qui va se passer. Le clic sur la carte (plus bas)
+                    déclenche toujours la résolution 5s comme avant, avec
+                    la direction choisie ici. */}
+                {selectedTitan.programmed.includes("graouhhh") && canPlayCard("graouhhh") && (
+                  <div style={{
+                    background: "rgba(45,212,191,.15)",
+                    border: "2.5px solid #2DD4BF",
+                    boxShadow: "0 0 0 3px rgba(45,212,191,.35), 0 4px 18px rgba(45,212,191,.35)",
+                    borderRadius: 14, padding: "12px 16px", marginBottom: 10,
+                  }}>
+                    <div style={{
+                      fontFamily: "'Bowlby One', sans-serif", marginBottom: 8, fontSize: ".95rem",
+                      color: "#7cf5e8", display: "flex", alignItems: "center", gap: 8,
+                    }}>
+                      <span aria-hidden="true">😤</span> GRAOUHHH — choisis un axe
+                    </div>
+                    <p style={{ margin: "0 0 10px", fontSize: ".78rem", color: "rgba(255,255,255,.75)" }}>
+                      Tous les Titans sur cet axe (jusqu'au premier bâtiment-mur) sont reculés, subissent Fatigue + DIL et +1 Bagarre chacun.
+                    </p>
+                    <div style={{
+                      display: "grid", gridTemplateColumns: "repeat(3, 44px)", gridTemplateRows: "repeat(3, 44px)",
+                      gap: 4, justifyContent: "center",
+                    }}>
+                      {[
+                        ["NO", "N", "NE"],
+                        ["O", null, "E"],
+                        ["SO", "S", "SE"],
+                      ].flat().map((d, i) => {
+                        if (d === null) {
+                          return (
+                            <div key={`c${i}`} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <TitanIcon titanId={selectedTitan.id} size={26} />
+                            </div>
+                          );
+                        }
+                        const dirs = { N:{dr:-1,dc:0}, NE:{dr:-1,dc:1}, E:{dr:0,dc:1}, SE:{dr:1,dc:1}, S:{dr:1,dc:0}, SO:{dr:1,dc:-1}, O:{dr:0,dc:-1}, NO:{dr:-1,dc:-1} };
+                        const isSel = direction.label === d;
+                        return (
+                          <button
+                            key={d}
+                            onClick={() => setDirection({ ...dirs[d], label: d })}
+                            style={{
+                              background: isSel ? "#2DD4BF" : "rgba(255,255,255,.08)",
+                              border: `2px solid ${isSel ? "#2DD4BF" : "rgba(255,255,255,.3)"}`,
+                              borderRadius: 8, color: isSel ? "#04302c" : "#fff",
+                              fontWeight: 700, fontSize: ".72rem", cursor: "pointer",
+                            }}
+                          >
+                            {d}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p style={{ margin: "8px 0 0", fontSize: ".7rem", color: "rgba(255,255,255,.5)" }}>
+                      Direction choisie : <strong style={{ color: "#7cf5e8" }}>{direction.label}</strong> — clique la carte Graouhhh ci-dessous pour lancer (résolution en 5s).
+                    </p>
+                  </div>
+                )}
                 {selectedTitan.programmed.length > 0 && (
                   <div style={{ marginBottom: 8 }}>
                     <div style={{
@@ -456,6 +515,7 @@ export default function BoardPanel({ vm }) {
                               cardId={cardId}
                               selected={activeMode}
                               selectable={canPlay}
+                              accentColor={TITAN_COLORS[selectedTitan.id]?.accent}
                               onClick={() => {
                                 if (!canPlay || animating) return;
                                 // Les cartes à résolution immédiate ont un délai visuel 5s
@@ -492,20 +552,13 @@ export default function BoardPanel({ vm }) {
                                 🗑️ Défausser
                               </button>
                             )}
-                            {/* Direction picker pour Graouhhh uniquement */}
+                            {/* Direction Graouhhh : sélection déplacée dans le
+                                banner façon DIL/RAGE ci-dessus — ce qui reste ici
+                                n'est qu'un rappel compact de la direction déjà
+                                choisie, pas un second contrôle en doublon. */}
                             {canPlay && needsDir && (
-                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-                                <div style={{ fontSize: ".6rem", color: "rgba(255,255,255,.45)" }}>Direction :</div>
-                                <select
-                                  value={direction.label}
-                                  onChange={(e) => {
-                                    const dirs = { N:{dr:-1,dc:0}, NE:{dr:-1,dc:1}, E:{dr:0,dc:1}, SE:{dr:1,dc:1}, S:{dr:1,dc:0}, SO:{dr:1,dc:-1}, O:{dr:0,dc:-1}, NO:{dr:-1,dc:-1} };
-                                    setDirection({ ...dirs[e.target.value], label: e.target.value });
-                                  }}
-                                  style={{ background: "rgba(255,217,61,.15)", color: "#FFD93D", border: "1px solid rgba(255,217,61,.4)", borderRadius: 6, padding: "3px 8px", fontSize: ".74rem", width: 76, fontWeight: 700 }}
-                                >
-                                  {["N","NE","E","SE","S","SO","O","NO"].map((d) => <option key={d} value={d}>{d}</option>)}
-                                </select>
+                              <div style={{ fontSize: ".62rem", color: "#7cf5e8" }}>
+                                Direction : {direction.label}
                               </div>
                             )}
                             {/* Adrénaline Tout Casser */}
