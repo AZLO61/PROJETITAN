@@ -245,11 +245,19 @@ export default function HeaderPhase({ vm }) {
           <span style={{ fontSize: ".78rem", fontFamily: "'Bowlby One', sans-serif", color: "#FFD93D" }}>
             M{mancheNumber} · {PHASE_LABELS[phase]}
           </span>
-          <span style={{ fontSize: ".7rem", color: "rgba(255,255,255,.4)", marginLeft: "auto" }}>
+          <span style={{ fontSize: ".7rem", color: "rgba(255,255,255,.4)", marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
+            {/* Bug remonté : "T1/T2/T3/T4" en texte brut ne parlait à
+                personne d'externe au projet — remplacé par l'icône du
+                Titan (même sprite que partout ailleurs dans l'UI). */}
             {titanState.ordreJeu.map((id) => {
               const isAi = titanModes[id] === "ia";
-              return `T${id}${isAi ? "🤖" : ""}${phaseValidated[id] ? "✅" : "⬜"}`;
-            }).join("  ")}
+              return (
+                <span key={id} style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+                  <TitanIcon titanId={id} size={16} />
+                  {isAi ? "🤖" : ""}{phaseValidated[id] ? "✅" : "⬜"}
+                </span>
+              );
+            })}
           </span>
         </div>
         {/* Bandeau Titan actif — bien visible */}
