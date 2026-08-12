@@ -4,6 +4,7 @@ import RoundPanels from "./panels/RoundPanels.jsx";
 import BoardPanel from "./panels/BoardPanel.jsx";
 import TitanPanel from "./panels/TitanPanel.jsx";
 import DilRageBanner from "./panels/DilRageBanner.jsx";
+import RepoVolBanner from "./panels/RepoVolBanner.jsx";
 import DecisionPanels from "./panels/DecisionPanels.jsx";
 import ScoringPanel from "./panels/ScoringPanel.jsx";
 
@@ -19,6 +20,10 @@ export default function GameView(vm) {
       {/* Bug #6 : DIL/RAGE juste sous l'en-tête — décision bloquante,
           ne doit plus être cachée en bas de l'écran après le plateau. */}
       <DilRageBanner vm={vm} />
+      {/* Refonte UI façon DIL/RAGE (demande explicite) : la décision
+          bloquante "Vol Phase Repos" suit maintenant le même traitement
+          visuel et la même position qu'une décision DIL/RAGE. */}
+      <RepoVolBanner vm={vm} />
       <RoundPanels vm={vm} />
       <BoardPanel vm={vm} />
       <TitanPanel vm={vm} />
