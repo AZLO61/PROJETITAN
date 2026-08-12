@@ -6,7 +6,7 @@ import TitanResourceBand from "../titans/TitanResourceBand.jsx";
 import { TitanIcon, TitanBadge } from "../titans/TitanVisuals.jsx";
 import { TITAN_COLORS } from "../titans/constants.js";
 import { ACTION_CARDS, CARD_LABEL, CARD_FORCE, PHASE_LABELS, EVENT_NAMES, COULEURS, COLOR_HEX, STANDARD_COLORS, ROWS, isBuildingCell, isSocleMarker } from "../../domain/index.js";
-import { btnStyle, smallBtn, cancelBtn } from "../styles.js";
+import { btnStyle, cancelBtn } from "../styles.js";
 
 export default function RoundPanels({ vm }) {
   const {
@@ -205,44 +205,11 @@ export default function RoundPanels({ vm }) {
     tcSel
   } = vm;
   return <>
-      {/* ── PHASE REPOS — Vol en chaîne (refonte session) ──
-          Ne démarre qu'une fois que TOUS les Titans ont joué leurs 3 cartes
-          de la Manche (jouées ou défaussées cachées). Le Détonateur choisit
-          UNE FOIS un sens de rotation, puis la chaîne se résout d'un coup :
-          chaque Titan pioche à l'aveugle 1 carte parmi les 3 de son voisin
-          dans ce sens, et la pose FACE VISIBLE en Zone Repos (consultable
-          par tous en permanence jusqu'à la Manche suivante). Plus de choix
-          individuel — objectif anti-répétitivité (confirmé Nikola). */}
-      {phase === "repos" && (
-        <div style={{
-          background: "rgba(227,35,71,.1)", border: "1px solid rgba(227,35,71,.35)",
-          borderRadius: 10, padding: "10px 14px", marginBottom: 10, fontSize: ".8rem",
-        }}>
-          <div style={{ fontFamily: "'Bowlby One', sans-serif", color: "#ff8fa3", marginBottom: 6 }}>
-            🎴 Vol en chaîne — Phase Repos M{mancheNumber}
-          </div>
-          {!volDirection ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ color: "rgba(255,255,255,.75)" }}>
-                Titan {titanState.detonateur} (Détonateur) choisit le sens de la chaîne :
-              </span>
-              <button onClick={() => chooseVolDirection("gauche")} style={smallBtn(true, "#e32347", "#C2185B")}>
-                ⬅️ Gauche
-              </button>
-              <button onClick={() => chooseVolDirection("droite")} style={smallBtn(true, "#e32347", "#C2185B")}>
-                ➡️ Droite
-              </button>
-              <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.45)" }}>
-                Chaque Titan vole ensuite, à l'aveugle, 1 carte à son voisin dans ce sens — posée face visible en Zone Repos.
-              </span>
-            </div>
-          ) : (
-            <div style={{ color: "#16E08C", fontSize: ".76rem" }}>
-              ✅ Vol résolu (sens {volDirection === "gauche" ? "⬅️ antihoraire" : "➡️ horaire"}) — voir le journal d'actions ci-dessous.
-            </div>
-          )}
-        </div>
-      )}
+      {/* Le banner "Vol en chaîne / Phase Repos" a été extrait dans
+          RepoVolBanner.jsx et remonté juste sous DilRageBanner dans
+          GameView.jsx (refonte UI façon DIL/RAGE — décision bloquante,
+          doit avoir le même traitement visuel et la même position
+          qu'une autre décision bloquante du jeu). Voir GameView.jsx. */}
 
 
       {/* ── VUE 3D ── */}
@@ -343,7 +310,11 @@ export default function RoundPanels({ vm }) {
               } else if (isBldg) {
                 cellBg = topBlock ? COLOR_HEX[topBlock] : "rgba(255,255,255,.05)";
               } else {
-                cellBg = "rgba(255,255,255,.02)";
+                // Bug remonté : les cases couloir (sans bâtiment) se
+                // fondaient presque totalement dans le fond du site
+                // (.02 d'opacité). Accentué à .07 pour rester nettement
+                // en retrait des cases bâtiment tout en restant lisible.
+                cellBg = "rgba(255,255,255,.07)";
               }
 
               return (
@@ -378,7 +349,7 @@ export default function RoundPanels({ vm }) {
                       ? `2px solid ${perimAccent}`
                       : isBldg
                       ? "1px solid rgba(255,255,255,.12)"
-                      : "1px solid rgba(255,255,255,.04)",
+                      : "1px solid rgba(255,255,255,.14)",
                     boxShadow: teaSelectable
                       ? "0 0 10px rgba(251,146,60,.8)"
                       : moveIsClassic
