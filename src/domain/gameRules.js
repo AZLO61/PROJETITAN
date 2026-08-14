@@ -1498,6 +1498,10 @@ function canRage(defenderId, gameState) {
 // partie sur une décision qu'on ne peut jamais valider (le bouton
 // "Valider" reste désactivé indéfiniment, aucune sortie possible).
 // Même garde-fou que canRage() ci-dessus, appliqué au cas DIL.
+// Ruling tranché Nikola (14/08/2026), point ouvert V36 « effet de repli
+// quand DIL est impossible » : il n'y en a pas. Quand la cible n'a pas
+// 2 couleurs différentes en Repaire, l'action est simplement notée au
+// journal et ne produit aucun effet. Le point est clos.
 function canDil(defenderId, gameState) {
   const t = gameState.titans.find((x) => x.id === defenderId);
   return new Set(t.repaire).size >= 2;
