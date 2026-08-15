@@ -132,7 +132,6 @@ export default function TitanPanel({ vm }) {
     captureSnapshot,
     prevActivePlayerRef,
     handleUndo,
-    computeAiMove,
     aiTriggerRef,
     aiTrigger,
     setAiTrigger,

@@ -138,7 +138,10 @@ export default function DecisionPanels({ vm }) {
     captureSnapshot,
     prevActivePlayerRef,
     handleUndo,
-    computeAiMove,
+    titanProfiles,
+    profilsReveles,
+    revelerProfil,
+    profileLabel,
     aiTriggerRef,
     aiTrigger,
     setAiTrigger,
@@ -335,6 +338,44 @@ export default function DecisionPanels({ vm }) {
               </table>
             </div>
           )}
+
+          {/* ── RÉVÉLATION DES PROFILS D'IA ──
+              Placée volontairement TOUT EN BAS, et conditionnée à ce que
+              chaque Vert soit déjà affecté (demande explicite de Nikola).
+              Apprendre qu'un adversaire est un Expert Agressif pendant
+              qu'on décide encore où poser ses Verts, c'est une
+              information qui influencerait ce choix : le placement doit
+              rester un pari à l'aveugle jusqu'au bout. */}
+          {(() => {
+            const iaIds = titanState.players.map((t) => t.id).filter((id) => titanModes[id] === "ia");
+            if (iaIds.length === 0 || !profileLabel) return null;
+            const vertsPlaces = titanState.players.every(
+              (t) => (vertAssignments[t.id] || []).filter(Boolean).length >= getVertCount(t)
+            );
+            if (!vertsPlaces) {
+              return (
+                <div style={{ marginTop: 12, fontSize: ".7rem", color: "rgba(255,255,255,.4)", fontStyle: "italic" }}>
+                  🤖 Les profils des IA seront dévoilés une fois tous les Blocs Verts placés.
+                </div>
+              );
+            }
+            return (
+              <div style={{
+                marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.12)",
+              }}>
+                <div style={{ color: "#a855f7", fontWeight: 700, marginBottom: 6, fontSize: ".76rem" }}>
+                  🤖 Qui étaient les IA
+                </div>
+                {iaIds.map((id) => (
+                  <div key={id} style={{ fontSize: ".74rem", marginBottom: 3 }}>
+                    <strong style={{ color: "#FFD93D" }}>{titanDisplayName(id)}</strong>
+                    <span style={{ color: "rgba(255,255,255,.6)" }}> — </span>
+                    <span style={{ color: "#a855f7", fontWeight: 700 }}>{profileLabel(titanProfiles[id])}</span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 

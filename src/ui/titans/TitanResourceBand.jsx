@@ -22,11 +22,30 @@ import { BLOCK_NAME, baremeHint } from "../blockNames.js";
 // infinie pendant une partie d'1h30 fatigue l'œil et vide la batterie
 // d'une tablette. La bordure et le halo fixes suffisent à le désigner.
 
-export default function TitanResourceBand({ titans, selectedTitanId, onSelect, activePlayerId, phase, titanDisplayName }) {
+export default function TitanResourceBand({
+  titans, selectedTitanId, onSelect, activePlayerId, phase, titanDisplayName,
+  titanModes = {}, titanProfiles = {}, profilsReveles = {}, revelerProfil, profileLabel,
+}) {
   const colorCount = (titan) => {
     const c = { bleu: 0, rose: 0, orange: 0, rouge: 0, vert: 0 };
     titan.repaire.forEach((x) => { if (c[x] !== undefined) c[x]++; });
     return c;
+  };
+
+  // Easter-egg demandé par Nikola : 10 clics sur l'encart d'un Titan IA
+  // dévoilent son profil. C'est une triche volontaire, réservée à qui la
+  // cherche — le profil reste sinon caché jusqu'au décompte final.
+  // Le compteur vit dans une ref : le faire passer par un state
+  // re-rendrait toute la bande à chaque clic, sans rien changer à
+  // l'affichage tant que le seuil n'est pas atteint.
+  const clicsRef = React.useRef({});
+  const CLICS_POUR_REVELER = 10;
+
+  const compterClic = (id) => {
+    if (!revelerProfil || titanModes[id] !== "ia" || profilsReveles[id]) return;
+    const n = (clicsRef.current[id] || 0) + 1;
+    clicsRef.current[id] = n;
+    if (n >= CLICS_POUR_REVELER) revelerProfil(id);
   };
 
   return (
@@ -50,7 +69,7 @@ export default function TitanResourceBand({ titans, selectedTitanId, onSelect, a
         return (
           <div
             key={t.id}
-            onClick={() => onSelect(t.id)}
+            onClick={() => { compterClic(t.id); onSelect(t.id); }}
             style={{
               borderRadius: 12, cursor: "pointer", minWidth: 0,
               // Le liseré porte toujours la couleur du Titan : le jaune du
@@ -119,6 +138,16 @@ export default function TitanResourceBand({ titans, selectedTitanId, onSelect, a
                 <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.35)" }}>Repaire vide</span>
               )}
             </div>
+
+            {/* Profil de l'IA, seulement une fois dévoilé. */}
+            {titanModes[t.id] === "ia" && profilsReveles[t.id] && profileLabel && (
+              <div
+                title="Profil de cette IA : sa force et son tempérament"
+                style={{ fontSize: ".66rem", color: "#a855f7", fontWeight: 700, marginTop: 4 }}
+              >
+                🤖 {profileLabel(titanProfiles[t.id])}
+              </div>
+            )}
 
             {/* Compteurs de fin de partie : consultés au décompte, pas à chaque tour */}
             <div style={{

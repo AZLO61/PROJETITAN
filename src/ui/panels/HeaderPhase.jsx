@@ -136,7 +136,6 @@ export default function HeaderPhase({ vm }) {
     captureSnapshot,
     prevActivePlayerRef,
     handleUndo,
-    computeAiMove,
     aiTriggerRef,
     aiTrigger,
     setAiTrigger,

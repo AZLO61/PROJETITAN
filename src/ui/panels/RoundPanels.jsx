@@ -157,7 +157,10 @@ export default function RoundPanels({ vm }) {
     captureSnapshot,
     prevActivePlayerRef,
     handleUndo,
-    computeAiMove,
+    titanProfiles,
+    profilsReveles,
+    revelerProfil,
+    profileLabel,
     aiTriggerRef,
     aiTrigger,
     setAiTrigger,
@@ -271,6 +274,11 @@ export default function RoundPanels({ vm }) {
         activePlayerId={activePlayerId}
         phase={phase}
         titanDisplayName={titanDisplayName}
+        titanModes={titanModes}
+        titanProfiles={titanProfiles}
+        profilsReveles={profilsReveles}
+        revelerProfil={revelerProfil}
+        profileLabel={profileLabel}
       />
 
 
