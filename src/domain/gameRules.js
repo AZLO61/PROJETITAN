@@ -1807,9 +1807,22 @@ function resolveRecuperation(titanId, cellKey, gameState, pickedValue) {
   if (stack.length === 0 && cellKey !== titan.cell) {
     const destBldg = gameState.board && gameState.board[cellKey];
     const isStandingBuilding = destBldg && destBldg.blocks && destBldg.blocks.length > 0;
-    if (!isStandingBuilding) {
+    // Bug trouvé par le diagnostic (npm run diagnose) : le déplacement
+    // obligatoire ne vérifiait QUE le bâtiment. Si un AUTRE Titan occupait
+    // la case libérée, le ramasseur se téléportait dessus — 13 cas sur
+    // 15 parties simulées, et le cas est tout aussi atteignable en jeu
+    // humain, puisque des débris tombent régulièrement sous les pieds
+    // d'un adversaire.
+    // Résolution retenue : le Titan reste sur place, exactement comme
+    // face à un bâtiment debout. C'est l'application de la règle déjà
+    // tranchée par Nikola (« deux Titans ne partagent jamais une case »)
+    // à un cas que le code avait oublié, et non une règle nouvelle.
+    const occupeParUnAutreTitan = titans.some((t) => t.id !== titanId && t.cell === cellKey);
+    if (!isStandingBuilding && !occupeParUnAutreTitan) {
       titan.cell = cellKey;
       log.push(`${cellKey} : case libérée → Titan ${titanId} s'y déplace obligatoirement.`);
+    } else if (occupeParUnAutreTitan) {
+      log.push(`${cellKey} : case libérée mais déjà occupée par un autre Titan → Titan ${titanId} reste en ${titan.cell}.`);
     }
   }
   return { log, applied: true };

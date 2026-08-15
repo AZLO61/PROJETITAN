@@ -10,6 +10,7 @@ import {
   resolveTeteEnAvant,
   resolveGraouhhh,
   resolveBoingBoing,
+  resolveRecuperation,
   computeFinalScore,
   checkEndGameTriggers,
   manchesMax,
@@ -233,6 +234,42 @@ describe("ruling — bonus Graouhhh cumulatif linéaire (FAQ #11, revue 2026-08-
     titans[0].adrenaline = 2;
     resolveGraouhhh(1, 0, 1, 1, { board: {}, looseBlocks: {}, titans });
     expect(titans[0].adrenaline).toBe(3);
+  });
+});
+
+describe("règle — la Récupération ne téléporte jamais sur un autre Titan", () => {
+  // Bug trouvé par le diagnostic (npm run diagnose) : le déplacement
+  // obligatoire déclenché par une case libérée ne vérifiait que la
+  // présence d'un bâtiment. Un Titan qui ramassait le dernier bloc d'une
+  // case occupée par un adversaire se téléportait dessus. 13 occurrences
+  // sur 15 parties simulées, et le cas est atteignable en jeu humain :
+  // les débris tombent régulièrement sous les pieds d'un adversaire.
+  const t = (id, cell) => ({
+    id, cell, repaire: [], socles: [], bagarre: 0, destruction: 0,
+    adrenaline: 0, programmed: [], hand: [], repos: [],
+    playedThisManche: [], discardedHidden: [],
+  });
+
+  it("le ramasseur reste sur place si la case libérée est occupée", () => {
+    const titans = [t(1, "E5"), t(2, "E6")];
+    resolveRecuperation(1, "E6", { board: {}, looseBlocks: { E6: ["bleu"] }, titans }, "bleu");
+    expect(titans[0].cell).toBe("E5");
+    expect(titans[1].cell).toBe("E6");
+    // Le bloc est bien récupéré : seul le déplacement est empêché.
+    expect(titans[0].repaire).toEqual(["bleu"]);
+  });
+
+  it("le déplacement a bien lieu quand la case libérée est libre", () => {
+    const titans = [t(1, "E5"), t(2, "A1")];
+    resolveRecuperation(1, "E6", { board: {}, looseBlocks: { E6: ["bleu"] }, titans }, "bleu");
+    expect(titans[0].cell).toBe("E6");
+  });
+
+  it("le garde-fou bâtiment reste actif", () => {
+    const titans = [t(1, "E5"), t(2, "A1")];
+    const board = { E6: { row: "E", col: 6, blocks: ["bleu"], socle: 1, isTeleporter: false } };
+    resolveRecuperation(1, "E6", { board, looseBlocks: { E6: ["rouge"] }, titans }, "rouge");
+    expect(titans[0].cell).toBe("E5");
   });
 });
 

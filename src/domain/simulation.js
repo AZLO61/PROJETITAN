@@ -73,6 +73,7 @@ import {
   planRecuperation,
 } from "./aiPlanner.js";
 import { pick, setSeed } from "./rng.js";
+import { verifierHygiene, verifierInvariants } from "./invariants.js";
 
 const ROUNDS_PAR_MANCHE = 3;
 
@@ -95,8 +96,13 @@ export function profilsAleatoires(nbJoueurs) {
  * @param {object} options.profils     { [titanId]: { force, temperament } }
  * @param {number} options.seed        graine, pour rejouer la partie
  */
-export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0 } = {}) {
+export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier = false } = {}) {
   setSeed(seed);
+  // Journal des anomalies : violations d'invariants, Manches sautées,
+  // tours sans coup jouable. Toujours rempli, même hors mode `verifier`,
+  // parce qu'un simulateur qui produit des chiffres faux en silence est
+  // pire qu'un simulateur qui plante.
+  const anomalies = [];
 
   const etatPlateau = generateBoard();
   const titanState = placeTitans(nbJoueurs);
@@ -120,7 +126,17 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0 } = {}) {
     // ── PHASE PROGRAMMATION ──
     for (const id of ordreJeu) {
       const cartes = planProgrammation(id, etat, profilsUtilises[id], manche);
-      if (cartes.length === ROUNDS_PAR_MANCHE) programCards(id, cartes, etat.titans);
+      if (cartes.length === ROUNDS_PAR_MANCHE) {
+        const res = programCards(id, cartes, etat.titans);
+        if (!res.ok) anomalies.push({ type: "programmation-refusee", manche, titanId: id, raison: res.reason });
+      } else {
+        // Le Titan n'a plus 3 cartes en main : Vol de Phase Repos et
+        // Fatigue les envoient en Zone Repos pour deux Manches. Il ne
+        // joue alors RIEN de toute la Manche. C'est le comportement du
+        // contrôleur aussi (`t.hand.length >= 3`), mais c'est une
+        // situation lourde de conséquences qu'il faut pouvoir compter.
+        anomalies.push({ type: "manche-sautee-main-insuffisante", manche, titanId: id, cartesEnMain: cartes.length });
+      }
     }
 
     // ── PHASE ACTION : 3 rounds, 1 carte par Titan et par round ──
@@ -137,8 +153,15 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0 } = {}) {
         // 2. Carte Action.
         const coup = planCardPlay(id, etat, profil, manche);
         const cardId = coup?.cardId ?? titan.programmed[0];
-        if (coup) appliquerCoup(coup, id, etat, manche);
-        cartesJouees[cardId] = (cartesJouees[cardId] || 0) + 1;
+        if (coup) {
+          appliquerCoup(coup, id, etat, manche);
+          cartesJouees[cardId] = (cartesJouees[cardId] || 0) + 1;
+        } else {
+          // Aucun coup n'a pu être noté : la carte part en défausse sans
+          // effet. Comptabilisé à part, sans quoi les parts d'usage des
+          // cartes compteraient des coups qui n'ont jamais eu lieu.
+          anomalies.push({ type: "carte-defaussee-sans-coup", manche, round, titanId: id, cardId });
+        }
 
         // La carte quitte la programmation pour le pool de la Manche,
         // qui alimente le Vol de Phase Repos.
@@ -151,6 +174,12 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0 } = {}) {
         // 3. Récupération, passif de chaque tour.
         const recup = planRecuperation(id, etat, profil);
         if (recup) resolveRecuperation(id, recup.cellKey, etat, recup.pickedValue);
+
+        if (verifier) {
+          const ou = `manche ${manche}, round ${round + 1}, Titan ${id}`;
+          for (const v of verifierInvariants(etat, ou)) anomalies.push({ type: "invariant", ...v });
+          for (const h of verifierHygiene(etat)) anomalies.push({ type: "hygiene", contexte: ou, ...h });
+        }
       }
     }
 
@@ -194,6 +223,7 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0 } = {}) {
     scores: scores.totals,
     detailVerts: verts,
     classement,
+    anomalies,
     gagnantId: classement[0].id,
     // Un écart faible signale une partie serrée, un écart énorme une
     // partie pliée d'avance : c'est l'indicateur de tension le plus
@@ -212,12 +242,38 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0 } = {}) {
  * @param {object|null} options.profils profils imposés, ou null pour tirer
  *                                      au sort à chaque partie
  */
-export function lancerCampagne({ parties = 100, nbJoueurs = 4, seed = 1, profils = null } = {}) {
+export function lancerCampagne({ parties = 100, nbJoueurs = 4, seed = 1, profils = null, verifier = false } = {}) {
   const resultats = [];
   for (let i = 0; i < parties; i++) {
-    resultats.push(jouerPartie({ nbJoueurs, profils, seed: seed + i }));
+    resultats.push(jouerPartie({ nbJoueurs, profils, seed: seed + i, verifier }));
   }
-  return { parties, nbJoueurs, seed, resultats, stats: agreger(resultats) };
+  return { parties, nbJoueurs, seed, resultats, stats: agreger(resultats), anomalies: agregerAnomalies(resultats) };
+}
+
+/** Regroupe les anomalies de toute une campagne, par type puis par cause. */
+export function agregerAnomalies(resultats) {
+  const parType = {};
+  for (const r of resultats) {
+    for (const a of r.anomalies || []) {
+      if (!parType[a.type]) parType[a.type] = { total: 0, partiesTouchees: new Set(), exemples: [], details: {} };
+      const e = parType[a.type];
+      e.total++;
+      e.partiesTouchees.add(r.seed);
+      const cle = a.regle || a.cardId || a.raison || "—";
+      e.details[cle] = (e.details[cle] || 0) + 1;
+      if (e.exemples.length < 3) e.exemples.push({ seed: r.seed, ...a });
+    }
+  }
+  const out = {};
+  for (const [type, e] of Object.entries(parType)) {
+    out[type] = {
+      total: e.total,
+      partiesTouchees: e.partiesTouchees.size,
+      details: e.details,
+      exemples: e.exemples,
+    };
+  }
+  return out;
 }
 
 function moyenne(valeurs) {

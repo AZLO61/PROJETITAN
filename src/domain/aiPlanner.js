@@ -91,13 +91,38 @@ function cloneEtat(gameState) {
   };
 }
 
-// Un coup peut échouer sur un état de bord inattendu. Plutôt que de faire
-// tomber le tour de l'IA, on écarte simplement le candidat fautif : il en
-// reste toujours d'autres, et le pire cas est un coup légèrement moins bon.
+/* ── DIAGNOSTIC ───────────────────────────────────────────────
+   Le garde-fou ci-dessous avale les exceptions par conception : un
+   candidat fautif ne doit pas faire tomber le tour de l'IA. Mais avaler
+   en silence est dangereux — c'est exactement ce qui a masqué, pendant
+   une session entière, le fait que Faut Pas Me Chauffer n'était JAMAIS
+   évaluable faute d'un champ manquant. L'IA se contentait de défausser,
+   sans que rien ne le signale.
+
+   Ces compteurs rendent le silence audible. Ils ne coûtent qu'une
+   incrémentation et permettent au simulateur de dire « 0 candidat
+   écarté » — ou de pointer précisément ce qui casse.
+──────────────────────────────────────────────────────────── */
+
+export const diagnostics = {
+  candidatsEcartes: 0,
+  coupsSansCandidat: 0,
+  erreurs: {}, // { "message d'erreur": nombre d'occurrences }
+};
+
+export function reinitialiserDiagnostics() {
+  diagnostics.candidatsEcartes = 0;
+  diagnostics.coupsSansCandidat = 0;
+  diagnostics.erreurs = {};
+}
+
 function noterApres(titanId, etat, profile, muter) {
   try {
     muter(etat);
-  } catch {
+  } catch (e) {
+    diagnostics.candidatsEcartes++;
+    const cle = String(e?.message || e);
+    diagnostics.erreurs[cle] = (diagnostics.erreurs[cle] || 0) + 1;
     return null;
   }
   return evaluatePosition(titanId, etat, profile);
@@ -399,6 +424,7 @@ export function planCardPlay(titanId, gameState, profile = makeProfile(), manche
     }
   }
 
+  if (candidats.length === 0) diagnostics.coupsSansCandidat++;
   return chooseAmongBest(candidats, profile);
 }
 
