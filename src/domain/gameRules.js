@@ -669,9 +669,24 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
       // comme n'importe quel Titan et se faisait pousser par ses propres
       // projections.
       if (ctx.initiatorId != null && occupantTitanId === ctx.initiatorId) {
-        log.push(`${nextKey} : élément revenu sur le Titan ${occupantTitanId} — immunité de l'initiateur, il s'arrête là.`);
-        r = nr;
-        c = nc;
+        // Conflit de règles tranché par Nikola le 2026-08-15.
+        // Le livret dit « il s'arrête immédiatement dessus », formulation
+        // écrite pour un DÉBRIS — lequel peut parfaitement reposer sur la
+        // case d'un Titan. Appliquée telle quelle à un TITAN projeté, elle
+        // en mettait deux sur la même case et contredisait l'autre ruling
+        // (« deux Titans ne partagent jamais une case »).
+        // Arbitrage : l'immunité joue dans les deux cas — l'initiateur
+        // n'est jamais poussé — mais un Titan projeté s'arrête sur la case
+        // PRÉCÉDENTE au lieu d'entrer sur celle de l'initiateur. Cette
+        // case est nécessairement libre : la trajectoire ne progresse que
+        // sur des cases sans occupant.
+        if (ctx.movingTitanId != null) {
+          log.push(`${nextKey} : Titan ${ctx.movingTitanId} projeté sur le Titan ${occupantTitanId} — immunité de l'initiateur, il s'arrête juste avant, en ${rowFromIndex(r)}${c}.`);
+        } else {
+          log.push(`${nextKey} : élément revenu sur le Titan ${occupantTitanId} — immunité de l'initiateur, il s'arrête là.`);
+          r = nr;
+          c = nc;
+        }
         remaining = 0;
         break;
       }
@@ -850,7 +865,8 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0) {
 
     const dr = rowIndex(cell.row) - rowIndex(titanRow);
     const dc = cell.col - titanCol;
-    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, bagarreSet, initiatorId: titanId });
+    // movingTitanId : c'est la cible qu'on projette (cf. projectInDirection).
+    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, bagarreSet, initiatorId: titanId, movingTitanId: targetId });
     target.cell = landing.row + landing.col; // mutation directe (re-render forcé côté UI)
     bagarreSet.add(targetId);
 
@@ -1094,7 +1110,8 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
       bagarreSet.add(occupantId);
       log.push(`${key} : Titan ${occupantId} percuté (${mode}, énergie ${energie}).`);
       if (seuil4) {
-        const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, bagarreSet, initiatorId: titanId });
+        // movingTitanId : c'est l'occupant qu'on projette (cf. projectInDirection).
+        const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, bagarreSet, initiatorId: titanId, movingTitanId: occupantId });
         const occupant = titans.find((t) => t.id === occupantId);
         occupant.cell = landing.row + landing.col;
         log.push(`${key} : Titan ${occupantId} projeté vers ${occupant.cell}` + (landing.hasBounced ? " (après rebond)" : ""));
@@ -1413,7 +1430,8 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
     const dirR = Math.sign(destRowIdx - originRowIdx);
     const dirC = Math.sign(destCol - originCol);
     const bagarreSet = new Set([occupantId]); // FAQ #12 : Titans distincts déplacés (direct + chaîne)
-    const landing = projectInDirection(destRow, destCol, dirR, dirC, energie, { board, looseBlocks, titans, log, bagarreSet, initiatorId: titanId });
+    // movingTitanId : c'est l'occupant qu'on projette (cf. projectInDirection).
+    const landing = projectInDirection(destRow, destCol, dirR, dirC, energie, { board, looseBlocks, titans, log, bagarreSet, initiatorId: titanId, movingTitanId: occupantId });
     let landingKey = landing.row + landing.col;
     // Ruling confirmée Nikola (session) : si l'occupant est coincé (rebond
     // avant ET arrière tous deux bloqués par un mur/bord — projectInDirection

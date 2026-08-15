@@ -303,6 +303,30 @@ describe("règle — immunité de l'initiateur (Tout Casser)", () => {
     projectInDirection("E", 4, 0, 1, 6, ctx);
     expect(titans[0].cell).not.toBe("E6");
   });
+
+  // Conflit de règles tranché par Nikola le 2026-08-15. Le livret dit que
+  // l'élément « s'arrête immédiatement dessus », ce qui convient à un
+  // débris mais mettait DEUX TITANS sur la même case quand l'élément
+  // projeté était lui-même un Titan. Arbitrage : l'immunité joue toujours,
+  // mais un Titan s'arrête sur la case précédente.
+  it("un Titan projeté sur l'initiateur s'arrête juste avant, sans le pousser", () => {
+    const titans = [
+      { id: 1, cell: "E6", repaire: [], adrenaline: 0, socles: [], bagarre: 0, destruction: 0 },
+      { id: 4, cell: "E3", repaire: [], adrenaline: 0, socles: [], bagarre: 0, destruction: 0 },
+    ];
+    const ctx = { board: {}, looseBlocks: {}, titans, log: [], initiatorId: 1, movingTitanId: 4 };
+    const arrivee = projectInDirection("E", 3, 0, 1, 6, ctx);
+    const cellule = arrivee.row + arrivee.col;
+    expect(cellule).toBe("E5");           // la case juste avant l'initiateur
+    expect(titans[0].cell).toBe("E6");    // l'initiateur n'a pas bougé
+  });
+
+  it("un débris, lui, s'arrête bien SUR la case de l'initiateur", () => {
+    const titans = [{ id: 1, cell: "E6", repaire: [], adrenaline: 0, socles: [], bagarre: 0, destruction: 0 }];
+    const ctx = { board: {}, looseBlocks: {}, titans, log: [], initiatorId: 1 };
+    const arrivee = projectInDirection("E", 3, 0, 1, 6, ctx);
+    expect(arrivee.row + arrivee.col).toBe("E6");
+  });
 });
 
 describe("règle — un débris ne se pose jamais sur un bâtiment debout", () => {
