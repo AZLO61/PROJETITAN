@@ -123,8 +123,16 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
 
   const total = manchesMax(nbJoueurs);
   for (let manche = 1; manche <= total; manche++) {
+    // L'ordre de la Manche suit l'ordre de jeu, mais DÉMARRE au Détonateur
+    // en cours. Le simulateur reproduisait auparavant le bug du
+    // contrôleur, qui repartait toujours du premier de l'ordre figé : la
+    // rotation du Détonateur n'avait aucun effet et le même Titan ouvrait
+    // toutes les Manches. Corrigé des deux côtés le 2026-08-15.
+    const depart = Math.max(0, ordreJeu.indexOf(detonateur));
+    const ordreManche = [...ordreJeu.slice(depart), ...ordreJeu.slice(0, depart)];
+
     // ── PHASE PROGRAMMATION ──
-    for (const id of ordreJeu) {
+    for (const id of ordreManche) {
       const cartes = planProgrammation(id, etat, profilsUtilises[id], manche);
       if (cartes.length === ROUNDS_PAR_MANCHE) {
         const res = programCards(id, cartes, etat.titans);
@@ -141,7 +149,7 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
 
     // ── PHASE ACTION : 3 rounds, 1 carte par Titan et par round ──
     for (let round = 0; round < ROUNDS_PAR_MANCHE; round++) {
-      for (const id of ordreJeu) {
+      for (const id of ordreManche) {
         const titan = etat.titans.find((t) => t.id === id);
         if (!titan || titan.programmed.length === 0) continue;
         const profil = profilsUtilises[id];
@@ -186,7 +194,7 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
     // ── PHASE REPOS ──
     // Le sens du vol revient au Détonateur dans le livret ; faute de
     // règle de décision pour l'IA, il est tiré au sort (cf. en-tête).
-    resolveVolPhaseRepos(manche, pick(["gauche", "droite"]), ordreJeu, etat.titans);
+    resolveVolPhaseRepos(manche, pick(["gauche", "droite"]), ordreManche, etat.titans);
 
     // ── FIN DE MANCHE ──
     if (manche < total) {

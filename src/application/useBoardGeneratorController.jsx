@@ -170,16 +170,19 @@ export function useBoardGeneratorController() {
       const nextDet = nextDetonateur(prev.ordreJeu, prev.detonateur);
       return { ...prev, players, detonateur: nextDet };
     });
-    setActivePlayerId((prev) => {
-      const idx = titanState.ordreJeu.indexOf(prev);
-      return titanState.ordreJeu[(idx + 1) % titanState.ordreJeu.length];
-    });
+    // Le joueur actif suit désormais le Détonateur, seule source de vérité
+    // sur qui ouvre la Manche (cf. correction du 2026-08-15). L'ancien
+    // calcul faisait avancer d'un cran dans l'ordre de jeu à partir du
+    // joueur courant, ce qui donnait un résultat sans rapport avec le
+    // Détonateur — et de toute façon écrasé à l'ouverture de la Phase
+    // Action.
+    setActivePlayerId(nextDetonateur(titanState.ordreJeu, titanState.detonateur));
     setPassifUsed({});
     setMoveMode(false);
     setRecupMode(false);
     setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0);
     setVolDirection(null); // Phase Repos suivante : le nouveau Détonateur devra rechoisir un sens
-  }, [mancheNumber, nbJoueurs, titanState.ordreJeu]);
+  }, [mancheNumber, nbJoueurs, titanState.ordreJeu, titanState.detonateur]);
 
   const canValidatePhase = useCallback(
     (titanId) => {
@@ -232,8 +235,14 @@ export function useBoardGeneratorController() {
       if (nextPhase === "action") {
         cardsPlayedCountRef.current = {};   // reset compteur de rounds
         setWaitingNextTitan(false);
-        // Premier joueur = détonateur (ordreJeu[0])
-        setActivePlayerId(titanState.ordreJeu[0]);
+        // Bug trouvé par le diagnostic, confirmé par Nikola le 2026-08-15 :
+        // cette ligne lisait `ordreJeu[0]`, pas le Détonateur. Or le
+        // Détonateur pivote bien à chaque Manche (cf. nextDetonateur dans
+        // advanceManche) — mais sa rotation ne produisait STRICTEMENT
+        // AUCUN effet : le même Titan ouvrait toutes les Manches de toutes
+        // les parties. La rotation existait dans les données et nulle part
+        // dans le jeu.
+        setActivePlayerId(titanState.detonateur ?? titanState.ordreJeu[0]);
       }
       setPhase(nextPhase);
     }
@@ -1141,8 +1150,10 @@ export function useBoardGeneratorController() {
     if (next === null) {
       // Tous ont joué ce round
       if (roundsDone < 3) {
-        // Nouveau round : repart du détonateur (ordreJeu[0])
-        next = ordreJeu[0];
+        // Même correction qu'à l'ouverture de la Phase Action : chaque
+        // nouveau round repart du Détonateur en cours, et non du premier
+        // de l'ordre de jeu figé.
+        next = aiTitanStateRef.current.detonateur ?? ordreJeu[0];
       } else {
         // 3 rounds terminés → fin de phase action
         aiNextPlayerRef.current = null; // aucun Titan suivant : évite une relecture stale par finishAiTurn

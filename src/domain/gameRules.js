@@ -536,6 +536,26 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
   const titansByCell = {};
   titans.forEach((t) => (titansByCell[t.cell] = t.id));
 
+  // Bug trouvé par le diagnostic : la carte des occupants est construite
+  // AVANT le déplacement, et un Titan projeté y figure encore à sa case de
+  // départ. Quand sa trajectoire rebondit et repasse par cette case, il se
+  // rencontrait lui-même, se traitait comme un obstacle et se poussait
+  // récursivement — d'où des superpositions.
+  //
+  // L'exclusion est volontairement EXPLICITE (`ctx.movingTitanId`) et non
+  // déduite de la case de départ : une case peut porter à la fois un bloc
+  // libre et un Titan, et projeter ce bloc ne doit surtout pas faire
+  // disparaître le Titan de la carte des obstacles.
+  //
+  // Cas distinct de l'immunité de l'initiateur plus bas, qui concerne un
+  // élément revenant sur le Titan ayant JOUÉ la carte, lequel n'a pas bougé.
+  if (ctx.movingTitanId != null) {
+    const enMouvement = titans.find((t) => t.id === ctx.movingTitanId);
+    if (enMouvement && titansByCell[enMouvement.cell] === ctx.movingTitanId) {
+      delete titansByCell[enMouvement.cell];
+    }
+  }
+
   let r = rowIndex(fromRow);
   let c = fromCol;
   let remaining = energy;
@@ -555,18 +575,28 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         else if (nr > 8) nr = 0;
         if (nc < 1) nc = 9;
         else if (nc > 9) nc = 1;
-        r = nr;
-        c = nc;
-        remaining -= 1;
-        continue;
-      }
-      if (!hasBounced) {
+        remaining -= 1; // le passage par la faille coûte 1 d'énergie
+        // Bug trouvé par le diagnostic, tranché par Nikola le 2026-08-15 :
+        // l'ancien code faisait `r = nr; c = nc; continue;`, c'est-à-dire
+        // qu'il TÉLÉPORTAIT l'élément sur la case de sortie sans jamais la
+        // valider — ni bâtiment debout, ni Titan présent. Un élément dont
+        // l'énergie tombait à zéro juste après s'arrêtait donc sur une case
+        // interdite, ce qui posait des Titans sur les bâtiments d'angle
+        // I1 et I9 (lignes et colonnes impaires, donc cases bâtiment).
+        // Ruling retenu : la case de sortie est traitée comme n'importe
+        // quelle case d'arrivée. On ne touche donc PLUS à r/c ici, et on
+        // laisse le code ci-dessous appliquer mur, rebond, poussée ou amas.
+        // L'entrée dans la faille exigeant une énergie >= 4, il reste
+        // toujours >= 3 après ce coût : la boucle ne peut pas se terminer
+        // ici en laissant l'élément nulle part.
+      } else if (!hasBounced) {
         hasBounced = true;
         curDr = -curDr;
         curDc = -curDc;
         continue; // rebond gratuit, ne consomme pas d'énergie
+      } else {
+        break; // 2e obstacle → arrêt sur la case adjacente courante
       }
-      break; // 2e obstacle → arrêt sur la case adjacente courante
     }
 
     const nextKey = rowFromIndex(nr) + nc;
@@ -584,7 +614,11 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         // n'avance pas sur la case) ; c'est le bloc cassé qui repart, dans
         // la direction du choc, avec l'énergie restante après l'impact. Il
         // peut donc lui-même déclencher une nouvelle chaîne.
-        const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remaining - 1, ctx);
+        // Ce qui repart est un BLOC, pas un Titan : on efface
+        // movingTitanId, sans quoi l'identité de l'élément projeté par
+        // l'appel parent fuiterait dans la chaîne et ferait disparaître ce
+        // Titan de la carte des obstacles pour toute la réaction.
+        const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remaining - 1, { ...ctx, movingTitanId: null });
         const pushedKey = pushed.row + pushed.col;
         if (!looseBlocks[pushedKey]) looseBlocks[pushedKey] = [];
         looseBlocks[pushedKey].push(broken);
@@ -597,13 +631,21 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
           releaseSocle(nextKey, board, looseBlocks);
           log.push(`${nextKey} : bâtiment détruit par ricochet → Socle (${bldg.socle}) au sol, à personne.`);
         }
-        // ⚠️ Point ouvert : ce bloc cassé ne crédite +1 Destruction à
-        // personne. projectInDirection ne sait pas quel Titan a initié la
-        // carte (il ne reçoit que le contexte plateau), contrairement aux
-        // resolvers qui font `titan.destruction += 1` sur une frappe
-        // directe. À trancher avec Nikola : la Destruction par ricochet
-        // revient-elle à l'initiateur de la carte, ou à personne comme le
-        // Socle ?
+        // Point ouvert TRANCHÉ par Nikola le 2026-08-15 : la Destruction
+        // par ricochet revient à l'INITIATEUR de la carte, comme pour une
+        // frappe directe. C'est bien son action qui a causé la casse.
+        // (Le Socle, lui, reste attribué à personne : ce sont deux rulings
+        // distincts, cf. releaseSocle.)
+        // L'information était disponible depuis le début — ctx.initiatorId
+        // est transmis par les dix appels de projectInDirection — elle
+        // n'était simplement pas exploitée ici.
+        if (ctx.initiatorId != null) {
+          const initiateur = titans.find((t) => t.id === ctx.initiatorId);
+          if (initiateur) {
+            initiateur.destruction = (initiateur.destruction || 0) + 1;
+            log.push(`+1 Destruction (Titan ${ctx.initiatorId}) — bloc cassé par ricochet.`);
+          }
+        }
         remaining = 0;
         break; // arrêt sur la case actuelle (r, c)
       }
@@ -640,7 +682,10 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         break; // reste sur la case actuelle (r, c) — case adjacente
       }
       const occupant = titans.find((t) => t.id === occupantTitanId);
-      const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remainingAfterArrival, ctx);
+      // Dans cette récursion, l'élément en mouvement est l'OCCUPANT poussé,
+      // plus celui de l'appel parent : c'est donc lui qui doit être exclu
+      // de la carte des obstacles s'il rebondit sur sa propre case.
+      const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remainingAfterArrival, { ...ctx, movingTitanId: occupantTitanId });
       occupant.cell = pushed.row + pushed.col;
       if (ctx.bagarreSet) ctx.bagarreSet.add(occupantTitanId); // FAQ #12 : Titan distinct déplacé en chaîne
       log.push(
@@ -661,7 +706,8 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         break;
       }
       const pushedColor = stack.pop();
-      const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remainingAfterArrival, ctx);
+      // Un bloc est transmis, pas un Titan : même raison qu'au ricochet.
+      const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remainingAfterArrival, { ...ctx, movingTitanId: null });
       const pushedKey = pushed.row + pushed.col;
       if (!looseBlocks[pushedKey]) looseBlocks[pushedKey] = [];
       looseBlocks[pushedKey].push(pushedColor);
@@ -1144,7 +1190,9 @@ function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
   for (let i = touched.length - 1; i >= 0; i--) {
     const t = touched[i];
     const occupant = titans.find((x) => x.id === t.id);
-    const landing = projectInDirection(t.row, t.col, dr, dc, reculDistance, { board, looseBlocks, titans, log, bagarreSet, initiatorId: titanId });
+    // movingTitanId : c'est ce Titan-là qu'on projette, il ne doit pas se
+    // voir lui-même comme un obstacle si sa trajectoire rebondit.
+    const landing = projectInDirection(t.row, t.col, dr, dc, reculDistance, { board, looseBlocks, titans, log, bagarreSet, initiatorId: titanId, movingTitanId: t.id });
     occupant.cell = landing.row + landing.col;
     bagarreSet.add(t.id);
     const dilOk = canDil(t.id, gameState);
