@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  appliquerDecisions,
   candidatsPourCarte,
   planCardPlay,
   planMovement,
@@ -26,6 +27,11 @@ const titan = (id, extra = {}) => ({
   programmed: [],
   hand: [],
   repos: [],
+  // getProgrammedSum lit ces deux champs : sans eux, toute évaluation de
+  // Faut Pas Me Chauffer lève, et le candidat est silencieusement écarté
+  // par le garde-fou du planificateur.
+  playedThisManche: [],
+  discardedHidden: [],
   ...extra,
 });
 
@@ -171,6 +177,68 @@ describe("carte — l'IA ne suit plus un ordre de priorité figé", () => {
     // Titan 1 en tête : retour au régime normal de 2 cases.
     const enTete = [titan(1, { cell: "E5", repaire: Array(6).fill("bleu"), programmed: ["je_ne_partage_pas"] }), titan(2, { cell: "A1" })];
     expect(planCardPlay(1, etat(enTete, looseBlocks), expert, 1).jnpCells).toHaveLength(2);
+  });
+});
+
+describe("sabotage — l'IA sait faire perdre des points sans en gagner", () => {
+  it("l'Expert préfère dépouiller le leader plutôt qu'encaisser un petit gain", () => {
+    setSeed(31);
+    // Le leader détient 5 Rouge : lui en retirer un lui coûte 6 points
+    // (22 - 16). Notre Titan, lui, n'a rien : Faut Pas Me Chauffer, force
+    // programmée supérieure, déclenche un RAGE qui prend ce Rouge.
+    // L'alternative Je Ne Partage Pas ne lui rapporterait qu'un ramassage.
+    const titans = [
+      titan(1, { cell: "E5", programmed: ["faut_pas_me_chauffer", "je_ne_partage_pas"], hand: [] }),
+      titan(2, { cell: "E6", repaire: Array(5).fill("rouge"), programmed: [] }),
+    ];
+    const choix = planCardPlay(1, etat(titans, { D5: ["bleu"], F5: ["bleu"] }), expert, 1);
+    expect(choix.cardId).toBe("faut_pas_me_chauffer");
+  });
+
+  it("appliquerDecisions : un RAGE transfère bien la ressource", () => {
+    const titans = [titan(1), titan(2, { repaire: ["rouge", "bleu"] })];
+    appliquerDecisions([{ type: "RAGE", attackerId: 1, defenderId: 2 }], etat(titans));
+    expect(titans[0].repaire).toHaveLength(1);
+    expect(titans[1].repaire).toHaveLength(1);
+  });
+
+  it("appliquerDecisions : un RAGE sur une cible à 1 seul bloc fonctionne", () => {
+    // Le ruling de Nikola est explicite : RAGE est possible dès 1 ressource.
+    const titans = [titan(1), titan(2, { repaire: ["rouge"] })];
+    appliquerDecisions([{ type: "RAGE", attackerId: 1, defenderId: 2 }], etat(titans));
+    expect(titans[1].repaire).toHaveLength(0);
+    expect(titans[0].repaire).toEqual(["rouge"]);
+  });
+
+  it("appliquerDecisions : à court de blocs, RAGE prend l'Adrénaline (FAQ #5)", () => {
+    const titans = [titan(1), titan(2, { repaire: [], adrenaline: 2 })];
+    appliquerDecisions([{ type: "RAGE", attackerId: 1, defenderId: 2 }], etat(titans));
+    expect(titans[1].adrenaline).toBe(1);
+    expect(titans[0].adrenaline).toBe(1);
+  });
+
+  it("appliquerDecisions : DIL retire une ressource à la cible", () => {
+    const titans = [titan(1), titan(2, { repaire: ["rouge", "bleu"] })];
+    appliquerDecisions([{ type: "DIL", attackerId: 1, defenderId: 2 }], etat(titans));
+    expect(titans[1].repaire).toHaveLength(1);
+    // DIL détruit, il ne transfère pas : l'attaquant ne récupère rien.
+    expect(titans[0].repaire).toHaveLength(0);
+  });
+
+  it("appliquerDecisions : DIL impossible sous 2 couleurs différentes", () => {
+    const titans = [titan(1), titan(2, { repaire: ["bleu", "bleu", "bleu"] })];
+    appliquerDecisions([{ type: "DIL", attackerId: 1, defenderId: 2 }], etat(titans));
+    expect(titans[1].repaire).toHaveLength(3);
+  });
+
+  it("appliquerDecisions : la cible paie une Adrénaline quand la perte le justifie", () => {
+    // 5 Rouge (perte marginale 6) et 9 Bleu (perte marginale 5) : la
+    // cible perdrait au mieux 5 points, plus que les 3 que vaut une
+    // Adrénaline. Elle paie donc plutôt que d'encaisser.
+    const titans = [titan(1), titan(2, { repaire: [...Array(5).fill("rouge"), ...Array(9).fill("bleu")], adrenaline: 1 })];
+    appliquerDecisions([{ type: "DIL", attackerId: 1, defenderId: 2 }], etat(titans));
+    expect(titans[1].adrenaline).toBe(0);
+    expect(titans[1].repaire).toHaveLength(14);
   });
 });
 

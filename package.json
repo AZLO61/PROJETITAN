@@ -9,6 +9,7 @@
     "test": "vitest run",
     "lint": "eslint .",
     "audit": "node scripts/audit-structure.mjs",
+    "simulate": "node scripts/simulate.mjs",
     "check": "npm run audit && npm run lint && npm test"
   },
   "dependencies": {

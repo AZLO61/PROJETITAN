@@ -38,9 +38,10 @@
    · Horizon d'un seul coup. L'IA ne déroule pas la suite de la Manche.
      Aller plus loin supposerait de deviner la programmation adverse, qui
      est secrète : le gain serait faible et le coût élevé.
-   · Les décisions DIL et RAGE déclenchées par un coup ne sont pas
-     simulées, elles se résolvent dans une file séparée après coup. L'IA
-     sous-estime donc légèrement les cartes qui en génèrent.
+   · Les décisions DIL et RAGE sont désormais simulées en valeur attendue
+     (cf. `appliquerDecisions`), mais leur résolution réelle passe par une
+     file où un joueur humain peut choisir autrement. L'IA raisonne donc
+     sur la résolution la plus probable, pas sur une certitude.
    · Les cartes Événements sont hors sujet ici : elles n'ont aujourd'hui
      aucun effet mécanique dans le moteur, décision de Nikola de les
      traiter en extension plus tard.
@@ -49,11 +50,15 @@
 import {
   PORTEE_BOING_BOING,
   chebyshevDistance,
+  getFPMCTargets,
   getJeNePartagePasPool,
   getMovementReachable,
+  getProgrammedSum,
   getRecuperationPool,
   isLanterneRouge,
   isSocleMarker,
+  makeDecisionRequest,
+  scoreBareme,
   resolveBoingBoing,
   resolveFreeMovement,
   resolveGraouhhh,
@@ -158,36 +163,171 @@ export function planMovement(titanId, gameState, profile = makeProfile()) {
 
 /* ── CARTE ACTION ─────────────────────────────────────────── */
 
-// Applique un coup sur un état, résolveur réel à l'appui, et retranche la
-// mise d'Adrénaline (cf. « point d'attention » en en-tête).
+/* ── VALEUR ATTENDUE DES DÉCISIONS DIL ET RAGE ────────────── */
+
+// Sans ce bloc, l'IA était structurellement incapable de saboter : les
+// cartes qui dépouillent un adversaire (DIL, RAGE) ne produisent pas
+// d'effet immédiat, elles empilent des décisions résolues plus tard. La
+// simulation les voyait donc comme des coups sans conséquence, et une
+// IA Experte n'avait jamais de raison de préférer « faire perdre 6 points
+// au leader » à « en gagner 2 ». C'est pourtant tout l'intérêt de ces
+// cartes.
+
+const COULEURS_SCORABLES = ["bleu", "rose", "orange", "rouge"];
+
+function compteCouleur(repaire, couleur) {
+  return (repaire || []).filter((c) => c === couleur).length;
+}
+
+// Ce que gagnerait un Titan en AJOUTANT un bloc de cette couleur.
+function gainSiAjoute(repaire, couleur) {
+  const n = compteCouleur(repaire, couleur);
+  return scoreBareme(couleur, n + 1) - scoreBareme(couleur, n);
+}
+
+// Ce que perdrait un Titan en RETIRANT un bloc de cette couleur. Ce n'est
+// pas l'inverse du gain : sur l'Orange, perdre le bloc qui complétait une
+// paire coûte cher, perdre le bloc impair ne coûte rien.
+function perteSiRetire(repaire, couleur) {
+  const n = compteCouleur(repaire, couleur);
+  if (n === 0) return 0;
+  return scoreBareme(couleur, n) - scoreBareme(couleur, n - 1);
+}
+
+// Valeur d'une Adrénaline au décompte final (3 points par le livret).
+// Sert d'étalon quand un défenseur arbitre entre payer et encaisser.
+const VALEUR_ADRENALINE = 3;
+
+/**
+ * Applique la résolution la plus probable des décisions générées par un
+ * coup. On ne devine pas : chaque camp est supposé jouer son intérêt, ce
+ * qui est l'hypothèse la moins arbitraire disponible.
+ */
+export function appliquerDecisions(decisions, etat) {
+  for (const d of decisions || []) {
+    const attaquant = etat.titans.find((t) => t.id === d.attackerId);
+    const defenseur = etat.titans.find((t) => t.id === d.defenderId);
+    if (!attaquant || !defenseur) continue;
+
+    if (d.type === "RAGE") {
+      // Livret : l'attaquant choisit librement, et prend UNE ressource.
+      // Il vise donc celle qui lui rapporte le plus à lui — ce qui n'est
+      // pas forcément celle qui coûte le plus au défenseur, mais c'est
+      // bien la règle.
+      if (defenseur.repaire.length >= 1) {
+        let meilleurIdx = 0;
+        let meilleurGain = -Infinity;
+        defenseur.repaire.forEach((couleur, idx) => {
+          const gain = gainSiAjoute(attaquant.repaire, couleur);
+          if (gain > meilleurGain) {
+            meilleurGain = gain;
+            meilleurIdx = idx;
+          }
+        });
+        const [pris] = defenseur.repaire.splice(meilleurIdx, 1);
+        attaquant.repaire.push(pris);
+      } else if ((defenseur.adrenaline || 0) >= 1) {
+        // FAQ #5 : l'Adrénaline de la cible est elle-même ciblable.
+        defenseur.adrenaline -= 1;
+        attaquant.adrenaline = (attaquant.adrenaline || 0) + 1;
+      }
+      continue;
+    }
+
+    if (d.type === "DIL") {
+      // Livret : l'attaquant désigne 2 couleurs DIFFÉRENTES, la cible
+      // choisit laquelle elle perd, ou paie 1 Adrénaline pour annuler.
+      // L'attaquant a donc intérêt à proposer la paire dont le MOINS
+      // coûteux des deux termes est le plus cher possible : c'est un
+      // maximin, la cible prendra toujours l'option la plus douce.
+      const presentes = COULEURS_SCORABLES.filter((c) => compteCouleur(defenseur.repaire, c) > 0);
+      if (presentes.length < 2) continue; // DIL structurellement impossible
+
+      let couleurPerdue = null;
+      let meilleurMinimum = -Infinity;
+      for (let i = 0; i < presentes.length; i++) {
+        for (let j = i + 1; j < presentes.length; j++) {
+          const a = perteSiRetire(defenseur.repaire, presentes[i]);
+          const b = perteSiRetire(defenseur.repaire, presentes[j]);
+          const choixDeLaCible = a <= b ? presentes[i] : presentes[j];
+          const coutSubi = Math.min(a, b);
+          if (coutSubi > meilleurMinimum) {
+            meilleurMinimum = coutSubi;
+            couleurPerdue = choixDeLaCible;
+          }
+        }
+      }
+      if (!couleurPerdue) continue;
+
+      // La cible paie plutôt que d'encaisser si la perte dépasse la
+      // valeur d'une Adrénaline.
+      if (meilleurMinimum > VALEUR_ADRENALINE && (defenseur.adrenaline || 0) >= 1) {
+        defenseur.adrenaline -= 1;
+        continue;
+      }
+      const idx = defenseur.repaire.indexOf(couleurPerdue);
+      if (idx !== -1) defenseur.repaire.splice(idx, 1);
+    }
+  }
+}
+
+/**
+ * Applique un coup sur un état, résolveur réel à l'appui, et retranche la
+ * mise d'Adrénaline (cf. « point d'attention » en en-tête).
+ *
+ * Exporté parce que le simulateur de parties s'en sert pour JOUER, quand
+ * l'IA s'en sert pour RÉFLÉCIR. C'est délibéré : la partie simulée et le
+ * raisonnement de l'IA passent ainsi par exactement le même code, il ne
+ * peut pas y avoir de divergence entre ce que l'IA croit et ce qui arrive.
+ */
+export function appliquerCoup(coup, titanId, etat, mancheNumber) {
+  return simulerCarte(coup, titanId, etat, mancheNumber);
+}
+
 function simulerCarte(coup, titanId, etat, mancheNumber) {
   const { cardId, dir, bbDest, jnpCells, mise = 0 } = coup;
   const moi = etat.titans.find((t) => t.id === titanId);
+  let res = null;
 
   switch (cardId) {
     case "tout_casser":
-      resolveToutCasser(titanId, etat, mise);
+      res = resolveToutCasser(titanId, etat, mise);
       break;
     case "tete_en_avant":
-      resolveTeteEnAvant(titanId, dir.dr, dir.dc, mise, etat);
+      res = resolveTeteEnAvant(titanId, dir.dr, dir.dc, mise, etat);
       break;
     case "graouhhh":
-      resolveGraouhhh(titanId, dir.dr, dir.dc, mancheNumber, etat);
+      res = resolveGraouhhh(titanId, dir.dr, dir.dc, mancheNumber, etat);
       break;
     case "boing_boing":
-      resolveBoingBoing(titanId, bbDest, mise, mancheNumber, etat);
+      res = resolveBoingBoing(titanId, bbDest, mise, mancheNumber, etat);
       break;
     case "je_ne_partage_pas":
-      resolveJeNePartagePas(titanId, jnpCells, etat);
+      res = resolveJeNePartagePas(titanId, jnpCells, etat);
       break;
-    case "faut_pas_me_chauffer":
-      // Aucun effet direct : la carte produit des comparaisons de force
-      // qui partent en file de décisions DIL/RAGE, hors simulation.
+    case "faut_pas_me_chauffer": {
+      // Aucun effet direct : la carte compare les forces programmées et
+      // engendre RAGE (attaquant devant), DIL (égalité) ou rien. On
+      // reproduit ici la même comparaison que le contrôleur, sans quoi la
+      // carte de sabotage par excellence serait notée comme un coup nul.
+      const decisions = [];
+      for (const defId of getFPMCTargets(titanId, etat)) {
+        const atk = etat.titans.find((t) => t.id === titanId);
+        const def = etat.titans.find((t) => t.id === defId);
+        if (!atk || !def) continue;
+        const somme = getProgrammedSum(atk);
+        const sommeDef = getProgrammedSum(def);
+        if (somme > sommeDef) decisions.push(makeDecisionRequest("RAGE", titanId, defId, "Faut Pas Me Chauffer"));
+        else if (somme === sommeDef) decisions.push(makeDecisionRequest("DIL", titanId, defId, "Faut Pas Me Chauffer"));
+      }
+      res = { decisions };
       break;
+    }
     default:
       break;
   }
 
+  appliquerDecisions(res?.decisions, etat);
   if (mise > 0 && moi) moi.adrenaline = Math.max(0, (moi.adrenaline || 0) - mise);
 }
 

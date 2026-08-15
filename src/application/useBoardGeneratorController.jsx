@@ -783,7 +783,14 @@ export function useBoardGeneratorController() {
         // RAGE : décision 100% côté attaquant (livret) — indépendant du
         // mode du défenseur.
         if (!atkIsIa) { needHuman.push(d); continue; }
-        if (defender.repaire.length >= 2) {
+        // Bug trouvé en branchant les IA : le seuil était `>= 2`, reliquat
+        // de l'ancien alignement erroné sur la contrainte de DIL. Le
+        // ruling de Nikola est explicite (cf. canRage) : RAGE est possible
+        // dès 1 seule ressource, l'attaquant n'en prend qu'une. Avec
+        // l'ancien seuil, une cible possédant exactement 1 bloc et aucune
+        // Adrénaline ne perdait RIEN face à un attaquant IA : le RAGE
+        // était purement et simplement annulé.
+        if (defender.repaire.length >= 1) {
           let bestIdx = 0, bestScore = -Infinity;
           defender.repaire.forEach((color, idx) => {
             const val = marginalValue(color, attacker.repaire, curPlayers, d.attackerId);
