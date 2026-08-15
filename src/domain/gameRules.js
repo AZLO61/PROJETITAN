@@ -556,6 +556,14 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
     }
   }
 
+  // `titansByCell` est un relevé figé au début de l'appel. Les récursions
+  // (bloc transmis, Titan poussé, ricochet) peuvent déplacer un Titan
+  // PENDANT le parcours, y compris sur la case où l'élément courant compte
+  // se poser. Cette fonction interroge l'état RÉEL au moment voulu, ce que
+  // le relevé initial ne peut pas faire.
+  const caseOccupeeParUnAutreTitan = (cle) =>
+    titans.some((t) => t.cell === cle && t.id !== ctx.movingTitanId);
+
   let r = rowIndex(fromRow);
   let c = fromCol;
   let remaining = energy;
@@ -697,15 +705,45 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         break; // reste sur la case actuelle (r, c) — case adjacente
       }
       const occupant = titans.find((t) => t.id === occupantTitanId);
+      const caseAvant = occupant.cell;
       // Dans cette récursion, l'élément en mouvement est l'OCCUPANT poussé,
       // plus celui de l'appel parent : c'est donc lui qui doit être exclu
       // de la carte des obstacles s'il rebondit sur sa propre case.
       const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remainingAfterArrival, { ...ctx, movingTitanId: occupantTitanId });
-      occupant.cell = pushed.row + pushed.col;
-      if (ctx.bagarreSet) ctx.bagarreSet.add(occupantTitanId); // FAQ #12 : Titan distinct déplacé en chaîne
+      const caseApres = pushed.row + pushed.col;
+
+      // OCCUPANT COINCÉ. Quand la trajectoire du Titan poussé est bloquée
+      // dans les deux sens (mur ou bord devant ET derrière),
+      // projectInDirection renvoie sa case d'origine INCHANGÉE : il n'a pas
+      // bougé. Le code supposait pourtant toujours la case libérée et y
+      // installait l'élément arrivant, ce qui produisait deux Titans sur la
+      // même case. Cas observé en simulation : « Titan 2 repoussé vers B2 »
+      // alors qu'il était déjà en B2, suivi de « Titan 1 déplacé en B2 ».
+      //
+      // Nikola avait déjà tranché ce cas de l'occupant coincé pour Boing
+      // Boing (voir resolveBoingBoing, qui annule alors l'action) ; la
+      // réaction en chaîne n'avait jamais reçu le garde-fou correspondant.
+      // Ici l'élément arrivant s'arrête simplement sur la case précédente,
+      // comme face à n'importe quel obstacle infranchissable.
+      if (caseApres === caseAvant) {
+        log.push(
+          `${nextKey} : Titan ${occupantTitanId} coincé, il ne peut pas être repoussé → l'élément s'arrête en ${rowFromIndex(r)}${c}.`
+        );
+        break; // reste sur la case actuelle (r, c)
+      }
+
+      occupant.cell = caseApres;
+      if (ctx.bagarreSet) ctx.bagarreSet.add(occupantTitanId); // FAQ #12 : Titan distinct DÉPLACÉ en chaîne
       log.push(
         `${nextKey} : réaction en chaîne — Titan ${occupantTitanId} repoussé vers ${occupant.cell} (énergie transmise ${remainingAfterArrival}).`
       );
+
+      // Même précaution que pour le bloc transmis : la chaîne a pu ramener
+      // un TROISIÈME Titan sur la case que l'occupant vient de libérer.
+      if (caseOccupeeParUnAutreTitan(nextKey)) {
+        break; // reste sur la case actuelle (r, c)
+      }
+
       r = nr;
       c = nc;
       remaining = 0; // l'élément arrivant prend la place libérée
@@ -729,6 +767,20 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
       log.push(
         `${nextKey} : réaction en chaîne — bloc ${pushedColor} transmis vers ${pushedKey} (énergie ${remainingAfterArrival}).`
       );
+
+      // La récursion ci-dessus a pu DÉPLACER UN TITAN sur la case que
+      // l'élément s'apprête à occuper : le bloc poussé percute un Titan
+      // plus loin, celui-ci rebondit et retombe précisément ici. Cas
+      // observé en simulation, Manche 1 : le bloc de B2 est poussé vers
+      // A1, y percute le Titan 2 qui rebondit et atterrit en B2, et le
+      // Titan 4 arrivant prenait quand même B2.
+      // La carte des occupants ayant été figée AVANT la récursion, elle ne
+      // peut pas voir ce déplacement : il faut donc revérifier la case au
+      // moment de s'y poser, et non se fier au relevé initial.
+      if (caseOccupeeParUnAutreTitan(nextKey)) {
+        break; // reste sur la case actuelle (r, c)
+      }
+
       r = nr;
       c = nc;
       remaining = 0;
@@ -1053,47 +1105,16 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
       break;
     }
 
-    if (hasAmas) {
-      if (seuil4) {
-        const ejected = [...stack];
-        looseBlocks[key] = [];
-        for (let i = ejected.length - 1; i >= 0; i--) {
-          const blockColor = ejected[i];
-          const hauteur = i + 1;
-          const landing = projectInDirection(row, cIdx, -dr, -dc, hauteur, { board, looseBlocks, titans, log, initiatorId: titanId });
-          const landingKey = landing.row + landing.col;
-          if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
-          looseBlocks[landingKey].push(blockColor);
-          log.push(
-            `${key} : Patatras — bloc ${blockColor} (hauteur ${hauteur}) éjecté vers ${landingKey}` +
-              (landing.hasBounced ? " (après rebond)" : "")
-          );
-        }
-        titan.cell = key;
-        log.push(`Titan ${titanId} avance jusqu'à ${key} (Amas balayé par le Patatras).`);
-      } else {
-        titan.cell = lastFreeCell;
-        log.push(`${key} : Amas trop massif (énergie ${energie} < Seuil 4) → obstacle infranchissable. Titan ${titanId} s'arrête en ${lastFreeCell}.`);
-      }
-      stopped = true;
-      break;
-    }
-
-    if (hasSingleBlock) {
-      const picked = stack.pop();
-      titan.cell = key;
-      if (isSocleMarker(picked)) {
-        const val = socleValue(picked);
-        titan.socles.push(val);
-        log.push(`${key} : Socle libre (valeur ${val}) récupéré, Titan ${titanId} prend sa place.`);
-      } else {
-        titan.repaire.push(picked);
-        log.push(`${key} : bloc libre ${picked} récupéré en Repaire, Titan ${titanId} prend sa place.`);
-      }
-      stopped = true;
-      break;
-    }
-
+    // ⚠️ ORDRE DES TESTS : le Titan occupant DOIT être testé avant l'Amas et
+    // le bloc isolé. Bug trouvé par le diagnostic : l'ancien ordre
+    // (Amas/Bloc d'abord) faisait qu'une case portant À LA FOIS un Titan ET
+    // un débris était traitée comme un simple ramassage — l'attaquant
+    // encaissait le bloc et se posait sur la case sans jamais pousser
+    // l'occupant, d'où deux Titans superposés.
+    // Exactement le même défaut que celui déjà corrigé dans
+    // resolveBoingBoing (voir le commentaire de ce résolveur) : la
+    // correction n'y avait pas été portée. Le bâtiment, lui, reste testé en
+    // premier — aucun Titan ne peut se tenir sur un bâtiment debout.
     if (occupantId && occupantId !== titanId) {
       const mode = seuil4 ? "RAGE" : "DIL";
       if (seuil4) {
@@ -1139,6 +1160,49 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
       }
       titan.cell = arrivee;
       log.push(`Titan ${titanId} s'arrête en ${arrivee} (collision avec Titan ${occupantId}).`);
+      stopped = true;
+      break;
+    }
+
+    // La case est libre de tout Titan à partir d'ici : Amas et bloc isolé
+    // peuvent être traités sans risque de superposition.
+    if (hasAmas) {
+      if (seuil4) {
+        const ejected = [...stack];
+        looseBlocks[key] = [];
+        for (let i = ejected.length - 1; i >= 0; i--) {
+          const blockColor = ejected[i];
+          const hauteur = i + 1;
+          const landing = projectInDirection(row, cIdx, -dr, -dc, hauteur, { board, looseBlocks, titans, log, initiatorId: titanId });
+          const landingKey = landing.row + landing.col;
+          if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
+          looseBlocks[landingKey].push(blockColor);
+          log.push(
+            `${key} : Patatras — bloc ${blockColor} (hauteur ${hauteur}) éjecté vers ${landingKey}` +
+              (landing.hasBounced ? " (après rebond)" : "")
+          );
+        }
+        titan.cell = key;
+        log.push(`Titan ${titanId} avance jusqu'à ${key} (Amas balayé par le Patatras).`);
+      } else {
+        titan.cell = lastFreeCell;
+        log.push(`${key} : Amas trop massif (énergie ${energie} < Seuil 4) → obstacle infranchissable. Titan ${titanId} s'arrête en ${lastFreeCell}.`);
+      }
+      stopped = true;
+      break;
+    }
+
+    if (hasSingleBlock) {
+      const picked = stack.pop();
+      titan.cell = key;
+      if (isSocleMarker(picked)) {
+        const val = socleValue(picked);
+        titan.socles.push(val);
+        log.push(`${key} : Socle libre (valeur ${val}) récupéré, Titan ${titanId} prend sa place.`);
+      } else {
+        titan.repaire.push(picked);
+        log.push(`${key} : bloc libre ${picked} récupéré en Repaire, Titan ${titanId} prend sa place.`);
+      }
       stopped = true;
       break;
     }
@@ -1323,13 +1387,13 @@ function resolveJeNePartagePas(titanId, selectedCellKeys, gameState) {
     // joueur : si plusieurs cases se libèrent d'affilée, le Titan finit
     // sur la DERNIÈRE case libérée traitée (chaque libération déplace le
     // Titan, la suivante écrase la précédente).
-    if (stack.length === 0 && key !== titan.cell) {
-      const destBldg = gameState.board && gameState.board[key];
-      const isStandingBuilding = destBldg && destBldg.blocks && destBldg.blocks.length > 0;
-      if (!isStandingBuilding) {
-        titan.cell = key;
-        log.push(`${key} : case libérée → Titan ${titanId} s'y déplace obligatoirement.`);
-      }
+    if (stack.length === 0) {
+      // Même helper que le passif Récupération : la règle est la même, elle
+      // ne doit exister qu'à un seul endroit (cf. deplacerVersCaseLiberee).
+      // Cette copie-ci ignorait la présence d'un autre Titan et provoquait
+      // des superpositions, alors que la version Récupération avait déjà
+      // été corrigée.
+      deplacerVersCaseLiberee(titan, key, gameState, log);
     }
   }
 
@@ -1832,6 +1896,36 @@ function getRecuperationPool(titanId, gameState) {
     .filter((key) => looseBlocks[key] && looseBlocks[key].length > 0);
 }
 
+/* Règle transversale (confirmée Nikola) : quand un Titan vide la dernière
+   pile de blocs d'une case, il s'y déplace OBLIGATOIREMENT.
+
+   Deux exceptions, et c'est tout l'objet de cette fonction :
+   · un bâtiment encore debout occupe la case ;
+   · un AUTRE Titan occupe la case — deux Titans ne partagent jamais une
+     case (ruling Nikola). Cette seconde exception manquait, et la règle
+     était recopiée à l'identique dans deux résolveurs (Récupération et
+     Je Ne Partage Pas) : corriger l'une laissait l'autre cassée. D'où
+     cette fonction unique, appelée par les deux.
+
+   Retourne true si le déplacement a eu lieu. */
+function deplacerVersCaseLiberee(titan, cellKey, gameState, log) {
+  const { board, titans } = gameState;
+  if (cellKey === titan.cell) return false;
+
+  const bat = board && board[cellKey];
+  if (bat && bat.blocks && bat.blocks.length > 0) return false;
+
+  const occupant = titans.find((t) => t.id !== titan.id && t.cell === cellKey);
+  if (occupant) {
+    log.push(`${cellKey} : case libérée mais occupée par le Titan ${occupant.id} → Titan ${titan.id} reste en ${titan.cell}.`);
+    return false;
+  }
+
+  titan.cell = cellKey;
+  log.push(`${cellKey} : case libérée → Titan ${titan.id} s'y déplace obligatoirement.`);
+  return true;
+}
+
 function resolveRecuperation(titanId, cellKey, gameState, pickedValue) {
   const { titans, looseBlocks } = gameState;
   const titan = titans.find((t) => t.id === titanId);
@@ -1870,26 +1964,8 @@ function resolveRecuperation(titanId, cellKey, gameState, pickedValue) {
   // l'ancien code ignorait le blocage si destBldg.isTeleporter était vrai, ce qui
   // pouvait forcer un Titan à se poser sur un téléporteur encore actif — même
   // invariant "jamais sur un bâtiment" que pour le Mouvement gratuit.
-  if (stack.length === 0 && cellKey !== titan.cell) {
-    const destBldg = gameState.board && gameState.board[cellKey];
-    const isStandingBuilding = destBldg && destBldg.blocks && destBldg.blocks.length > 0;
-    // Bug trouvé par le diagnostic (npm run diagnose) : le déplacement
-    // obligatoire ne vérifiait QUE le bâtiment. Si un AUTRE Titan occupait
-    // la case libérée, le ramasseur se téléportait dessus — 13 cas sur
-    // 15 parties simulées, et le cas est tout aussi atteignable en jeu
-    // humain, puisque des débris tombent régulièrement sous les pieds
-    // d'un adversaire.
-    // Résolution retenue : le Titan reste sur place, exactement comme
-    // face à un bâtiment debout. C'est l'application de la règle déjà
-    // tranchée par Nikola (« deux Titans ne partagent jamais une case »)
-    // à un cas que le code avait oublié, et non une règle nouvelle.
-    const occupeParUnAutreTitan = titans.some((t) => t.id !== titanId && t.cell === cellKey);
-    if (!isStandingBuilding && !occupeParUnAutreTitan) {
-      titan.cell = cellKey;
-      log.push(`${cellKey} : case libérée → Titan ${titanId} s'y déplace obligatoirement.`);
-    } else if (occupeParUnAutreTitan) {
-      log.push(`${cellKey} : case libérée mais déjà occupée par un autre Titan → Titan ${titanId} reste en ${titan.cell}.`);
-    }
+  if (stack.length === 0) {
+    deplacerVersCaseLiberee(titan, cellKey, gameState, log);
   }
   return { log, applied: true };
 }

@@ -11,6 +11,7 @@ import {
   resolveGraouhhh,
   resolveBoingBoing,
   resolveRecuperation,
+  resolveJeNePartagePas,
   computeFinalScore,
   checkEndGameTriggers,
   manchesMax,
@@ -270,6 +271,55 @@ describe("règle — la Récupération ne téléporte jamais sur un autre Titan"
     const board = { E6: { row: "E", col: 6, blocks: ["bleu"], socle: 1, isTeleporter: false } };
     resolveRecuperation(1, "E6", { board, looseBlocks: { E6: ["rouge"] }, titans }, "rouge");
     expect(titans[0].cell).toBe("E5");
+  });
+});
+
+describe("règle — aucune superposition, même en réaction en chaîne", () => {
+  // Trois causes distinctes de superposition trouvées par le diagnostic,
+  // toutes dans la résolution des chocs. Chacune est verrouillée ici : ce
+  // sont des invariants du livret, aucun refactor ne doit pouvoir les
+  // défaire silencieusement.
+  const t = (id, cell) => ({
+    id, cell, repaire: [], socles: [], bagarre: 0, destruction: 0,
+    adrenaline: 0, programmed: [], hand: [], repos: [],
+    playedThisManche: [], discardedHidden: [],
+  });
+  const sansDoublon = (titans) =>
+    new Set(titans.map((x) => x.cell)).size === titans.length;
+
+  it("Je Ne Partage Pas ne téléporte pas sur un autre Titan", () => {
+    // Même défaut que le passif Récupération, dupliqué dans ce résolveur :
+    // la case vidée déclenche un déplacement obligatoire qui ignorait la
+    // présence d'un Titan.
+    const titans = [t(1, "E5"), t(2, "E6")];
+    resolveJeNePartagePas(1, ["E6"], { board: {}, looseBlocks: { E6: ["bleu"] }, titans });
+    expect(titans[0].cell).toBe("E5");
+    expect(sansDoublon(titans)).toBe(true);
+  });
+
+  it("Tête en Avant pousse le Titan au lieu de ramasser sous ses pieds", () => {
+    // L'ordre des tests plaçait le bloc isolé AVANT l'occupant : sur une
+    // case portant un Titan ET un débris, l'attaquant encaissait le bloc
+    // et se posait dessus sans jamais pousser l'occupant.
+    for (let essai = 0; essai < 40; essai++) {
+      const titans = [t(1, "E4"), t(2, "E5")];
+      resolveTeteEnAvant(1, 0, 1, 0, { board: {}, looseBlocks: { E5: ["bleu"] }, titans });
+      expect(sansDoublon(titans)).toBe(true);
+    }
+  });
+
+  it("un Titan coincé n'est pas considéré comme ayant libéré sa case", () => {
+    // projectInDirection renvoie la case d'origine INCHANGÉE quand la
+    // trajectoire est bloquée des deux côtés. L'élément arrivant prenait
+    // quand même la place, d'où deux Titans superposés.
+    // Plateau clos par des bâtiments : l'occupant n'a nulle part où aller.
+    const board = {};
+    for (const k of ["A1", "A3", "C1", "C3"]) {
+      board[k] = { row: k[0], col: Number(k[1]), blocks: ["bleu", "rose"], socle: 2, isTeleporter: false };
+    }
+    const titans = [t(1, "B1"), t(2, "B2"), t(3, "B3")];
+    projectInDirection("B", 1, 0, 1, 6, { board, looseBlocks: {}, titans, log: [], initiatorId: 1, movingTitanId: 1 });
+    expect(sansDoublon(titans)).toBe(true);
   });
 });
 

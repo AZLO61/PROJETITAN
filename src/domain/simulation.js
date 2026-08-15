@@ -112,6 +112,34 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
     titans: titanState.players,
   };
 
+  // ── ATTRIBUTION DES VIOLATIONS À L'ÉTAPE FAUTIVE ──
+  // Première version du diagnostic : on vérifiait les invariants en fin de
+  // tour et on signalait tout ce qui n'allait pas. Problème, un état fautif
+  // le RESTE jusqu'à correction : la même superposition était recomptée à
+  // chaque contrôle suivant, et rien ne disait quelle action l'avait
+  // introduite. On chassait donc à l'aveugle.
+  // Ici on ne retient que les violations NOUVELLES par rapport au contrôle
+  // précédent, et on les étiquette avec l'étape exacte qui les a produites.
+  const dejaVues = new Set();
+  const signature = (v) => `${v.regle}|${v.detail}`;
+
+  function controler(etape, manche, round, titanId) {
+    if (!verifier) return;
+    const ou = `manche ${manche}${round != null ? `, round ${round + 1}` : ""}${titanId != null ? `, Titan ${titanId}` : ""}`;
+    for (const v of verifierInvariants(etat, ou)) {
+      const cle = signature(v);
+      if (dejaVues.has(cle)) continue;
+      dejaVues.add(cle);
+      anomalies.push({ type: "invariant", etape, ...v });
+    }
+    for (const h of verifierHygiene(etat)) {
+      const cle = signature(h);
+      if (dejaVues.has(cle)) continue;
+      dejaVues.add(cle);
+      anomalies.push({ type: "hygiene", etape, contexte: ou, ...h });
+    }
+  }
+
   const profilsUtilises = profils ?? profilsAleatoires(nbJoueurs);
   const detonateurInitial = titanState.detonateur;
   const positionsDepart = Object.fromEntries(titanState.players.map((t) => [t.id, t.cell]));
@@ -157,12 +185,14 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
         // 1. Mouvement gratuit (2 cases), passif de chaque tour.
         const mouvement = planMovement(id, etat, profil);
         if (mouvement) resolveFreeMovement(id, mouvement.destKey, etat);
+        controler("mouvement", manche, round, id);
 
         // 2. Carte Action.
         const coup = planCardPlay(id, etat, profil, manche);
         const cardId = coup?.cardId ?? titan.programmed[0];
         if (coup) {
           appliquerCoup(coup, id, etat, manche);
+          controler(`carte:${cardId}`, manche, round, id);
           cartesJouees[cardId] = (cartesJouees[cardId] || 0) + 1;
         } else {
           // Aucun coup n'a pu être noté : la carte part en défausse sans
@@ -182,12 +212,7 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
         // 3. Récupération, passif de chaque tour.
         const recup = planRecuperation(id, etat, profil);
         if (recup) resolveRecuperation(id, recup.cellKey, etat, recup.pickedValue);
-
-        if (verifier) {
-          const ou = `manche ${manche}, round ${round + 1}, Titan ${id}`;
-          for (const v of verifierInvariants(etat, ou)) anomalies.push({ type: "invariant", ...v });
-          for (const h of verifierHygiene(etat)) anomalies.push({ type: "hygiene", contexte: ou, ...h });
-        }
+        controler("recuperation", manche, round, id);
       }
     }
 
@@ -195,6 +220,7 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
     // Le sens du vol revient au Détonateur dans le livret ; faute de
     // règle de décision pour l'IA, il est tiré au sort (cf. en-tête).
     resolveVolPhaseRepos(manche, pick(["gauche", "droite"]), ordreManche, etat.titans);
+    controler("vol-phase-repos", manche);
 
     // ── FIN DE MANCHE ──
     if (manche < total) {
@@ -207,6 +233,7 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
         t.adrenaline = (t.adrenaline || 0) + 1;
       }
       detonateur = nextDetonateur(ordreJeu, detonateur);
+      controler("fin-de-manche", manche);
     }
   }
 
@@ -267,7 +294,10 @@ export function agregerAnomalies(resultats) {
       const e = parType[a.type];
       e.total++;
       e.partiesTouchees.add(r.seed);
-      const cle = a.regle || a.cardId || a.raison || "—";
+      // Regrouper par ÉTAPE et non seulement par règle : savoir qu'il y a
+      // des superpositions ne sert à rien, savoir que c'est Tout Casser qui
+      // les produit permet d'aller lire le bon résolveur.
+      const cle = a.etape ? `${a.etape} → ${a.regle}` : (a.regle || a.cardId || a.raison || "—");
       e.details[cle] = (e.details[cle] || 0) + 1;
       if (e.exemples.length < 3) e.exemples.push({ seed: r.seed, ...a });
     }
