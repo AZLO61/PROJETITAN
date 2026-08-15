@@ -3,6 +3,8 @@ import {
   FORCES,
   TEMPERAMENTS,
   allProfiles,
+  bestVertAssignment,
+  bestVertAssignments,
   chooseAmongBest,
   evaluatePosition,
   makeProfile,
@@ -10,6 +12,7 @@ import {
   valeurAPortee,
 } from "../../src/domain/aiEvaluation.js";
 import { setSeed } from "../../src/domain/rng.js";
+import { computeFinalScore } from "../../src/domain/gameRules.js";
 
 // Ces tests verrouillent les propriétés de COMPORTEMENT de l'évaluation,
 // pas ses valeurs numériques exactes. Les notes doivent pouvoir bouger
@@ -158,6 +161,78 @@ describe("valeur à portée — l'IA voit ce qui traîne autour d'elle", () => {
     const confirme = makeProfile(FORCES.CONFIRME, TEMPERAMENTS.OPPORTUNISTE);
     expect(evaluatePosition(1, entoure, novice)).toBe(evaluatePosition(1, vide, novice));
     expect(evaluatePosition(1, entoure, confirme)).toBeGreaterThan(evaluatePosition(1, vide, confirme));
+  });
+});
+
+describe("blocs Vert — l'IA sait où elle les poserait", () => {
+  const profil = makeProfile(FORCES.CONFIRME, TEMPERAMENTS.OPPORTUNISTE);
+
+  it("un Vert vaut quelque chose, il n'est plus compté zéro", () => {
+    const sans = etat([titan(1, { repaire: ["bleu", "bleu"] }), titan(2)]);
+    const avec = etat([titan(1, { repaire: ["bleu", "bleu", "vert"] }), titan(2)]);
+    expect(evaluatePosition(1, avec, profil)).toBeGreaterThan(evaluatePosition(1, sans, profil));
+  });
+
+  it("le Vert renforce une couleur déjà possédée quand c'est le plus payant", () => {
+    // 5 Bleu en Repaire : le 6e vaut 5 points (15 - 10), largement plus
+    // que ce qu'un point de Piste ADN rapporterait ici.
+    const titans = [titan(1, { repaire: [...Array(5).fill("bleu"), "vert"] }), titan(2, { bagarre: 9 })];
+    const placement = bestVertAssignment(1, titans);
+    expect(placement).toEqual([{ type: "color", target: "bleu" }]);
+  });
+
+  it("le Vert part en Piste ADN quand aucune couleur ne peut l'accueillir", () => {
+    // Repaire sans aucun bloc réel : la règle interdit d'affecter un Vert
+    // à une couleur qu'on ne possède pas. Il ne reste que les Pistes.
+    const titans = [titan(1, { repaire: ["vert"] }), titan(2)];
+    const placement = bestVertAssignment(1, titans);
+    expect(placement[0].type).toBe("adn");
+  });
+
+  it("ne propose jamais une couleur absente du Repaire réel", () => {
+    // Contrainte du livret : un Vert ne rejoint une couleur que si le
+    // Titan possède déjà au moins un bloc RÉEL de cette couleur.
+    const titans = [titan(1, { repaire: ["rouge", "vert", "vert"] }), titan(2)];
+    const placement = bestVertAssignment(1, titans, { exact: true });
+    placement.forEach((p) => {
+      if (p.type === "color") expect(p.target).toBe("rouge");
+    });
+  });
+
+  it("le mode exact rattrape l'angle mort du glouton sur les paires d'Orange", () => {
+    // Le piège : 2 Orange réels forment déjà une paire (5 pts). Un 3e
+    // Orange ne rapporte RIEN, seul un 4e refait une paire (11 pts, soit
+    // +6). Le glouton, qui juge bloc par bloc, voit ce premier Vert à
+    // gain nul et lui préfère le Bleu qui rapporte +2 tout de suite. Il
+    // s'enferme et termine à +4, là où les deux Verts en Orange
+    // valaient +6. Le mode exact, qui énumère les répartitions, le voit.
+    // L'adversaire est hors d'atteinte sur les deux Pistes ADN : sans ça,
+    // grimper d'un cran au classement rapporterait plus que tout le reste
+    // et masquerait le phénomène qu'on veut montrer ici.
+    const titans = [
+      titan(1, { repaire: ["bleu", "orange", "orange", "vert", "vert"] }),
+      titan(2, { bagarre: 10, destruction: 10 }),
+    ];
+    const total = (a) => computeFinalScore(titans, { 1: a }, null).totals[1].total;
+
+    const glouton = bestVertAssignment(1, titans);
+    const exact = bestVertAssignment(1, titans, { exact: true });
+
+    expect(glouton.every((p) => p.target === "bleu")).toBe(true);
+    expect(exact.filter((p) => p.target === "orange")).toHaveLength(2);
+    expect(total(exact)).toBeGreaterThan(total(glouton));
+  });
+
+  it("bestVertAssignments couvre tous les Titans et reste vide sans Vert", () => {
+    const titans = [titan(1, { repaire: ["bleu", "vert"] }), titan(2, { repaire: ["rose"] })];
+    const tous = bestVertAssignments(titans);
+    expect(tous[1]).toHaveLength(1);
+    expect(tous[2]).toEqual([]);
+  });
+
+  it("le placement est déterministe, deux appels donnent le même résultat", () => {
+    const titans = [titan(1, { repaire: ["bleu", "rose", "vert", "vert"] }), titan(2)];
+    expect(bestVertAssignment(1, titans)).toEqual(bestVertAssignment(1, titans));
   });
 });
 

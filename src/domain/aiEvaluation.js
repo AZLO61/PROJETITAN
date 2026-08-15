@@ -43,16 +43,29 @@
    perçue, pas du déséquilibre.
 
    ------------------------------------------------------------
-   LIMITE CONNUE, À TRAITER PLUS TARD
+   LE CAS DU VERT
 
-   Les blocs Vert sont évalués à zéro. Leur valeur dépend d'un placement
-   secret décidé en toute fin de partie (barème couleur ou Piste ADN), et
-   l'IA ne le simule pas encore. Elle sous-estime donc légèrement ses
-   propres Verts. À reprendre quand le placement secret de l'IA sera
-   implémenté — d'ici là, mieux vaut une sous-estimation franche qu'une
-   estimation inventée.
+   Le Vert est le seul élément du jeu dont la valeur n'est pas lisible
+   dans l'état de la partie : elle dépend d'un placement secret décidé au
+   décompte final, en barème couleur ou en Piste ADN. Une IA qui ignore
+   ça sous-estime ses propres Verts et néglige les téléporteurs.
+
+   La solution retenue : l'IA calcule en permanence le placement qu'elle
+   CHOISIRAIT si on lui demandait maintenant, et évalue ses Verts à cette
+   valeur-là. C'est exactement le raisonnement d'un joueur humain qui
+   garde en tête où il compte poser ses Verts.
+
+   Deux qualités de calcul, selon l'usage — voir `bestVertAssignments` :
+   glouton pendant la recherche de coup, où il est appelé des centaines
+   de fois, exhaustif au moment de la vraie décision, où il n'est appelé
+   qu'une fois et doit être juste.
 ============================================================ */
 
+// Note : le placement des Verts est calculé sur le score complet, y
+// compris pour un Novice qui, lui, n'en lira ensuite que le barème et les
+// Socles. Ce n'est pas une incohérence : si le glouton envoie un Vert en
+// Piste ADN, le Novice n'en tire rien, ce qui modélise assez fidèlement le
+// débutant qui gâche son Vert.
 import { computeFinalScore, isSocleMarker, socleValue } from "./gameRules.js";
 import { randomInt } from "./rng.js";
 
@@ -115,6 +128,121 @@ export function makeProfile(force = FORCES.CONFIRME, temperament = TEMPERAMENTS.
 export function profileLabel(profile) {
   if (!profile) return "—";
   return `${FORCE_LABELS[profile.force] ?? profile.force} ${TEMPERAMENT_LABELS[profile.temperament] ?? profile.temperament}`;
+}
+
+/* ── PLACEMENT DES BLOCS VERT ─────────────────────────────── */
+
+// Les six destinations possibles d'un bloc Vert. L'ordre compte : à
+// valeur égale, c'est le premier de la liste qui est retenu, et le
+// placement doit rester déterministe pour que deux simulations à graine
+// égale donnent le même résultat.
+const DESTINATIONS_VERT = Object.freeze([
+  { type: "color", target: "bleu" },
+  { type: "color", target: "rose" },
+  { type: "color", target: "orange" },
+  { type: "color", target: "rouge" },
+  { type: "adn", target: "bagarre" },
+  { type: "adn", target: "destruction" },
+]);
+
+function compterVert(titan) {
+  return (titan?.repaire || []).filter((c) => c === "vert").length;
+}
+
+// Le livret interdit d'affecter un Vert à une couleur dont le Titan ne
+// possède aucun bloc RÉEL. On écarte donc ces destinations d'emblée :
+// elles ne rapporteraient rien et pollueraient le placement retourné
+// d'une ligne trompeuse (« Vert → Bleu » chez un Titan sans Bleu).
+function destinationsPour(titan) {
+  const repaire = titan?.repaire || [];
+  return DESTINATIONS_VERT.filter(
+    (d) => d.type !== "color" || repaire.includes(d.target)
+  );
+}
+
+// Toutes les répartitions de `nb` blocs sur les destinations ouvertes.
+// Utilisé par le mode exact. On énumère les COMBINAISONS et non les
+// arrangements : deux blocs Vert sont interchangeables, les permuter ne
+// change rien au score. Le coût tombe de 6^4 = 1296 à 126 pour 4 blocs.
+function combinaisonsVert(destinations, nb, depuis = 0) {
+  if (nb === 0) return [[]];
+  const out = [];
+  for (let i = depuis; i < destinations.length; i++) {
+    for (const reste of combinaisonsVert(destinations, nb - 1, i)) {
+      out.push([destinations[i], ...reste]);
+    }
+  }
+  return out;
+}
+
+function totalPour(titanId, titans, assignations) {
+  return computeFinalScore(titans, assignations, null).totals[titanId]?.total ?? 0;
+}
+
+/**
+ * Meilleur placement des Verts d'UN Titan, les autres Titans gardant le
+ * placement qui leur est déjà attribué.
+ *
+ * Mode glouton (défaut) : place les blocs un par un, en gardant à chaque
+ * fois la destination qui rapporte le plus. ~6 évaluations par bloc.
+ * Il a un angle mort connu, l'Orange : un seul bloc Orange ne marque
+ * rien, il faut la paire. Le glouton, qui juge bloc par bloc, ne voit
+ * jamais le gain de la paire et écarte l'Orange. Erreur d'estimation
+ * acceptable pendant la recherche de coup, pas au moment de décider.
+ *
+ * Mode exact : énumère toutes les répartitions. C'est celui à utiliser
+ * pour le placement réel en fin de partie.
+ */
+export function bestVertAssignment(titanId, titans, { exact = false, autres = {} } = {}) {
+  const moi = titans.find((t) => t.id === titanId);
+  const nb = compterVert(moi);
+  if (nb === 0) return [];
+  const destinations = destinationsPour(moi);
+
+  if (exact) {
+    let meilleur = [];
+    let meilleurScore = -Infinity;
+    for (const combi of combinaisonsVert(destinations, nb)) {
+      const score = totalPour(titanId, titans, { ...autres, [titanId]: combi });
+      if (score > meilleurScore) {
+        meilleurScore = score;
+        meilleur = combi;
+      }
+    }
+    return meilleur;
+  }
+
+  const choisis = [];
+  for (let i = 0; i < nb; i++) {
+    let meilleure = destinations[0];
+    let meilleurScore = -Infinity;
+    for (const dest of destinations) {
+      const score = totalPour(titanId, titans, { ...autres, [titanId]: [...choisis, dest] });
+      if (score > meilleurScore) {
+        meilleurScore = score;
+        meilleure = dest;
+      }
+    }
+    choisis.push(meilleure);
+  }
+  return choisis;
+}
+
+/**
+ * Placement supposé de TOUS les Titans, à passer à `computeFinalScore`.
+ *
+ * Approximation assumée : chaque Titan est optimisé à son tour, les
+ * précédents étant figés. Les placements ne sont pas strictement
+ * indépendants (le bonus Rose et les classements ADN se disputent), mais
+ * l'écart est marginal et le coût d'un vrai calcul conjoint serait sans
+ * commune mesure avec le gain.
+ */
+export function bestVertAssignments(titans, { exact = false } = {}) {
+  const out = {};
+  for (const t of titans) {
+    out[t.id] = bestVertAssignment(t.id, titans, { exact, autres: out });
+  }
+  return out;
 }
 
 /* ── VALEUR DE CE QUI EST À PORTÉE ────────────────────────── */
@@ -184,11 +312,16 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
   const reglages = FORCE_SETTINGS[profile?.force] ?? FORCE_SETTINGS[FORCES.CONFIRME];
   const poids = TEMPERAMENT_WEIGHTS[profile?.temperament] ?? POIDS_NEUTRE;
 
-  // Le Vert est passé à vide : l'IA ne simule pas encore le placement
-  // secret (cf. « limite connue » en en-tête). Le trophée Arc-en-ciel est
-  // passé à null pour la même raison — il est suivi en cours de partie
-  // côté application, pas reconstituable depuis le seul état de plateau.
-  const scores = computeFinalScore(titans, {}, null);
+  // Les Verts sont valorisés au placement que chacun choisirait s'il
+  // devait décider maintenant (cf. « le cas du Vert » en en-tête). Mode
+  // glouton : cette fonction est appelée une fois par coup candidat, le
+  // mode exact y serait hors de prix.
+  // Le trophée Arc-en-ciel reste à null : il est suivi en cours de partie
+  // côté application et n'est pas reconstituable depuis le seul état de
+  // plateau. L'IA l'ignore donc, c'est une sous-estimation de 5 points
+  // identique pour tout le monde, donc sans effet sur le classement des
+  // coups.
+  const scores = computeFinalScore(titans, bestVertAssignments(titans), null);
   const mien = scores.totals[titanId];
   if (!mien) return 0;
 
