@@ -153,11 +153,18 @@ describe("carte — l'IA ne suit plus un ordre de priorité figé", () => {
 
   it("dépense en revanche l'Adrénaline quand elle met une cible à portée", () => {
     setSeed(12);
-    // Même carte, mais l'adversaire est à 4 cases : hors de la portée de
-    // base (3), atteignable avec 1 Adrénaline. Le point de Piste Bagarre
-    // gagné vaut plus que l'Adrénaline dépensée.
-    const titans = [titan(1, { cell: "E1", adrenaline: 2, programmed: ["tete_en_avant"] }), titan(2, { cell: "E5" })];
-    const choix = planCardPlay(1, etat(titans), expert, 1);
+    // Un bâtiment est à 4 cases : hors de la portée de base (3),
+    // atteignable avec 1 Adrénaline. Les blocs Rouge récupérés valent plus
+    // que les 3 points d'une Adrénaline conservée.
+    //
+    // La version précédente de ce test visait un TITAN à 4 cases, en
+    // supposant que le contact rapportait de la Bagarre. Le ruling de
+    // Nikola du 2026-08-15 l'a invalidée : une bagarre non remportée ne
+    // rapporte rien, et sous le Seuil 4 la cible n'est même pas projetée.
+    // L'IA a donc raison de garder son Adrénaline dans ce cas-là.
+    const board = { E5: { row: "E", col: 5, blocks: ["rouge", "rouge", "rouge"], socle: 3, isTeleporter: false } };
+    const titans = [titan(1, { cell: "E1", adrenaline: 2, programmed: ["tete_en_avant"] }), titan(2, { cell: "I9" })];
+    const choix = planCardPlay(1, { board, looseBlocks: {}, titans }, expert, 1);
     expect(choix.mise).toBeGreaterThan(0);
     expect(choix.dir).toEqual({ dr: 0, dc: 1 });
   });

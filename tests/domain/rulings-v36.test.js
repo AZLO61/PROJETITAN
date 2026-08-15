@@ -323,6 +323,69 @@ describe("règle — aucune superposition, même en réaction en chaîne", () =>
   });
 });
 
+describe("ruling — une bagarre non remportée ne rapporte aucun point", () => {
+  // Formulation de Nikola, 2026-08-15 : « si je fais une bagarre mais ne la
+  // remporte pas, je n'ai pas de point de Bagarre. »
+  // Le crédit était donné dès qu'une cible était touchée, sans vérifier
+  // qu'elle avait effectivement bougé — et pour Tête en Avant, même en
+  // dessous du Seuil 4, où aucune projection n'a lieu du tout.
+  // Cohérent avec la FAQ #12, qui parle de Titans distincts DÉPLACÉS.
+  const t = (id, cell) => ({
+    id, cell, repaire: [], socles: [], bagarre: 0, destruction: 0,
+    adrenaline: 0, programmed: [], hand: [], repos: [],
+    playedThisManche: [], discardedHidden: [],
+  });
+
+  // Mur de bâtiments qui enferme la cible : elle ne peut aller nulle part,
+  // ni vers l'avant ni après rebond.
+  const murAutour = (cles) => {
+    const board = {};
+    for (const k of cles) {
+      board[k] = { row: k[0], col: Number(k.slice(1)), blocks: ["bleu", "rose"], socle: 2, isTeleporter: false };
+    }
+    return board;
+  };
+
+  it("Tête en Avant : cible coincée, aucun point de Bagarre", () => {
+    const titans = [t(1, "E4"), t(2, "E5")];
+    const board = murAutour(["E6", "E7", "E3"]);
+    resolveTeteEnAvant(1, 0, 1, 3, { board, looseBlocks: {}, titans });
+    expect(titans[1].cell).toBe("E5");  // la cible n'a pas bougé
+    expect(titans[0].bagarre).toBe(0);  // donc aucun point
+  });
+
+  it("Tête en Avant : cible réellement déplacée, 1 point de Bagarre", () => {
+    const titans = [t(1, "E4"), t(2, "E5")];
+    resolveTeteEnAvant(1, 0, 1, 3, { board: {}, looseBlocks: {}, titans });
+    expect(titans[1].cell).not.toBe("E5");
+    expect(titans[0].bagarre).toBeGreaterThan(0);
+  });
+
+  it("Tête en Avant sous le Seuil 4 : aucune projection, aucun point", () => {
+    // Sans Seuil 4 la cible n'est pas projetée du tout : il y a bien
+    // contact (un DIL est déclenché), mais pas de bagarre remportée.
+    const titans = [t(1, "E1"), t(2, "E4")];
+    titans[1].repaire = ["bleu", "rose"];
+    resolveTeteEnAvant(1, 0, 1, 0, { board: {}, looseBlocks: {}, titans });
+    expect(titans[0].bagarre).toBe(0);
+  });
+
+  it("Graouhhh : Titan touché mais coincé, aucun point de Bagarre", () => {
+    const titans = [t(1, "E4"), t(2, "E5")];
+    const board = murAutour(["E6", "E7", "E8", "E9"]);
+    resolveGraouhhh(1, 0, 1, 1, { board, looseBlocks: {}, titans });
+    expect(titans[1].cell).toBe("E5");
+    expect(titans[0].bagarre).toBe(0);
+  });
+
+  it("Graouhhh : Titan réellement reculé, la Bagarre est comptée", () => {
+    const titans = [t(1, "E4"), t(2, "E5")];
+    resolveGraouhhh(1, 0, 1, 1, { board: {}, looseBlocks: {}, titans });
+    expect(titans[1].cell).not.toBe("E5");
+    expect(titans[0].bagarre).toBe(1);
+  });
+});
+
 describe("règle — durée de la partie", () => {
   it("6 Manches à 3 Titans, 4 Manches à 4 Titans", () => {
     expect(manchesMax(3)).toBe(6);

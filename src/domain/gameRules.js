@@ -571,6 +571,18 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
   let curDc = dc;
   let hasBounced = false;
 
+  // Trace du parcours, de la case de départ à la case d'arrivée. Sert au
+  // garde-fou final : si la case d'arrivée s'est retrouvée occupée pendant
+  // le vol, on remonte le chemin réellement emprunté pour trouver où
+  // s'arrêter. Le reconstituer après coup serait impossible, la trajectoire
+  // pouvant rebondir et traverser la faille spatio-temporelle.
+  const chemin = [rowFromIndex(r) + c];
+  const avancerVers = (nr2, nc2) => {
+    r = nr2;
+    c = nc2;
+    chemin.push(rowFromIndex(r) + c);
+  };
+
   while (remaining > 0) {
     let nr = r + curDr;
     let nc = c + curDc;
@@ -692,8 +704,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
           log.push(`${nextKey} : Titan ${ctx.movingTitanId} projeté sur le Titan ${occupantTitanId} — immunité de l'initiateur, il s'arrête juste avant, en ${rowFromIndex(r)}${c}.`);
         } else {
           log.push(`${nextKey} : élément revenu sur le Titan ${occupantTitanId} — immunité de l'initiateur, il s'arrête là.`);
-          r = nr;
-          c = nc;
+          avancerVers(nr, nc);
         }
         remaining = 0;
         break;
@@ -744,8 +755,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         break; // reste sur la case actuelle (r, c)
       }
 
-      r = nr;
-      c = nc;
+      avancerVers(nr, nc);
       remaining = 0; // l'élément arrivant prend la place libérée
       break;
     }
@@ -753,8 +763,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
     if (stack && stack.length === 1) {
       if (remainingAfterArrival <= 1) {
         // Accumulation par défaut (Formation d'Amas) : pas de poussée.
-        r = nr;
-        c = nc;
+        avancerVers(nr, nc);
         remaining = 0;
         break;
       }
@@ -781,8 +790,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         break; // reste sur la case actuelle (r, c)
       }
 
-      r = nr;
-      c = nc;
+      avancerVers(nr, nc);
       remaining = 0;
       break;
     }
@@ -790,17 +798,49 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
     if (stack && stack.length >= 2) {
       // Amas déjà en place : accumulation par défaut (Formation), pas de
       // Patatras automatique ici (mécanique de carte à part, Seuil 4).
-      r = nr;
-      c = nc;
+      avancerVers(nr, nc);
       remaining = 0;
       break;
     }
 
     // Case libre : on avance normalement.
-    r = nr;
-    c = nc;
+    avancerVers(nr, nc);
     remaining -= 1;
   }
+
+  // ── GARANTIE DE SORTIE ──
+  // Les garde-fous posés dans les branches ci-dessus vérifient la case
+  // SUIVANTE avant de s'y poser. Ils ne peuvent rien contre le cas inverse,
+  // observé en simulation : une récursion déclenchée en cours de vol
+  // ramène un Titan sur la case où l'élément est DÉJÀ arrêté. Exemple
+  // réel — un ricochet au Seuil 4 casse un bloc et le projette plus loin ;
+  // ce bloc percute un Titan qui recule et atterrit précisément sur la
+  // case où l'élément venait de s'immobiliser.
+  //
+  // Plutôt que d'ajouter un garde-fou par branche (il en manquera toujours
+  // un), on vérifie ici, une bonne fois, que la case d'arrivée est libre.
+  // Sinon on remonte le chemin réellement emprunté jusqu'à la première
+  // case libre — d'où la trace `chemin`, la trajectoire pouvant rebondir
+  // et traverser la faille, donc être impossible à reconstituer après coup.
+  //
+  // Réservé aux TITANS en mouvement : un débris, lui, a parfaitement le
+  // droit de reposer sur la case d'un Titan — c'est même exactement ce que
+  // décrit l'immunité de l'initiateur (« il s'arrête immédiatement
+  // dessus »). Seule la superposition Titan + Titan est interdite.
+  if (ctx.movingTitanId != null && caseOccupeeParUnAutreTitan(rowFromIndex(r) + c)) {
+    for (let i = chemin.length - 2; i >= 0; i--) {
+      if (!caseOccupeeParUnAutreTitan(chemin[i])) {
+        const cle = chemin[i];
+        log.push(
+          `${rowFromIndex(r)}${c} : case occupée entre-temps par un autre Titan → l'élément recule en ${cle}.`
+        );
+        r = rowIndex(cle[0]);
+        c = Number(cle.slice(1));
+        break;
+      }
+    }
+  }
+
   return { row: rowFromIndex(r), col: c, energyLeft: remaining, hasBounced, log };
 }
 
@@ -918,9 +958,15 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0) {
     const dr = rowIndex(cell.row) - rowIndex(titanRow);
     const dc = cell.col - titanCol;
     // movingTitanId : c'est la cible qu'on projette (cf. projectInDirection).
+    const caseAvant = target.cell;
     const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, bagarreSet, initiatorId: titanId, movingTitanId: targetId });
     target.cell = landing.row + landing.col; // mutation directe (re-render forcé côté UI)
-    bagarreSet.add(targetId);
+    // Ruling Nikola (2026-08-15) : « si je fais une bagarre mais ne la
+    // remporte pas, je n'ai pas de point de Bagarre. » Une cible coincée
+    // (trajectoire bloquée des deux côtés) reste sur sa case : la Bagarre
+    // n'est pas remportée, elle ne rapporte rien. Cohérent avec la FAQ #12,
+    // qui parle de Titans distincts DÉPLACÉS.
+    if (target.cell !== caseAvant) bagarreSet.add(targetId);
 
     if (seuil4) {
       if (canRage(targetId, gameState)) {
@@ -1128,13 +1174,18 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
       } else {
         log.push(`${key} : DIL impossible sur Titan ${occupantId} (< 2 couleurs différentes en Repaire).`);
       }
-      bagarreSet.add(occupantId);
       log.push(`${key} : Titan ${occupantId} percuté (${mode}, énergie ${energie}).`);
+      // Ruling Nikola (2026-08-15) : une bagarre qui n'est pas remportée ne
+      // rapporte pas de point. Le crédit était donné ici INCONDITIONNELLEMENT,
+      // avant même de savoir si la cible allait bouger — et même en dessous
+      // du Seuil 4, où aucune projection n'a lieu du tout.
       if (seuil4) {
+        const occupant = titans.find((t) => t.id === occupantId);
+        const caseAvant = occupant.cell;
         // movingTitanId : c'est l'occupant qu'on projette (cf. projectInDirection).
         const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, bagarreSet, initiatorId: titanId, movingTitanId: occupantId });
-        const occupant = titans.find((t) => t.id === occupantId);
         occupant.cell = landing.row + landing.col;
+        if (occupant.cell !== caseAvant) bagarreSet.add(occupantId);
         log.push(`${key} : Titan ${occupantId} projeté vers ${occupant.cell}` + (landing.hasBounced ? " (après rebond)" : ""));
       }
 
@@ -1273,9 +1324,12 @@ function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
     const occupant = titans.find((x) => x.id === t.id);
     // movingTitanId : c'est ce Titan-là qu'on projette, il ne doit pas se
     // voir lui-même comme un obstacle si sa trajectoire rebondit.
+    const caseAvant = occupant.cell;
     const landing = projectInDirection(t.row, t.col, dr, dc, reculDistance, { board, looseBlocks, titans, log, bagarreSet, initiatorId: titanId, movingTitanId: t.id });
     occupant.cell = landing.row + landing.col;
-    bagarreSet.add(t.id);
+    // Ruling Nikola (2026-08-15) : pas de déplacement, pas de point de
+    // Bagarre. Un Titan touché mais coincé contre un mur ne compte pas.
+    if (occupant.cell !== caseAvant) bagarreSet.add(t.id);
     const dilOk = canDil(t.id, gameState);
     if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, t.id, "Graouhhh"));
     const fatigue = resolveFatigue(titanId, t.id, mancheNumber, titans);

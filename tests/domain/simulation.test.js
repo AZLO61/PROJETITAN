@@ -65,7 +65,10 @@ describe("simulateur — reproductibilité", () => {
   });
 
   it("une campagne entière est rejouable à l'identique", () => {
-    const params = { parties: 5, nbJoueurs: 4, seed: 500 };
+    // 3 parties suffisent à prouver la propriété, et la version à 5 frôlait
+    // le délai de 5 s de vitest : elle passait seule et échouait en suite
+    // complète, ce qui ressemblait à tort à une perte de reproductibilité.
+    const params = { parties: 3, nbJoueurs: 4, seed: 500 };
     expect(lancerCampagne(params).stats).toEqual(lancerCampagne(params).stats);
   });
 });
