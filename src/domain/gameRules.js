@@ -22,6 +22,8 @@
    - Socle = hauteur à la construction, valeur FIXE ensuite
 ============================================================ */
 
+import { pick, randomInt, shuffled } from "./rng.js";
+
 const STOCK_INITIAL = { bleu: 19, rose: 12, orange: 11, rouge: 7 };
 const COULEURS = ["bleu", "rose", "orange", "rouge"];
 const COLOR_HEX = {
@@ -135,13 +137,11 @@ function checkEndGameTriggers(board, looseBlocks, apocalypseThreshold, mancheNum
   return reasons;
 }
 
+// Le mélange délègue au générateur semé : toute la part de hasard du
+// moteur doit passer par `rng.js`, sinon une graine ne suffit plus à
+// rejouer une partie à l'identique (cf. en-tête de rng.js).
 function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+  return shuffled(arr);
 }
 
 // Construit le sac de 49 blocs standards, pioche sans remise
@@ -200,7 +200,7 @@ function generateBoard() {
   // 3. Bâtiments Vert en premier (garantit la contrainte ≥3 étages)
   for (const cell of vertCells) {
     const key = cell.row + cell.col;
-    const targetHeight = 3 + Math.floor(Math.random() * 2); // 3 ou 4
+    const targetHeight = 3 + randomInt(2); // 3 ou 4
     const blocks = ["vert"];
     for (let i = 1; i < targetHeight; i++) {
       const b = draw();
@@ -222,7 +222,7 @@ function generateBoard() {
   );
   for (const cell of standardCells) {
     const key = cell.row + cell.col;
-    const targetHeight = Math.floor(Math.random() * 5); // 0 à 4
+    const targetHeight = randomInt(5); // 0 à 4
     const blocks = [];
     for (let i = 0; i < targetHeight; i++) {
       const b = draw();
@@ -386,7 +386,7 @@ function placeTitans(nbJoueurs) {
     adrenaline: 1, // dette #3 résolue : stock réel, 1 distribué au départ (Manche 1) puis +1 à chaque advanceManche
   }));
   const ordreJeu = shuffle(players.map((p) => p.id));
-  const detonateurManche1 = ordreJeu[Math.floor(Math.random() * ordreJeu.length)];
+  const detonateurManche1 = pick(ordreJeu);
   return { players, ordreJeu, detonateur: detonateurManche1 };
 }
 
@@ -1961,7 +1961,7 @@ function resolveVolPhaseRepos(mancheNumber, direction, ordreJeu, gameStateTitans
       log.push(`Vol Phase Repos : Titan ${thiefId} → Titan ${victimId} — pool vide, rien à voler.`);
       continue;
     }
-    const cardId = pool[Math.floor(Math.random() * pool.length)];
+    const cardId = pick(pool);
     const idxPlayed = victim.playedThisManche.indexOf(cardId);
     if (idxPlayed !== -1) {
       victim.playedThisManche.splice(idxPlayed, 1);
@@ -1982,7 +1982,7 @@ function resolveFatigue(attackerId, targetId, mancheNumber, gameStateTitans) {
   const target = gameStateTitans.find((t) => t.id === targetId);
   const pool = getNonPlayedPool(target);
   if (pool.length === 0) return { ok: false, reason: `Titan ${targetId} n'a aucune carte non jouée disponible.` };
-  const cardId = pool[Math.floor(Math.random() * pool.length)];
+  const cardId = pick(pool);
   // Bug remonté : Fatigue peut piocher dans `programmed` (pas seulement
   // `hand`) — une carte pas encore jouée CE round. Si c'est le cas, le
   // Titan ciblé se retrouve avec moins de cartes que prévu pour finir ses

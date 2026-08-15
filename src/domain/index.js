@@ -1,4 +1,5 @@
 export * from "./gameRules.js";
+export * from "./rng.js";
 export * as board from "./board.js";
 export * as cards from "./cards.js";
 export * as movement from "./movement.js";

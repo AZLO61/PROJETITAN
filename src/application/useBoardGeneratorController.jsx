@@ -14,7 +14,8 @@ export function useBoardGeneratorController() {
     canRage, makeDecisionRequest, getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
     getRecuperationPool, resolveRecuperation, programCards, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
     resolveFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS, scoreBareme, PODIUM_POINTS,
-    rankWithTies, countRepaireColors, computeFinalScore
+    rankWithTies, countRepaireColors, computeFinalScore,
+    pick, shuffled
   } = Domain;
 
   const [nbJoueurs, setNbJoueurs] = useState(4);
@@ -174,7 +175,7 @@ export function useBoardGeneratorController() {
 
   useEffect(() => {
     if (!eventsEnabled || phase !== "evenement" || currentEvent !== null) return;
-    const name = EVENT_NAMES[Math.floor(Math.random() * EVENT_NAMES.length)];
+    const name = pick(EVENT_NAMES);
     setCurrentEvent(name);
   }, [phase, currentEvent, mancheNumber, eventsEnabled]);
 
@@ -710,8 +711,15 @@ export function useBoardGeneratorController() {
         if (phase === "programmation") {
           const t = curTitanState.players.find((p) => p.id === id);
           if (t && t.programmed.length < 3 && t.hand.length >= 3) {
-            const shuffled = [...t.hand].sort(() => Math.random() - 0.5);
-            const chosen = shuffled.slice(0, 3);
+            // Programmation IA provisoire : 3 cartes au hasard. Elle sera
+            // remplacée par le choix piloté par le profil (la molette
+            // "Programmation" du plan : au hasard chez le Novice, en
+            // fonction des couleurs manquantes chez le Confirmé, en
+            // séquence combinée chez l'Expert).
+            // L'ancien `sort(() => Math.random() - 0.5)` était doublement
+            // fautif : non semé, et biaisé (comparateur incohérent, la
+            // distribution dépend de l'algorithme de tri du moteur JS).
+            const chosen = shuffled(t.hand).slice(0, 3);
             setTitanState((prev) => ({
               ...prev,
               players: prev.players.map((p) => {
