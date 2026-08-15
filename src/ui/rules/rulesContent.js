@@ -83,7 +83,7 @@ export const CARTES = [
       "Chacun subit Fatigue + DIL.",
       "+1 Bagarre par Titan touché.",
     ],
-    note: "🎁 Bonus : 2 Titans touchés → +1 Adrénaline. 🚫 Aucune Adrénaline dépensable sur cette action.",
+    note: "🎁 Bonus : +1 Adrénaline par Titan touché au-delà du premier (2 touchés → +1, 3 touchés → +2). 🚫 Aucune Adrénaline dépensable sur cette action.",
   },
   {
     num: "04",

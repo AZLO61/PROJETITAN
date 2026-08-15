@@ -1163,12 +1163,18 @@ function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
   }
 
   if (touched.length >= 2) {
-    // FAQ #11 (livret V35, cas OUVERT) tranchée le 2026-08-11 : le bonus
-    // est plafonné à +1 Adrénaline, quel que soit le nombre de Titans
-    // touchés au-delà de 2 (3 ou 4 Titans touchés ne donnent toujours
-    // que +1, pas +2/+3). Ne pas multiplier par touched.length.
-    titan.adrenaline = (titan.adrenaline || 0) + 1;
-    log.push(`Bonus : ${touched.length} Titans touchés (≥2) → +1 Adrénaline fixe et plafonné (FAQ #11 tranchée) — Titan ${titanId} stock ${titan.adrenaline}.`);
+    // FAQ #11 (livret V35, cas OUVERT). Ruling REVU le 2026-08-15 par Nikola :
+    // le bonus devient CUMULATIF LINÉAIRE, +1 Adrénaline par Titan touché
+    // au-delà du premier. 2 touchés → +1, 3 touchés → +2.
+    // Aucun plafond à écrire : l'initiateur ne peut toucher que 3 autres
+    // Titans au maximum (partie à 4 joueurs), donc le bonus culmine à +2.
+    // Motif du changement : Graouhhh est sous-jouée en test, et aligner
+    // 3 Titans avec une carte programmée une manche à l'avance est un coup
+    // spectaculaire qui méritait d'être récompensé à hauteur de sa rareté.
+    // Remplace le +1 fixe plafonné tranché le 2026-08-11.
+    const bonusAdrenaline = touched.length - 1;
+    titan.adrenaline = (titan.adrenaline || 0) + bonusAdrenaline;
+    log.push(`Bonus : ${touched.length} Titans touchés (≥2) → +${bonusAdrenaline} Adrénaline (cumulatif, +1 par Titan au-delà du premier) — Titan ${titanId} stock ${titan.adrenaline}.`);
   }
 
   return { log, titansTouches: touched.map((t) => t.id), decisions, fatiguedProgrammed };

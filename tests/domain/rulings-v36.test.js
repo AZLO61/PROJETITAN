@@ -8,6 +8,7 @@ import {
   socleValue,
   projectInDirection,
   resolveTeteEnAvant,
+  resolveGraouhhh,
   resolveBoingBoing,
   computeFinalScore,
   checkEndGameTriggers,
@@ -196,6 +197,42 @@ describe("règle — deux Titans ne partagent jamais une case", () => {
       const cases = titans.map((t) => t.cell);
       expect(new Set(cases).size).toBe(cases.length);
     }
+  });
+});
+
+describe("ruling — bonus Graouhhh cumulatif linéaire (FAQ #11, revue 2026-08-15)", () => {
+  // Ancien ruling (2026-08-11) : +1 fixe et plafonné, quel que soit le nombre
+  // de Titans touchés. Revu par Nikola : +1 par Titan touché au-delà du
+  // premier. Le plafond de fait est +2, l'initiateur ne pouvant toucher que
+  // 3 autres Titans au maximum dans une partie à 4 joueurs.
+  const cible = (id, cell) => ({
+    id, cell, repaire: [], adrenaline: 0, socles: [], bagarre: 0,
+    destruction: 0, programmed: [], hand: [], repos: [],
+  });
+
+  it("aucun bonus quand un seul Titan est touché", () => {
+    const titans = [cible(1, "E1"), cible(2, "E2")];
+    resolveGraouhhh(1, 0, 1, 1, { board: {}, looseBlocks: {}, titans });
+    expect(titans[0].adrenaline).toBe(0);
+  });
+
+  it("+1 Adrénaline pour 2 Titans touchés", () => {
+    const titans = [cible(1, "E1"), cible(2, "E2"), cible(3, "E3")];
+    resolveGraouhhh(1, 0, 1, 1, { board: {}, looseBlocks: {}, titans });
+    expect(titans[0].adrenaline).toBe(1);
+  });
+
+  it("+2 Adrénaline pour 3 Titans touchés, le bonus n'est plus plafonné à +1", () => {
+    const titans = [cible(1, "E1"), cible(2, "E2"), cible(3, "E3"), cible(4, "E4")];
+    resolveGraouhhh(1, 0, 1, 1, { board: {}, looseBlocks: {}, titans });
+    expect(titans[0].adrenaline).toBe(2);
+  });
+
+  it("le bonus s'ajoute au stock d'Adrénaline déjà possédé", () => {
+    const titans = [cible(1, "E1"), cible(2, "E2"), cible(3, "E3")];
+    titans[0].adrenaline = 2;
+    resolveGraouhhh(1, 0, 1, 1, { board: {}, looseBlocks: {}, titans });
+    expect(titans[0].adrenaline).toBe(3);
   });
 });
 
