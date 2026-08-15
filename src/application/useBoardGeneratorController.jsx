@@ -15,7 +15,10 @@ export function useBoardGeneratorController() {
     getRecuperationPool, resolveRecuperation, programCards, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
     resolveFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS, scoreBareme, PODIUM_POINTS,
     rankWithTies, countRepaireColors, computeFinalScore,
-    pick, shuffled
+    pick,
+    // IA : profils et choix de coup (cf. src/domain/aiEvaluation.js et aiPlanner.js)
+    FORCES, TEMPERAMENTS, makeProfile, profileLabel, bestVertAssignment,
+    planMovement, planCardPlay, planRecuperation, planProgrammation
   } = Domain;
 
   const [nbJoueurs, setNbJoueurs] = useState(4);
@@ -29,6 +32,39 @@ export function useBoardGeneratorController() {
 
   // { 1: "humain"|"ia", 2: "humain"|"ia", ... }
   const [titanModes, setTitanModes] = useState({ 1: "humain", 2: "humain", 3: "humain", 4: "humain" });
+  // { 2: { force, temperament }, ... } — profil de chaque Titan piloté par
+  // l'IA. Tiré au sort à chaque nouvelle partie et JAMAIS affiché tant que
+  // le joueur ne le demande pas (cf. profilsReveles) : deux parties de
+  // suite avec les mêmes adversaires ne doivent pas se ressembler, et
+  // savoir qui est l'Expert d'avance retirerait tout l'intérêt.
+  // `profilsImposes` permet de figer les profils pour les campagnes de
+  // simulation, où un tirage aléatoire rendrait les résultats
+  // ininterprétables (on ne saurait plus si un Titan perd à cause de sa
+  // position ou parce qu'il a tiré Novice trois fois de suite).
+  const [titanProfiles, setTitanProfiles] = useState({});
+  const [profilsImposes, setProfilsImposes] = useState(null);
+  // Titans dont le profil a été dévoilé (easter-egg des 10 clics, ou
+  // révélation générale de fin de partie).
+  const [profilsReveles, setProfilsReveles] = useState({});
+
+  // Dévoile le profil d'un Titan. Appelé par l'easter-egg des 10 clics sur
+  // l'encart d'un Titan, et par la révélation générale de fin de partie.
+  const revelerProfil = useCallback((id) => {
+    setProfilsReveles((prev) => (prev[id] ? prev : { ...prev, [id]: true }));
+  }, []);
+
+  const tirerProfils = useCallback((modes, nb) => {
+    if (profilsImposes) return { ...profilsImposes };
+    const forces = Object.values(FORCES);
+    const temperaments = Object.values(TEMPERAMENTS);
+    const out = {};
+    for (let id = 1; id <= nb; id++) {
+      if (modes[id] !== "ia") continue;
+      out[id] = makeProfile(pick(forces), pick(temperaments));
+    }
+    return out;
+  }, [profilsImposes]);
+
   // { 1: "Max", 2: "Étagère", ... } — nom personnalisé choisi en config
   // (session, demande Nikola : "j'ai le droit de choisir mon nom"). Vide
   // par défaut → fallback affiché "Titan {id}" partout (cf. titanDisplayName).
@@ -96,7 +132,9 @@ export function useBoardGeneratorController() {
     setGraouMode(false);
     setVertAssignments({});
     setAiPlayingSync(false);
-  }, [nbJoueurs, eventsEnabled]);
+    setTitanProfiles(tirerProfils(titanModes, nbJoueurs));
+    setProfilsReveles({});
+  }, [nbJoueurs, eventsEnabled, titanModes, tirerProfils]);
 
   const advanceManche = useCallback(() => {
     // La limite de Manches du livret (6 a 3 Titans, 4 a 4 Titans) n'etait
@@ -386,82 +424,21 @@ export function useBoardGeneratorController() {
     }));
   }, [activePlayerId]);
 
-  // ── HEURISTIQUES IA ──
-  // Retourne { cardId, dir, useAdrenaline, bbDest, jnpCells }
-  const computeAiMove = useCallback((titan, boardData, looseBlocksData, allTitans) => {
-    const byCellKey = {};
-    allTitans.forEach((t) => { byCellKey[t.cell] = t.id; });
-    const orderedCards = [...titan.programmed].sort((a, b) => {
-      // Priorité : tout_casser si énergie élevée, puis tete_en_avant, graouhhh, boing_boing, fpmc, jnp
-      const prio = { tout_casser: 0, tete_en_avant: 1, graouhhh: 2, boing_boing: 3, faut_pas_me_chauffer: 4, je_ne_partage_pas: 5 };
-      return (prio[a] ?? 9) - (prio[b] ?? 9);
-    });
-    const card = orderedCards[0];
-    if (!card) return null;
-
-    const DIRS = [
-      { dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 },
-      { dr: -1, dc: -1 }, { dr: -1, dc: 1 }, { dr: 1, dc: -1 }, { dr: 1, dc: 1 },
-    ];
-
-    if (card === "tout_casser") {
-      return { cardId: card, useAdrenaline: false };
-    }
-    if (card === "tete_en_avant" || card === "graouhhh") {
-      // Préfère la direction avec le plus de blocs dans la case devant
-      let bestDir = DIRS[0];
-      let bestScore = -1;
-      const r0 = rowIndex(titan.cell[0]);
-      const c0 = Number(titan.cell.slice(1));
-      for (const d of DIRS) {
-        const r = r0 + d.dr, c = c0 + d.dc;
-        if (r < 0 || r > 8 || c < 1 || c > 9) continue;
-        const cellKey = rowFromIndex(r) + c;
-        const bldg = boardData[cellKey];
-        const score = bldg ? bldg.blocks.length : 0;
-        if (score > bestScore) { bestScore = score; bestDir = d; }
-      }
-      return { cardId: card, dir: bestDir, useAdrenaline: false };
-    }
-    if (card === "boing_boing") {
-      // Saute vers la case avec le plus de blocs libres dans le rayon
-      const r0 = rowIndex(titan.cell[0]);
-      const c0 = Number(titan.cell.slice(1));
-      let bestKey = null, bestScore = -1;
-      for (let r = 0; r <= 8; r++) {
-        for (let c = 1; c <= 9; c++) {
-          const d = chebyshevDistance(r0, c0, r, c);
-          if (d < 1 || d > PORTEE_BOING_BOING) continue;
-          const k = rowFromIndex(r) + c;
-          if (byCellKey[k]) continue; // case occupée par un titan
-          const loose = (looseBlocksData[k] || []).filter((x) => !isSocleMarker(x)).length;
-          if (loose > bestScore) { bestScore = loose; bestKey = k; }
-        }
-      }
-      if (!bestKey) {
-        // fallback: case aléatoire accessible
-        for (let r = 0; r <= 8; r++) {
-          for (let c = 1; c <= 9; c++) {
-            const d = chebyshevDistance(r0, c0, r, c);
-            if (d >= 1 && d <= PORTEE_BOING_BOING && !byCellKey[rowFromIndex(r) + c]) {
-              bestKey = rowFromIndex(r) + c; break;
-            }
-          }
-          if (bestKey) break;
-        }
-      }
-      return { cardId: card, bbDest: bestKey };
-    }
-    if (card === "je_ne_partage_pas") {
-      const pool = getJeNePartagePasPool(titan.id, { titans: allTitans, looseBlocks: looseBlocksData });
-      const nb = isLanterneRouge(titan.id, { titans: allTitans }) ? 3 : 2;
-      return { cardId: card, jnpCells: [...pool].slice(0, nb) };
-    }
-    if (card === "faut_pas_me_chauffer") {
-      return { cardId: card };
-    }
-    return { cardId: card };
-  }, []);
+  // ── DÉCISIONS IA ──
+  // Les heuristiques à priorité fixe qui vivaient ici ont été retirées.
+  // Elles jouaient toujours la carte la plus haute d'un ordre codé en dur,
+  // visaient la direction dont la SEULE case suivante contenait le plus de
+  // blocs (sans jamais compter les Titans, ce qui était absurde pour
+  // Graouhhh), ne dépensaient jamais d'Adrénaline et ignoraient
+  // totalement le barème de scoring.
+  //
+  // Tout cela vit maintenant dans le domaine (`aiPlanner`), qui énumère
+  // les coups légaux, les simule avec les vrais résolveurs et les note au
+  // score réel. On ne garde ici que le branchement.
+  const profilDe = useCallback(
+    (id) => titanProfiles[id] ?? makeProfile(),
+    [titanProfiles]
+  );
 
   // Re-trigger IA quand activePlayerId change vers un joueur IA
   useEffect(() => {
@@ -554,21 +531,16 @@ export function useBoardGeneratorController() {
       if (!curTitan) { setAiPlayingSync(false); return; }
 
       if (!curPassifUsed[playerId]?.move) {
-        const titansByCell = Object.fromEntries(curTitanState.players.map((t) => [t.cell, t.id]));
-        const { reachable: aiReachable } = getMovementReachable(curTitan.cell, 2, curState.board, titansByCell, curLooseBlocks);
-        if (aiReachable.size > 0) {
-          let bestMoveKey = null, bestMoveScore = -1;
-          aiReachable.forEach((cellKey) => {
-            const loose = (curLooseBlocks[cellKey] || []).filter((x) => !isSocleMarker(x)).length;
-            const bldg = curState.board[cellKey] ? curState.board[cellKey].blocks.length : 0;
-            const score = loose * 2 + bldg;
-            if (score > bestMoveScore) { bestMoveScore = score; bestMoveKey = cellKey; }
-          });
-          if (bestMoveKey) {
-            resolveFreeMovement(playerId, bestMoveKey, { titans: curTitanState.players, board: curState.board, looseBlocks: curLooseBlocks });
-            setTitanState((p) => ({ ...p, players: [...p.players] }));
-            setPassifUsed((prev) => ({ ...prev, [playerId]: { ...(prev[playerId] || {}), move: true } }));
-          }
+        // L'ancienne note « blocsLibres × 2 + hauteurBâtiment » ignorait la
+        // couleur des blocs, donc le barème : un Titan au Bleu saturé
+        // courait vers un tas de Bleu à 0 point. planMovement note la case
+        // au score réel.
+        const jeu = { titans: curTitanState.players, board: curState.board, looseBlocks: curLooseBlocks };
+        const choix = planMovement(playerId, jeu, profilDe(playerId));
+        if (choix) {
+          resolveFreeMovement(playerId, choix.destKey, jeu);
+          setTitanState((p) => ({ ...p, players: [...p.players] }));
+          setPassifUsed((prev) => ({ ...prev, [playerId]: { ...(prev[playerId] || {}), move: true } }));
         }
       }
 
@@ -581,31 +553,37 @@ export function useBoardGeneratorController() {
         const curTitan2 = curTitanState2.players.find((t) => t.id === playerId);
         if (!curTitan2 || curTitan2.programmed.length === 0) { setAiPlayingSync(false); return; }
 
-        const move = computeAiMove(curTitan2, curState2.board, curLooseBlocks2, curTitanState2.players);
-        // Si pas de move optimal, défausser la première carte disponible
+        const jeu2 = { board: curState2.board, titans: curTitanState2.players, looseBlocks: curLooseBlocks2 };
+        const move = planCardPlay(playerId, jeu2, profilDe(playerId), mancheNumber);
+        // Si aucun coup n'a pu être noté, on défausse la première carte.
         const cardId = move?.cardId ?? curTitan2.programmed[0];
-        const { dir, useAdrenaline: useAdren, bbDest: dest, jnpCells } = move || {};
+        const { dir, mise = 0, bbDest: dest, jnpCells } = move || {};
+        // L'Adrénaline est retranchée ici : les résolveurs du domaine la
+        // lisent pour allonger la portée mais ne la débitent pas, c'est
+        // l'application qui s'en charge (même contrat que pour un humain,
+        // cf. les appels jouerToutCasser et consorts).
+        if (mise > 0) curTitan2.adrenaline = Math.max(0, (curTitan2.adrenaline || 0) - mise);
 
         let newLog = [];
         let newDecisions = [];
 
         if (cardId === "tout_casser") {
-          const res = resolveToutCasser(playerId, { board: curState2.board, titans: curTitanState2.players, looseBlocks: curLooseBlocks2 });
+          const res = resolveToutCasser(playerId, jeu2, mise);
           newLog = res.log; newDecisions = res.decisions || []; // défensif (fix session) : certains résolveurs (ex. resolveJeNePartagePas) ne retournent jamais "decisions", d'autres l'omettent sur leurs early-returns "applied:false" — sans ce garde, newDecisions.some(...) plus bas plante avec "Cannot read properties of undefined (reading 'some')"
           setState((p) => ({ ...p })); setLooseBlocks((p) => ({ ...p }));
         } else if (cardId === "tete_en_avant") {
           const d = dir || { dr: -1, dc: 0 };
-          const res = resolveTeteEnAvant(playerId, d.dr, d.dc, !!useAdren, { board: curState2.board, titans: curTitanState2.players, looseBlocks: curLooseBlocks2 });
+          const res = resolveTeteEnAvant(playerId, d.dr, d.dc, mise, jeu2);
           newLog = res.log; newDecisions = res.decisions || []; // défensif (fix session) : certains résolveurs (ex. resolveJeNePartagePas) ne retournent jamais "decisions", d'autres l'omettent sur leurs early-returns "applied:false" — sans ce garde, newDecisions.some(...) plus bas plante avec "Cannot read properties of undefined (reading 'some')"
           setState((p) => ({ ...p })); setLooseBlocks((p) => ({ ...p }));
         } else if (cardId === "graouhhh") {
           const d = dir || { dr: -1, dc: 0 };
-          const res = resolveGraouhhh(playerId, d.dr, d.dc, mancheNumber, { board: curState2.board, titans: curTitanState2.players, looseBlocks: curLooseBlocks2 });
+          const res = resolveGraouhhh(playerId, d.dr, d.dc, mancheNumber, jeu2);
           newLog = res.log; newDecisions = res.decisions || []; // défensif (fix session) : certains résolveurs (ex. resolveJeNePartagePas) ne retournent jamais "decisions", d'autres l'omettent sur leurs early-returns "applied:false" — sans ce garde, newDecisions.some(...) plus bas plante avec "Cannot read properties of undefined (reading 'some')"
           setLooseBlocks((p) => ({ ...p }));
         } else if (cardId === "boing_boing") {
           if (dest) {
-            const res = resolveBoingBoing(playerId, dest, false, mancheNumber, { board: curState2.board, titans: curTitanState2.players, looseBlocks: curLooseBlocks2 });
+            const res = resolveBoingBoing(playerId, dest, mise, mancheNumber, jeu2);
             newLog = res.log; newDecisions = res.decisions || []; // défensif (fix session) : certains résolveurs (ex. resolveJeNePartagePas) ne retournent jamais "decisions", d'autres l'omettent sur leurs early-returns "applied:false" — sans ce garde, newDecisions.some(...) plus bas plante avec "Cannot read properties of undefined (reading 'some')"
             setState((p) => ({ ...p })); setLooseBlocks((p) => ({ ...p }));
           } else {
@@ -613,7 +591,7 @@ export function useBoardGeneratorController() {
           }
         } else if (cardId === "je_ne_partage_pas") {
           const cells = jnpCells || [];
-          const res = resolveJeNePartagePas(playerId, cells, { titans: curTitanState2.players, looseBlocks: curLooseBlocks2, board: curState2.board });
+          const res = resolveJeNePartagePas(playerId, cells, jeu2);
           newLog = res.log; newDecisions = res.decisions || []; // défensif (fix session) : certains résolveurs (ex. resolveJeNePartagePas) ne retournent jamais "decisions", d'autres l'omettent sur leurs early-returns "applied:false" — sans ce garde, newDecisions.some(...) plus bas plante avec "Cannot read properties of undefined (reading 'some')"
           setLooseBlocks((p) => ({ ...p }));
         } else if (cardId === "faut_pas_me_chauffer") {
@@ -653,11 +631,17 @@ export function useBoardGeneratorController() {
           const curPassifUsed3 = aiPassifUsedRef.current;
           const curTitanModes3 = aiTitanModesRef.current;
 
-          const aiRecupPool = getRecuperationPool(playerId, { titans: curTitanState3.players, looseBlocks: curLooseBlocks3 });
-          if (aiRecupPool.length > 0 && !curPassifUsed3[playerId]?.recup) {
-            const targetCell = aiRecupPool.find((k) => (curLooseBlocks3[k] || []).some(isSocleMarker)) || aiRecupPool[0];
-            if (targetCell) {
-              resolveRecuperation(playerId, targetCell, { titans: curTitanState3.players, looseBlocks: curLooseBlocks3, board: aiStateRef.current.board });
+          if (!curPassifUsed3[playerId]?.recup) {
+            // L'ancienne version prenait la première case contenant un
+            // Socle, sinon la première du pool, et laissait le moteur
+            // ramasser « le dernier empilé » faute de logique de choix.
+            // planRecuperation désigne la case ET le bloc précis, au gain
+            // marginal réel : un 9e Bleu à 0 point ne vaut pas un 1er
+            // Rouge à 3.
+            const jeu3 = { titans: curTitanState3.players, looseBlocks: curLooseBlocks3, board: aiStateRef.current.board };
+            const choix = planRecuperation(playerId, jeu3, profilDe(playerId));
+            if (choix) {
+              resolveRecuperation(playerId, choix.cellKey, jeu3, choix.pickedValue);
               setLooseBlocks((p) => ({ ...p }));
               setTitanState((p) => ({ ...p, players: [...p.players] }));
               setPassifUsed((prev) => ({ ...prev, [playerId]: { ...(prev[playerId] || {}), recup: true } }));
@@ -711,15 +695,16 @@ export function useBoardGeneratorController() {
         if (phase === "programmation") {
           const t = curTitanState.players.find((p) => p.id === id);
           if (t && t.programmed.length < 3 && t.hand.length >= 3) {
-            // Programmation IA provisoire : 3 cartes au hasard. Elle sera
-            // remplacée par le choix piloté par le profil (la molette
-            // "Programmation" du plan : au hasard chez le Novice, en
-            // fonction des couleurs manquantes chez le Confirmé, en
-            // séquence combinée chez l'Expert).
-            // L'ancien `sort(() => Math.random() - 0.5)` était doublement
-            // fautif : non semé, et biaisé (comparateur incohérent, la
-            // distribution dépend de l'algorithme de tri du moteur JS).
-            const chosen = shuffled(t.hand).slice(0, 3);
+            // Troisième molette du profil : le Novice programme au hasard
+            // (l'erreur classique du débutant, qui subit sa programmation
+            // au lieu de la préparer), les autres retiennent les cartes
+            // qui rapporteraient le plus dans la situation présente.
+            const chosen = planProgrammation(
+              id,
+              { titans: curTitanState.players, board: aiStateRef.current.board, looseBlocks: aiLooseBlocksRef.current },
+              profilDe(id),
+              mancheNumber
+            );
             setTitanState((prev) => ({
               ...prev,
               players: prev.players.map((p) => {
@@ -1867,6 +1852,13 @@ export function useBoardGeneratorController() {
     setActivePlayerId,
     titanModes,
     setTitanModes,
+    titanProfiles,
+    setTitanProfiles,
+    profilsImposes,
+    setProfilsImposes,
+    profilsReveles,
+    revelerProfil,
+    profileLabel,
     titanNames,
     setTitanNames,
     titanDisplayName,
@@ -1974,7 +1966,6 @@ export function useBoardGeneratorController() {
     captureSnapshot,
     prevActivePlayerRef,
     handleUndo,
-    computeAiMove,
     aiTriggerRef,
     aiTrigger,
     setAiTrigger,

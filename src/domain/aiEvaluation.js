@@ -66,7 +66,7 @@
 // Socles. Ce n'est pas une incohérence : si le glouton envoie un Vert en
 // Piste ADN, le Novice n'en tire rien, ce qui modélise assez fidèlement le
 // débutant qui gâche son Vert.
-import { computeFinalScore, isSocleMarker, socleValue } from "./gameRules.js";
+import { computeFinalScore, isSocleMarker, scoreBareme, socleValue } from "./gameRules.js";
 import { randomInt } from "./rng.js";
 
 /* ── FORCE ────────────────────────────────────────────────── */
@@ -262,31 +262,52 @@ export function valeurAPortee(titan, gameState, rayon = 2) {
   const c0 = Number(titan.cell.slice(1));
   if (r0 < 0 || Number.isNaN(c0)) return 0;
 
-  let valeur = 0;
-  for (const [key, blocs] of Object.entries(looseBlocks)) {
+  // Un bloc alentour ne vaut pas « un bloc », il vaut ce qu'il ferait
+  // GAGNER à ce Titan-là. Compter les quantités serait retomber dans le
+  // travers des anciennes heuristiques : un Titan au barème Bleu saturé
+  // courait vers un tas de trois Bleu à 0 point en laissant le Rouge qui
+  // lui manquait. On mesure donc le gain marginal réel, couleur par
+  // couleur.
+  const compte = { bleu: 0, rose: 0, orange: 0, rouge: 0 };
+  (titan.repaire || []).forEach((c) => {
+    if (compte[c] !== undefined) compte[c]++;
+  });
+  const gainMarginal = (couleur) => {
+    if (compte[couleur] === undefined) return 0; // le Vert, traité ailleurs
+    return scoreBareme(couleur, compte[couleur] + 1) - scoreBareme(couleur, compte[couleur]);
+  };
+
+  const distanceA = (key) => {
     const r = "ABCDEFGHI".indexOf(key[0]);
     const c = Number(key.slice(1));
-    if (r < 0 || Number.isNaN(c)) continue;
-    const distance = Math.max(Math.abs(r - r0), Math.abs(c - c0));
+    if (r < 0 || Number.isNaN(c)) return Infinity;
+    return Math.max(Math.abs(r - r0), Math.abs(c - c0));
+  };
+
+  let valeur = 0;
+  for (const [key, blocs] of Object.entries(looseBlocks)) {
+    const distance = distanceA(key);
     if (distance > rayon) continue;
     // Décroissance avec la distance : un tas à 2 cases vaut moins qu'un
     // tas sous les pieds, puisqu'un adversaire peut le prendre avant.
     const proximite = 1 / (1 + distance);
     for (const bloc of blocs || []) {
-      valeur += isSocleMarker(bloc) ? socleValue(bloc) * proximite : proximite;
+      const points = isSocleMarker(bloc) ? socleValue(bloc) : gainMarginal(bloc);
+      valeur += points * proximite;
     }
   }
 
   // Les bâtiments debout à portée comptent aussi : ce sont les blocs de
-  // demain, ceux qu'une action de destruction fera tomber.
+  // demain, ceux qu'une action de destruction fera tomber. Décote
+  // supplémentaire de moitié, il faut encore les abattre.
   for (const [key, bat] of Object.entries(board)) {
     if (!bat?.blocks?.length) continue;
-    const r = "ABCDEFGHI".indexOf(key[0]);
-    const c = Number(key.slice(1));
-    if (r < 0 || Number.isNaN(c)) continue;
-    const distance = Math.max(Math.abs(r - r0), Math.abs(c - c0));
+    const distance = distanceA(key);
     if (distance > rayon) continue;
-    valeur += (bat.blocks.length * 0.5) / (1 + distance);
+    const proximite = 1 / (1 + distance);
+    for (const bloc of bat.blocks) {
+      valeur += gainMarginal(bloc) * 0.5 * proximite;
+    }
   }
 
   return valeur * DECOTE_PORTEE;
