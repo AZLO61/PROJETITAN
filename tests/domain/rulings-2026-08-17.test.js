@@ -15,6 +15,7 @@ import {
   SOCLE_OPTION,
   isSocleMarker,
   socleValue,
+  getCasesRepliDebris,
   projectInDirection,
 } from "../../src/domain/gameRules.js";
 import { setSeed } from "../../src/domain/rng.js";
@@ -501,5 +502,90 @@ describe("Faille spatio-temporelle — sortie bloquée, arrêt sec", () => {
     });
 
     expect(res.row + res.col).not.toBe("G9");
+  });
+});
+
+describe("Repli d'un élément sans la puissance de passer", () => {
+  /* Ruling Nikola du 2026-08-17, énoncé littéralement : « adjacent à la case
+     où il était ET où il devait aller — donc il peut revenir sur la case où
+     il était, ou adjacent entre sa destination et celle d'avant ». Le choix
+     revient au Titan initiateur.
+
+     Les quatre exemples donnés à la table sont repris tels quels ci-dessous.
+     Deux d'entre eux (1 et 4) listaient une case de moins que la règle n'en
+     autorise : la règle énoncée fait foi, et toutes les cases nommées par
+     Nikola y figurent bien. */
+
+  const vide = { board: {} };
+
+  it("exemple 1 — de B9 vers C9 bloquée : il revient ou glisse en arrière", () => {
+    // Nikola : « B9 ou B8 ». La règle ajoute C8, qui touche elle aussi les
+    // deux cases. Toutes les cases citées sont proposées.
+    const cases = getCasesRepliDebris("B9", "C9", 1, 0, vide).sort();
+    expect(cases).toContain("B9"); // il revient sur sa case
+    expect(cases).toContain("B8"); // cité par Nikola
+    expect(cases).toEqual(["B8", "B9", "C8"]);
+  });
+
+  it("exemple 2 — sortie de faille vers l'ouest sur C9 bloquée : B9 ou D9", () => {
+    // Aucune case précédente de ce côté du plateau : on prend les voisines
+    // de la cible qui ne franchissent pas l'obstacle. Rendu exact.
+    expect(getCasesRepliDebris(null, "C9", 0, -1, vide).sort()).toEqual(["B9", "D9"]);
+  });
+
+  it("exemple 3 — sortie de faille en diagonale sud-ouest sur C9 : B9 seule", () => {
+    // Le déplacement avance vers le sud ET vers l'ouest : toute case plus au
+    // sud ou plus à l'ouest reviendrait à traverser l'obstacle. Rendu exact.
+    expect(getCasesRepliDebris(null, "C9", 1, -1, vide)).toEqual(["B9"]);
+  });
+
+  it("exemple 4 — de B9 vers l'angle A9 bloqué : A8 et B9 sont proposées", () => {
+    // Nikola : « A8 ou B9 ». La règle ajoute B8. Les deux cases citées y sont.
+    const cases = getCasesRepliDebris("B9", "A9", -1, 0, vide).sort();
+    expect(cases).toContain("A8");
+    expect(cases).toContain("B9");
+    expect(cases).toEqual(["A8", "B8", "B9"]);
+  });
+
+  it("jamais une case portant un bâtiment encore debout", () => {
+    // Un débris ne se pose jamais sur un bâtiment : la règle transversale du
+    // 2026-08-15 s'applique aussi au repli.
+    const board = {
+      B8: { row: "B", col: 8, blocks: ["bleu"], socle: 1, isTeleporter: false },
+    };
+    expect(getCasesRepliDebris("B9", "C9", 1, 0, { board })).not.toContain("B8");
+  });
+
+  it("un Titan ne se replie jamais sur la case d'un autre Titan", () => {
+    // Un débris, lui, a le droit de reposer sur la case d'un Titan.
+    const titans = [{ id: 1, cell: "B9" }, { id: 2, cell: "B8" }];
+    const avecTitan = getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans, movingTitanId: 1 });
+    const debris = getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans });
+
+    expect(avecTitan).not.toContain("B8");
+    expect(debris).toContain("B8");
+  });
+
+  it("la case visée n'est jamais proposée — c'est justement celle qu'il ne peut pas atteindre", () => {
+    expect(getCasesRepliDebris("B9", "C9", 1, 0, vide)).not.toContain("C9");
+    expect(getCasesRepliDebris(null, "C9", 0, -1, vide)).not.toContain("C9");
+  });
+
+  it("la trajectoire expose le choix quand il y a plusieurs cases possibles", () => {
+    // Bout en bout : un débris bloqué par un mur qu'il ne peut pas casser
+    // rend la liste des cases où l'initiateur peut le poser.
+    // Couloir fermé des deux côtés : l'élément tape le mur devant, rebondit,
+    // puis tape celui derrière. Le rebond étant consommé, il s'arrête là.
+    const mur = (cle) => ({ [cle]: { row: cle[0], col: Number(cle.slice(1)), blocks: ["bleu"], socle: 1, isTeleporter: false } });
+    const board = { ...mur("E5"), ...mur("E3") };
+    const res = projectInDirection("E", 4, 0, 1, 2, {
+      board, looseBlocks: {}, titans: [], log: [], initiatorId: 1,
+    });
+
+    expect(res.repliOptions).toBeTruthy();
+    expect(res.repliOptions.cases.length).toBeGreaterThan(1);
+    // Le défaut reste la case où l'élément s'est naturellement arrêté.
+    expect(res.repliOptions.cases).toContain(res.repliOptions.defaut);
+    expect(res.repliOptions.defaut).toBe(res.row + res.col);
   });
 });

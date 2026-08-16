@@ -679,6 +679,83 @@ function releaseSocle(cellKey, board, looseBlocks) {
    direct. Voir tracker, dette #2, pour le plan d'implémentation.
 ============================================================ */
 
+/* ============================================================
+   OÙ SE POSE UN ÉLÉMENT QUI N'A PAS LA PUISSANCE DE PASSER
+   ============================================================
+   Ruling Nikola du 2026-08-17, énoncé littéralement : « adjacent à la case
+   où il était ET où il devait aller — donc il peut revenir sur la case où il
+   était, ou adjacent entre sa destination et celle d'avant ». Le choix
+   revient au TITAN INITIATEUR de l'action.
+
+   DEUX CAS.
+
+   · Cas normal — l'élément vient d'une case du plateau (`depuis`). Les cases
+     valides sont sa propre case, plus toutes celles qui touchent À LA FOIS
+     sa case et la case visée. Géométriquement, c'est la « charnière » entre
+     les deux : il ne peut ni dépasser l'obstacle, ni s'échapper au loin.
+
+   · Sortie de faille — l'élément débarque de l'autre bout du plateau et n'a
+     pas de case précédente ici (`depuis` vaut null). Il n'a donc nulle part
+     où « revenir ». On prend alors les voisines de la case visée, en
+     écartant celles qui AVANCENT sur l'un des axes du déplacement : franchir
+     l'obstacle par le côté reviendrait à le traverser. C'est ce qui donne
+     B9/D9 quand un élément ressort à l'ouest sur C9 bloquée, et B9 seul
+     quand il arrive en diagonale sud-ouest.
+
+   Une case n'est proposée que si l'élément peut réellement s'y poser :
+   pas de bâtiment debout, et pas de Titan déjà là quand c'est un Titan qu'on
+   déplace (un débris, lui, peut reposer sur la case d'un Titan).
+============================================================ */
+function getCasesRepliDebris(depuis, cible, dr, dc, { board, titans = [], movingTitanId = null } = {}) {
+  const cr = rowIndex(cible[0]);
+  const cc = Number(cible.slice(1));
+  const titansByCell = indexerTitans(titans);
+
+  const posable = (key) => {
+    const b = board && board[key];
+    if (b && b.blocks && b.blocks.length > 0) return false;
+    if (movingTitanId != null) {
+      const occ = titansByCell[key];
+      if (occ && occ !== movingTitanId) return false;
+    }
+    return true;
+  };
+
+  const voisines = (key) => {
+    const r0 = rowIndex(key[0]);
+    const c0 = Number(key.slice(1));
+    const out = [];
+    for (let a = -1; a <= 1; a++) {
+      for (let b = -1; b <= 1; b++) {
+        if (a === 0 && b === 0) continue;
+        const nr = r0 + a, nc = c0 + b;
+        if (nr < 0 || nr > 8 || nc < 1 || nc > 9) continue;
+        out.push(rowFromIndex(nr) + nc);
+      }
+    }
+    return out;
+  };
+
+  let candidates;
+  if (depuis) {
+    const autour = new Set(voisines(depuis));
+    // La charnière : sa propre case, plus celles qui touchent les deux.
+    candidates = [depuis, ...voisines(cible).filter((k) => autour.has(k))];
+  } else {
+    // Sortie de faille : aucune case précédente sur ce bord du plateau.
+    // On écarte toute case qui progresse sur un axe du déplacement.
+    candidates = voisines(cible).filter((k) => {
+      const r = rowIndex(k[0]);
+      const c = Number(k.slice(1));
+      if (dr !== 0 && Math.sign(r - cr) === Math.sign(dr)) return false;
+      if (dc !== 0 && Math.sign(c - cc) === Math.sign(dc)) return false;
+      return true;
+    });
+  }
+
+  return [...new Set(candidates)].filter((k) => k !== cible && posable(k));
+}
+
 function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
   // ctx = { board, looseBlocks, titans, log? } — log est optionnel : si
   // fourni (tableau du resolver appelant), les messages de chaîne s'y
@@ -742,6 +819,18 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
   // se calcule autour de cette case-là. Remis à null dès que l'élément
   // avance normalement.
   let sortieDeFaille = null;
+
+  /* Cases proposées au TITAN INITIATEUR quand l'élément s'arrête faute de
+     puissance (ruling du 2026-08-17, cf. getCasesRepliDebris). Renseigné aux
+     trois points d'arrêt « je ne passe pas » ; reste null quand l'élément
+     s'arrête pour une autre raison (énergie épuisée, case libre atteinte). */
+  let choixRepli = null;
+  const noterRepli = (depuis, cible) => {
+    const cases = getCasesRepliDebris(depuis, cible, curDr, curDc, {
+      board, titans, movingTitanId: ctx.movingTitanId ?? null,
+    });
+    if (cases.length > 0) choixRepli = { depuis, cible, dr: curDr, dc: curDc, cases };
+  };
 
   while (remaining > 0) {
     let nr = r + curDr;
@@ -927,6 +1016,9 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
          l'élément contre sa case de sortie, du bon côté du plateau. */
       if (sortieDeFaille) {
         log.push(`${nextKey} : mur rencontré à la sortie de la faille, énergie insuffisante (${remaining}) → arrêt, le déplacement ne se poursuit pas.`);
+        // Sorti de faille : aucune case précédente de ce côté du plateau,
+        // d'où `null` — les cases proposées se calculent autour de la cible.
+        noterRepli(null, nextKey);
         break;
       }
       if (!hasBounced) {
@@ -935,6 +1027,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         curDc = -curDc;
         continue;
       }
+      noterRepli(rowFromIndex(r) + c, nextKey);
       break; // arrêt sur la case actuelle (r, c)
     }
 
@@ -973,6 +1066,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         log.push(
           `${nextKey} : Titan ${occupantTitanId} déjà présent — poussée impossible (énergie restante ${remainingAfterArrival}) → arrêt en ${rowFromIndex(r)}${c}.`
         );
+        noterRepli(rowFromIndex(r) + c, nextKey);
         break; // reste sur la case actuelle (r, c) — case adjacente
       }
       const occupant = titans.find((t) => t.id === occupantTitanId);
@@ -1183,7 +1277,21 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
     }
   }
 
-  return { row: rowFromIndex(r), col: c, energyLeft: remaining, hasBounced, log };
+  /* `repliOptions` : les cases entre lesquelles le TITAN INITIATEUR peut
+     choisir de poser l'élément arrêté faute de puissance. La case retournée
+     (`row`/`col`) reste le choix par défaut — celle où l'élément s'est
+     naturellement immobilisé — pour que tout appelant qui ignore ce champ
+     garde exactement le comportement actuel. L'interface propose le choix
+     quand il y a plus d'une case ; les arrêts survenus au fond d'une
+     réaction en chaîne gardent le défaut, faute de pouvoir interroger le
+     joueur au milieu d'une récursion. */
+  const arrivee = rowFromIndex(r) + c;
+  const repliOptions =
+    choixRepli && choixRepli.cases.length > 1 && choixRepli.cases.includes(arrivee)
+      ? { ...choixRepli, defaut: arrivee }
+      : null;
+
+  return { row: rowFromIndex(r), col: c, energyLeft: remaining, hasBounced, log, repliOptions };
 }
 
 
@@ -3365,6 +3473,7 @@ export {
   BUILDING_ROWS,
   BUILDING_COLS,
   socleMarker,
+  getCasesRepliDebris,
   isSocleMarker,
   socleValue,
   estSurLePlateau,

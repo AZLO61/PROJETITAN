@@ -31,6 +31,12 @@ export const BADGES = [
   { code: "DIL", nom: "Dilemme", def: "L'attaquant désigne 2 options différentes chez la cible : une couleur de son Repaire, ou « un Socle tiré au sort » si elle en possède au moins un. La cible choisit laquelle des 2 elle perd, ou paie 1 Adrénaline pour annuler. L'option Socle est anonyme : personne ne choisit lequel partira ni ne connaît sa valeur avant le tirage. Impossible s'il n'y a pas 2 options distinctes — mais « 1 couleur + 1 Socle » suffit. Où va l'élément perdu dépend de la CARTE jouée, voir le tableau ci-dessous.", color: "#FFD93D" },
   { code: "RAGE", nom: "Rage", def: "L'attaquant choisit librement 1 ressource dans le Repaire de la cible, sans étape de défense. Possible dès que la cible possède 1 seule ressource. Où va la ressource dépend de la CARTE jouée, voir le tableau ci-dessous. Une Adrénaline volée rejoint toujours la réserve de l'attaquant : elle ne se pose pas au sol.", color: "#FF2E63" },
   {
+    code: "⊣",
+    nom: "Arrêt faute de puissance",
+    def: "Un élément projeté qui percute quelque chose sans avoir l'énergie de le déplacer ou de le casser ne finit PAS son déplacement : il s'arrête là. Le Titan initiateur choisit alors où le poser, parmi sa propre case et celles qui touchent à la fois sa case et la case visée. S'il sortait d'une faille et n'a donc pas de case précédente de ce côté du plateau, on prend les cases voisines de la case visée qui ne franchissent pas l'obstacle. Exemple : un élément qui ressort à l'ouest sur une case bloquée en C9 se pose en B9 ou D9.",
+    color: "#FB923C",
+  },
+  {
     code: "→",
     nom: "Où va le bloc perdu",
     def: "Tout Casser : au sol dans les deux cas (DIL comme RAGE). Tête en Avant : DIL au sol, RAGE dans le Repaire de l'attaquant. Boing Boing : DIL au sol, RAGE dans le Repaire de l'attaquant. Graouhhh : au sol, cette carte n'a pas de RAGE. Faut Pas Me Chauffer : dans le Repaire de l'attaquant dans les deux cas. « Au sol » veut dire sur la case où la cible a encaissé le coup, AVANT sa projection éventuelle — le bloc y redevient ramassable par n'importe qui. Un Socle perdu en Dilemme suit la même route et conserve sa valeur.",
