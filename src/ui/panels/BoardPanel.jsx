@@ -411,6 +411,19 @@ export default function BoardPanel({ vm }) {
               <div style={{ fontSize: ".76rem", color: "rgba(255,255,255,.6)", marginBottom: 12 }}>
                 Passe l'appareil au Titan suivant.
               </div>
+              {/* POURQUOI LE RAMASSAGE N'EST PAS PROPOSÉ.
+                  Remonté par Nikola le 2026-08-18 : « j'ai défaussé Je Ne
+                  Partage Pas et ça m'a fait sauter mon passif de Ramassage. »
+                  Le passif était bien disponible — une défausse y donne droit
+                  au même titre qu'une carte jouée — mais le panneau Ramasser
+                  ne se montre QUE s'il y a réellement quelque chose à
+                  ramasser. Périmètre vide, aucun panneau, et rien à l'écran
+                  ne disait que le tour n'avait rien sauté. On le dit. */}
+              {!passifUsed[selectedTitan.id]?.recup && recupPool.size === 0 && (
+                <div style={{ fontSize: ".72rem", color: "rgba(255,255,255,.45)", marginBottom: 12 }}>
+                  🤲 Ramassage : aucun débris dans ton Périmètre, il n'y avait rien à prendre.
+                </div>
+              )}
               <button
                 onClick={() => {
                   setWaitingNextTitan(false);

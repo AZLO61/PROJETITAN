@@ -16,12 +16,35 @@ import {
   BOARD3D_BTN_STYLE,
 } from "./constants.js";
 import { makeNumberSprite } from "./helpers.js";
-export default function Board3D({ board, looseBlocks, titans, boardVersion, selectedTitanId, onSelectTitan, moveClassic, moveTeleport, moveMode }) {
+/* ============================================================
+   LA 3D EST JOUABLE, PLUS SEULEMENT REGARDABLE
+   ============================================================
+   Demande de Nikola du 2026-08-18 : « le clic sur les cases en 3D ».
+
+   La vue 3D ne savait faire qu'une chose, sélectionner un Titan en cliquant
+   son sprite ; tout le reste — se déplacer, viser une charge, choisir une
+   destination de saut, ramasser, poser un débris arrêté — n'existait qu'en
+   2D, d'où la mention « Visualisation uniquement, repasse en Vue 2D pour
+   jouer » sous le plateau. Jouer une partie entière en 3D était impossible.
+
+   Deux briques suffisent, et aucune ne duplique une règle :
+
+   · CHAQUE MESH PORTE SA CASE (`userData.cellKey`) — sol, blocs, socle,
+     débris, sprite de Titan. Un clic renvoie donc une clé de case, exactement
+     ce que la 2D produit, et part dans le MÊME aiguilleur (`onCellClick`,
+     cf. RoundPanels). Aucune logique de jeu ne vit ici.
+
+   · LES CASES ACTIVES ARRIVENT DÉJÀ CALCULÉES (`cellulesActives`), avec leur
+     couleur, depuis le même code que le surlignage 2D. Ce que le joueur voit
+     en 3D ne peut donc pas diverger de ce que la 2D propose — c'est le
+     défaut qui avait déjà mordu sur la portée de Boing Boing.
+============================================================ */
+export default function Board3D({ board, looseBlocks, titans, boardVersion, selectedTitanId, onSelectTitan, cellulesActives = [], onCellClick }) {
   const mountRef = useRef(null);
   const apiRef = useRef(null);
   const rebuildRef = useRef(null);
-  const dataRef = useRef({ board, looseBlocks, titans, selectedTitanId, moveClassic, moveTeleport, moveMode });
-  dataRef.current = { board, looseBlocks, titans, selectedTitanId, moveClassic, moveTeleport, moveMode };
+  const dataRef = useRef({ board, looseBlocks, titans, selectedTitanId, cellulesActives, onCellClick, onSelectTitan });
+  dataRef.current = { board, looseBlocks, titans, selectedTitanId, cellulesActives, onCellClick, onSelectTitan };
   const [hoverSocle, setHoverSocle] = useState(null);
 
   // --- Effet unique : mise en place de la scène, caméra, lumières,
@@ -97,6 +120,9 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     // Puis +40% demandé :
     // 0x3A3A3E (58,58,62) × 1.4 ≈ 0x515157 (81,81,87).
     const ROAD_COLOR = 0x515157;
+    // Cibles de clic. Le sol est posé une fois pour toutes ; bâtiments,
+    // débris et Titans y sont ajoutés à chaque reconstruction (cf. `viderPick`).
+    const pickables = [];
     for (let r = 0; r <= 8; r++) {
       for (let c = 1; c <= 9; c++) {
         const { x, z } = cellWorld(r, c);
@@ -104,9 +130,15 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
         const mat = new THREE.MeshStandardMaterial({ color: ROAD_COLOR, roughness: 0.95 });
         const mesh = new THREE.Mesh(geo, mat);
         mesh.position.set(x, -0.04, z);
+        mesh.userData.cellKey = rowFromIndex(r) + c;
         groundGroup.add(mesh);
+        pickables.push(mesh);
       }
     }
+    // Le sol occupe les 81 premières entrées et ne bouge jamais : on ne
+    // recycle que ce qui vient après.
+    const PICK_SOL = pickables.length;
+    const viderPick = () => { pickables.length = PICK_SOL; };
 
     // --- Façades procédurales par couleur (cache, réutilisé à chaque
     // reconstruction pour éviter de regénérer les textures canvas) ---
@@ -355,8 +387,10 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
           const socleMesh = new THREE.Mesh(socleGeo, socleMat);
           socleMesh.position.set(x, SOCLE_H / 2, z);
           socleMesh.userData.socleValue = socleVal;
+          socleMesh.userData.cellKey = key;
           buildingGroup.add(socleMesh);
           socleMeshes.push(socleMesh);
+          pickables.push(socleMesh);
           const label = makeNumberSprite(socleVal);
           label.position.set(x, SOCLE_H + 0.16, z);
           buildingGroup.add(label);
@@ -368,7 +402,9 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
           addToonOutline(mesh, geo);
           const centerY = baseH + i * LEVEL_H + LEVEL_H / 2;
           mesh.position.set(x, centerY, z);
+          mesh.userData.cellKey = key;
           buildingGroup.add(mesh);
+          pickables.push(mesh);
           // Stud sommital (cf. icônes officielles Bloc_*.png) : petit cube
           // en relief au centre du dessus + ombre douce à sa base, visible
           // uniquement sur le bloc du SOMMET de la pile — les studs des
@@ -421,7 +457,9 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
           const mesh = new THREE.Mesh(geo, mat);
           const ox = (i - (stack.length - 1) / 2) * 0.2;
           mesh.position.set(x + ox, baseY + 0.16, z);
+          mesh.userData.cellKey = key;
           looseGroup.add(mesh);
+          pickables.push(mesh);
           if (isSocle) {
             const label = makeNumberSprite(socleValue(entry));
             label.scale.set(0.2, 0.2, 1);
@@ -444,6 +482,7 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
         sprite.scale.set(H * asp, H, 1);
         sprite.center.set(0.5, 0);
         sprite.userData.titanId = t.id;
+        sprite.userData.cellKey = t.cell;
         const r = rowIndex(t.cell[0]);
         const c = Number(t.cell.slice(1));
 
@@ -461,6 +500,9 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
           const { x: xo, z: zo } = cellWorld(r + dr, c + dc);
           material.opacity = 0.45;
           sprite.position.set(xo, 0, zo);
+          // Il attend HORS du ring : sa case ne désigne plus une position
+          // jouable, cliquer dessus ne doit rien viser sur le plateau.
+          delete sprite.userData.cellKey;
           titanGroup.add(sprite);
           return;
         }
@@ -471,18 +513,13 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
         const { x, z } = cellWorld(r, c);
         sprite.position.set(x, socleH + n * LEVEL_H, z);
         titanGroup.add(sprite);
+        pickables.push(sprite);
       });
     }
 
-    function rebuildHighlight(titansData, selId, boardData, classicCells, teleportCells, isMoveMode) {
+    function rebuildHighlight(titansData, selId, boardData, cellules) {
       viderGroupe(highlightGroup);
       const titan = titansData.find((t) => t.id === selId);
-      // Un Titan hors du ring n'occupe aucune case : surligner son périmètre
-      // dessinerait une zone d'action là où il n'est pas.
-      if (!titan || titan.horsPlateau) return;
-      const slabColor = TITAN_RING_COLOR[titan.id] ?? 0xffd93d;
-      const r0 = rowIndex(titan.cell[0]);
-      const c0 = Number(titan.cell.slice(1));
       const slabSize = CELL - GAP;
 
       function addSlab(cellKey, color, opacity) {
@@ -502,38 +539,41 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
         highlightGroup.add(slab);
       }
 
-      // Périmètre (toujours affiché)
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
-          const r = r0 + dr, c = c0 + dc;
-          if (r < 0 || r > 8 || c < 1 || c > 9) continue;
-          const cellKey = rowFromIndex(r) + c;
-          addSlab(cellKey, slabColor, 0.72);
+      // Périmètre du Titan sélectionné, toujours affiché. Un Titan hors du
+      // ring n'occupe aucune case : on ne dessine pas sa zone d'action là où
+      // il n'est pas.
+      if (titan && !titan.horsPlateau) {
+        const slabColor = TITAN_RING_COLOR[titan.id] ?? 0xffd93d;
+        const r0 = rowIndex(titan.cell[0]);
+        const c0 = Number(titan.cell.slice(1));
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            if (dr === 0 && dc === 0) continue;
+            const r = r0 + dr, c = c0 + dc;
+            if (r < 0 || r > 8 || c < 1 || c > 9) continue;
+            addSlab(rowFromIndex(r) + c, slabColor, 0.72);
+          }
         }
       }
 
-      // Cases de mouvement (uniquement en moveMode)
-      if (isMoveMode) {
-        if (classicCells) {
-          classicCells.forEach((cellKey) => {
-            addSlab(cellKey, 0x71dbff, 0.55); // bleu cyan — classique (plus opaque)
-          });
-        }
-        if (teleportCells) {
-          teleportCells.forEach((cellKey) => {
-            addSlab(cellKey, 0xb88cff, 0.38); // violet — téléporteur (plus transparent)
-          });
-        }
-      }
+      /* Cases cliquables du moment. Elles arrivent toutes calculées et déjà
+         colorées, depuis le même code qui peint la grille 2D : déplacement,
+         charge, saut, ramassage, repli, écroulement. Le plateau 3D n'a donc
+         plus une seule règle à connaître, et ne peut plus proposer autre
+         chose que la 2D. Dessinées APRÈS le périmètre pour rester lisibles
+         par-dessus lui. */
+      (cellules || []).forEach(({ key, couleur, opacite }) => {
+        addSlab(key, couleur, opacite ?? 0.55);
+      });
     }
 
     function rebuildAll() {
-      const { board: b, looseBlocks: lb, titans: ts, selectedTitanId: sel, moveClassic: mc, moveTeleport: mt, moveMode: mm } = dataRef.current;
+      const { board: b, looseBlocks: lb, titans: ts, selectedTitanId: sel, cellulesActives: ca } = dataRef.current;
+      viderPick();
       rebuildBuildings(b);
       rebuildLoose(lb, b);
       rebuildTitans(ts, b);
-      rebuildHighlight(ts, sel, b, mc, mt, mm);
+      rebuildHighlight(ts, sel, b, ca);
     }
     rebuildRef.current = rebuildAll;
     rebuildAll();
@@ -625,13 +665,27 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
       camera.zoom = THREE.MathUtils.clamp(camera.zoom * (1 - e.deltaY * 0.001), 0.4, 5);
       camera.updateProjectionMatrix();
     }
+    /* UN CLIC = UNE CASE. On prend le premier objet touché — sol, étage de
+       bâtiment, débris ou sprite de Titan — et on lit la case qu'il porte.
+       Cliquer le sommet d'une tour vise donc bien SA case, et non la case du
+       sol qu'on aperçoit derrière elle sous cet angle de caméra.
+
+       La case part ensuite dans l'aiguilleur commun aux deux vues : c'est
+       lui qui sait si on est en train de se déplacer, de viser une charge ou
+       simplement de sélectionner un Titan. Rien de tout ça ne se décide ici.
+       À défaut d'aiguilleur (vue montée en simple visualisation), on retombe
+       sur l'ancien comportement, la sélection du Titan cliqué. */
     function handleClick(e) {
       const rect = renderer.domElement.getBoundingClientRect();
       ndc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       ndc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(ndc, camera);
-      const hits = raycaster.intersectObjects(titanGroup.children, false);
-      if (hits.length > 0 && onSelectTitan) onSelectTitan(hits[0].object.userData.titanId);
+      const hits = raycaster.intersectObjects(pickables, false);
+      if (hits.length === 0) return;
+      const touche = hits[0].object;
+      const { onCellClick: clic, onSelectTitan: selectionner } = dataRef.current;
+      if (clic && touche.userData.cellKey) { clic(touche.userData.cellKey); return; }
+      if (selectionner && touche.userData.titanId != null) selectionner(touche.userData.titanId);
     }
 
     const dom = renderer.domElement;
@@ -691,15 +745,22 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
       renderer.dispose();
       if (mount.contains(dom)) mount.removeChild(dom);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Aucune dépendance, et plus besoin d'en désactiver le contrôle : depuis
+    // que les gestionnaires de clic lisent `dataRef` plutôt que les props
+    // capturées, cet effet ne référence réellement plus rien de l'extérieur.
   }, []); // mise en place unique — le contenu est reconstruit via rebuildRef
 
   // Reconstruction du contenu (bâtiments/blocs/titans/halo) à chaque
   // changement de signature de plateau ou de sélection — la caméra et
   // le renderer, eux, persistent (pas de saut de vue).
+  // `signatureCellules` : les cases actives changent à chaque ouverture de
+  // mode, et leur tableau est reconstruit à chaque rendu. Comparer leur
+  // contenu plutôt que leur référence évite de reconstruire toute la scène
+  // à chaque frappe de clavier ailleurs dans la page.
+  const signatureCellules = cellulesActives.map((c) => `${c.key}:${c.couleur}`).join("|");
   useEffect(() => {
     if (rebuildRef.current) rebuildRef.current();
-  }, [boardVersion, selectedTitanId, moveMode]);
+  }, [boardVersion, selectedTitanId, signatureCellules]);
 
   return (
     <div>

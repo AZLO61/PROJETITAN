@@ -241,6 +241,72 @@ export default function RoundPanels({ vm }) {
     occupiedCount,
     tcSel
   } = vm;
+
+  /* ── UN SEUL AIGUILLEUR DE CLIC POUR LES DEUX VUES ──
+     Il vivait en JSX, à l'intérieur du `onClick` d'une case de la grille 2D.
+     La vue 3D ne pouvait donc pas s'en servir, et c'est exactement ce qui la
+     réduisait à une visualisation (demande de Nikola du 2026-08-18 : « le
+     clic sur les cases en 3D »). Le recopier là-bas aurait créé deux
+     comportements à maintenir en parallèle — le motif que tout ce fichier
+     essaie d'éviter.
+
+     Il est donc extrait ici, tel quel, et les deux plateaux l'appellent avec
+     une clé de case. L'ORDRE DES TESTS est la règle et ne doit pas bouger :
+     une décision en attente capte le plateau entier, puis les modes de
+     carte, puis le ramassage, et seulement à défaut la consultation d'un
+     bâtiment ou la sélection d'un Titan.
+
+     `el` est l'élément DOM cliqué, dont la composition d'un bâtiment tire sa
+     position à l'écran. La 3D n'en a pas : elle passe null, et ce seul
+     affichage-là reste propre à la 2D. */
+  const clicCase = (key, el = null) => {
+    if (currentRepli) { if (currentRepli.cases.includes(key)) choisirRepli(key); return; }
+    if (ecroulement) { if (ecroulementCells.includes(key)) ecroulementPoserDebris(key); return; }
+    if (jnpMode) { if (jnpPool.has(key)) jnpToggleCell(key); return; }
+    if (bbMode) { if (bbReachable.has(key)) bbSelectCell(key); return; }
+    if (teaMode) { if (teaTargets.has(key)) jouerTeteEnAvant(key); return; }
+    if (moveMode) { if (moveReachable.has(key)) jouerMouvementGratuit(key); return; }
+    if (recupMode) {
+      if (recupPool.has(key)) {
+        const distinct = [...new Set(looseBlocks[key] || [])];
+        // Plusieurs débris DIFFÉRENTS sur la case : le livret laisse le choix,
+        // on ouvre le popup au lieu de prendre le dernier empilé.
+        if (distinct.length > 1) setRecupChoiceCell(key);
+        else jouerRecuperation(key);
+      }
+      return;
+    }
+    const cellData = state.board[key];
+    if (el && cellData && cellData.blocks.length > 0) { openComposition(key, el); return; }
+    if (titansByCell[key]) setSelectedTitanId(titansByCell[key]);
+  };
+
+  /* Les cases que le plateau 3D doit allumer, avec leur couleur. Mêmes
+     ensembles que ceux qui peignent la grille 2D juste en dessous : ce que
+     le joueur voit en 3D ne peut pas diverger de ce que le moteur accepte. */
+  const cellulesActives = (() => {
+    const out = [];
+    const add = (key, couleur, opacite) => out.push({ key, couleur, opacite });
+    if (currentRepli) {
+      currentRepli.cases.forEach((k) =>
+        add(k, 0xfb923c, k === currentRepli.defaut ? 0.75 : 0.45));
+    } else if (ecroulement) {
+      ecroulementCells.forEach((k) => add(k, 0xfb923c, 0.5));
+    } else if (jnpMode) {
+      jnpPool.forEach((k) => add(k, 0x16e08c, jnpSelected.includes(k) ? 0.8 : 0.4));
+    } else if (bbMode) {
+      bbReachable.forEach((k) => add(k, 0x16e08c, bbDest === k ? 0.8 : 0.4));
+    } else if (teaMode) {
+      teaTargets.forEach((_, k) => add(k, 0xfb923c, 0.55));
+    } else if (moveMode) {
+      moveClassic.forEach((k) => add(k, 0x71dbff, 0.55));
+      moveTeleport.forEach((k) => { if (!moveClassic.has(k)) add(k, 0xb88cff, 0.38); });
+    } else if (recupMode) {
+      recupPool.forEach((k) => add(k, 0xffd93d, 0.5));
+    }
+    return out;
+  })();
+
   return <>
       {/* Le banner "Vol en chaîne / Phase Repos" a été extrait dans
           RepoVolBanner.jsx et remonté juste sous DilRageBanner dans
@@ -264,13 +330,12 @@ export default function RoundPanels({ vm }) {
               boardVersion={boardSignature3D}
               selectedTitanId={selectedTitanId}
               onSelectTitan={setSelectedTitanId}
-              moveClassic={moveClassic}
-              moveTeleport={moveTeleport}
-              moveMode={moveMode}
+              cellulesActives={cellulesActives}
+              onCellClick={clicCase}
             />
           </Suspense>
           <div style={{ fontSize: ".7rem", color: "rgba(255,255,255,.45)", textAlign: "center", marginTop: 6 }}>
-            Visualisation uniquement — repasse en Vue 2D pour jouer
+            Clique une case pour jouer · glisse pour tourner · molette pour zoomer
           </div>
         </div>
       )}
@@ -309,7 +374,10 @@ export default function RoundPanels({ vm }) {
       {/* ── RÉPARTITION D'UN AMAS ÉCROULÉ ──
           Boing Boing sur un tas : le joueur place les débris un par un, et
           chacun fait son effet avant le suivant. */}
-      {ecroulement && (
+      {/* Une seule décision à l'écran : la répartition attend son tour
+          derrière un Dilemme ou un repli non tranché (cf. decisionBloquante
+          dans le contrôleur, demande Nikola du 2026-08-18). */}
+      {ecroulement && vm.decisionBloquante === "ecroulement" && (
         <div style={{
           background: "rgba(251,146,60,.14)", border: "1.5px solid #fb923c",
           borderRadius: 12, padding: "10px 14px", marginBottom: 10, fontSize: ".8rem",
@@ -353,9 +421,26 @@ export default function RoundPanels({ vm }) {
            translucide. Elles restent vides tant que personne n'est sorti. */
         const attenteParCase = {};
         (titansEnAttente || []).forEach((t) => { attenteParCase[t.cell] = t; });
-        const Gouttiere = ({ cle }) => {
+        /* UN TITAN N'ATTEND QUE DANS UNE SEULE GOUTTIÈRE.
+           Les quatre pistes se recoupent aux coins : A1 appartient à la fois
+           à la gouttière haute (colonne 1) et à celle de gauche (ligne A).
+           Le même Titan s'y affichait donc en double. C'était rare tant
+           qu'on ne sortait que par un bord droit ; depuis la règle du
+           miroir du 2026-08-18, une poussée en diagonale renvoie
+           précisément sur un coin, et le cas est devenu courant.
+
+           La piste retenue est celle par laquelle il rentrera vraiment :
+           `rentrerEnJeu` fait longer la COLONNE en priorité quand la case
+           est sur une colonne de bord, l'affichage suit la même règle. */
+        const zoneDe = (cle) => {
+          const col = Number(cle.slice(1));
+          if (col === 1) return "gauche";
+          if (col === 9) return "droite";
+          return cle[0] === "A" ? "haut" : "bas";
+        };
+        const Gouttiere = ({ cle, zone }) => {
           const t = attenteParCase[cle];
-          if (!t) return <div />;
+          if (!t || zoneDe(cle) !== zone) return <div />;
           return (
             <div
               title={`${titanDisplayName(t.id)} attend hors de BIG CITY — rentre par ${cle} au début de son tour`}
@@ -394,11 +479,11 @@ export default function RoundPanels({ vm }) {
         <div />
         {/* Gouttière haute : attente au-dessus de la ligne A */}
         <div /><div />
-        {[1,2,3,4,5,6,7,8,9].map((c) => <Gouttiere key={`haut${c}`} cle={`A${c}`} />)}
+        {[1,2,3,4,5,6,7,8,9].map((c) => <Gouttiere key={`haut${c}`} cle={`A${c}`} zone="haut" />)}
         <div />
         {ROWS.map((r) => (
           <React.Fragment key={r}>
-            <Gouttiere cle={`${r}1`} />
+            <Gouttiere cle={`${r}1`} zone="gauche" />
             <div style={{ display: "grid", placeItems: "center", fontSize: ".68rem", color: "rgba(255,255,255,.4)" }}>{r}</div>
             {[1,2,3,4,5,6,7,8,9].map((c) => {
               const key = r + c;
@@ -493,43 +578,10 @@ export default function RoundPanels({ vm }) {
                 <div
                   key={key}
 
-                  onClick={(e) => {
-                    // La répartition d'un Amas écroulé passe avant tout le
-                    // reste : tant qu'elle est en cours, le plateau ne sert
-                    // qu'à désigner où tombe chaque débris.
-                    // Un repli en attente bloque tout le reste : tant que le
-                    // joueur n'a pas dit où l'élément se pose, le plateau ne
-                    // sert qu'à ça.
-                    if (currentRepli) { if (repliSelectable) choisirRepli(key); return; }
-                    if (ecroulement) { if (ecroulSelectable) ecroulementPoserDebris(key); return; }
-                    if (jnpMode) { if (jnpSelectable) jnpToggleCell(key); return; }
-                    if (bbMode) { if (bbSelectable) bbSelectCell(key); return; }
-                    if (teaMode) { if (teaSelectable) jouerTeteEnAvant(key); return; }
-                    if (moveMode) { if (moveSelectable) jouerMouvementGratuit(key); return; }
-                    // Aucun mode actif : un clic sur un bâtiment ouvre sa
-                    // composition, posée contre la case elle-même.
-                    if (!jnpMode && !bbMode && !teaMode && !moveMode && !recupMode
-                        && isBldg && cellData && cellData.blocks.length > 0) {
-                      openComposition(key, e.currentTarget);
-                      return;
-                    }
-                    if (recupMode) {
-                      if (recupSelectable) {
-                        const stack = looseBlocks[key] || [];
-                        const distinct = [...new Set(stack)];
-                        if (distinct.length > 1) {
-                          // Plusieurs débris DIFFÉRENTS sur cette case : on
-                          // n'appelle pas jouerRecuperation tout de suite,
-                          // on ouvre le popup de choix (rendu plus bas).
-                          setRecupChoiceCell(key);
-                        } else {
-                          jouerRecuperation(key);
-                        }
-                      }
-                      return;
-                    }
-                    if (titansByCell[key]) setSelectedTitanId(titansByCell[key]);
-                  }}
+                  // Aiguillage commun aux vues 2D et 3D (cf. `clicCase` en
+                  // tête de composant) : une seule description de ce que
+                  // « cliquer une case » veut dire, quelle que soit la vue.
+                  onClick={(e) => clicCase(key, e.currentTarget)}
                   // Les icones empilees dans une case de 30px etaient
                   // illisibles. La composition exacte passe dans l'infobulle,
                   // du haut vers le bas, et la case garde des reperes
@@ -684,12 +736,12 @@ De haut en bas : ${[...cellData.blocks].reverse().map((c) => BLOCK_NAME[c] || c)
                 </div>
               );
             })}
-            <Gouttiere cle={`${r}9`} />
+            <Gouttiere cle={`${r}9`} zone="droite" />
           </React.Fragment>
         ))}
         {/* Gouttière basse : attente sous la ligne I */}
         <div /><div />
-        {[1,2,3,4,5,6,7,8,9].map((c) => <Gouttiere key={`bas${c}`} cle={`I${c}`} />)}
+        {[1,2,3,4,5,6,7,8,9].map((c) => <Gouttiere key={`bas${c}`} cle={`I${c}`} zone="bas" />)}
         <div />
       </div>
         );

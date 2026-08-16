@@ -23,7 +23,7 @@ export const LEXIQUE = [
   { icon: ICON("titan"), nom: "Titan", def: "Le personnage que tu incarnes : un colosse qui détruit BIG CITY." },
   { icon: ICON("socle"), nom: "Socle", def: "Placé sous chaque bâtiment à sa construction. Sa valeur est fixe, même si le bâtiment perd des blocs ensuite." },
   { icon: ICON("rebond"), nom: "Rebond", def: "Un élément qui percute un bâtiment ou un bord de plateau repart en sens inverse, gratuitement." },
-  { icon: ICON("projection"), nom: "Projection", def: "Un élément qui arrive sur une case occupée pousse ce qui s'y trouve, d'un nombre de cases égal à l'énergie restante." },
+  { icon: ICON("projection"), nom: "Projection", def: "Un élément qui arrive sur une case occupée pousse ce qui s'y trouve, d'un nombre de cases égal à l'énergie restante. Un TITAN pousse toujours, même s'il ne lui reste qu'une énergie de 1 : il décale alors sa cible d'une case. La chaîne peut se poursuivre de proche en proche, et chaque Titan DISTINCT déplacé rapporte 1 Bagarre à l'initiateur — mais un Titan déjà en mouvement dans la réaction n'est jamais poussé une seconde fois." },
   { icon: ICON("detonateur"), nom: "Détonateur", def: "Désigne le Titan qui commence la Manche. Passe au joueur suivant à chaque Manche." },
 ];
 
@@ -33,7 +33,7 @@ export const BADGES = [
   {
     code: "⊣",
     nom: "Arrêt faute de puissance",
-    def: "Un élément projeté qui percute quelque chose sans avoir l'énergie de le déplacer ou de le casser ne finit PAS son déplacement : il s'arrête là. Le Titan initiateur choisit alors où le poser, parmi sa propre case et celles qui touchent à la fois sa case et la case visée. Ces voisines ne peuvent jamais porter un bâtiment debout, c'est la seule interdiction : un débris déjà au sol est autorisé (l'élément s'empile et forme un Amas) et une case portant un Titan aussi. Seul un Titan replié ne peut pas se poser sur un autre Titan. Sa case d'origine reste toujours disponible. S'il sortait d'une faille et n'a donc pas de case précédente de ce côté du plateau, on prend les cases voisines de la case visée qui ne franchissent pas l'obstacle. Exemple : un élément qui ressort à l'ouest sur une case bloquée en C9 se pose en B9 ou D9.",
+    def: "Un élément projeté qui percute quelque chose sans avoir l'énergie de le déplacer ou de le casser ne finit PAS son déplacement : il s'arrête là. Le Titan initiateur choisit alors où le poser, parmi sa propre case et celles qui touchent à la fois sa case et la case visée. Une seule interdiction : jamais sur un bâtiment debout, sa case d'origine comprise. Tout le reste est ouvert — un débris déjà au sol (l'élément s'empile et forme un Amas), et même la case d'un autre Titan : un Titan replié qui la vise l'en chasse d'une case et marque 1 Bagarre, c'est un coup à part entière. Seule la case du Titan qui a joué la carte reste fermée, il a l'immunité sur sa propre action. Sa case d'origine reste toujours disponible. S'il sortait d'une faille et n'a donc pas de case précédente de ce côté du plateau, on prend les cases voisines de la case visée qui ne franchissent pas l'obstacle. Exemple : un élément qui ressort à l'ouest sur une case bloquée en C9 se pose en B9 ou D9.",
     color: "#FB923C",
   },
   {

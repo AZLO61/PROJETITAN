@@ -62,6 +62,16 @@ export default function RepliBanner({ vm }) {
         Sa case de départ, ou une case qui touche à la fois sa case et celle qu'il visait.
         {currentRepli.defaut && ` Sans choix de ta part, il resterait en ${currentRepli.defaut}.`}
       </p>
+      {/* Ruling Nikola du 2026-08-18 : viser un adversaire est un vrai coup,
+          pas un accident de trajectoire. Il fallait le dire à l'endroit où le
+          choix se fait — sans ça, personne ne pense à cliquer une case
+          occupée, et la case de piste ADN reste sur la table. */}
+      {currentRepli.titanId != null && (
+        <p style={{ margin: "6px 0 0", fontSize: ".72rem", color: "#ffb877" }}>
+          💪 Une case occupée par un autre Titan est un choix valide : tu l'en chasses
+          d'une case, et ça te rapporte 1 Bagarre.
+        </p>
+      )}
     </div>
   );
 }

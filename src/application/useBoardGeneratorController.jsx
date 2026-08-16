@@ -17,7 +17,7 @@ const {
   resolveToutCasserBatiments, resolveToutCasserBlocs,
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
   resolveGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
-  choisirRepliIA, appliquerRepli,
+  choisirRepliIA, appliquerRepli, appliquerReplElement,
   canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
   getRecuperationPool, resolveRecuperation, retirerPileVide, programCards, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
@@ -42,6 +42,18 @@ export function useBoardGeneratorController() {
   // ReferenceError de zone morte temporelle.
   const [actionLog, setActionLog] = useState([]);
   const [looseBlocks, setLooseBlocks] = useState({});
+  /* Files de DÉCISIONS EN ATTENTE, déclarées ici en tête pour la même
+     raison que `actionLog` et `looseBlocks` juste au-dessus : les effets de
+     Phase, plus haut dans le corps du hook, doivent les lire dans leur
+     tableau de dépendances — et un tableau de dépendances est évalué AU
+     RENDU. Une déclaration plus bas provoquerait une ReferenceError de zone
+     morte temporelle. Leur documentation détaillée est restée à leur ancien
+     emplacement, avec le reste de la mécanique de repli. */
+  const [decisionQueue, setDecisionQueue] = useState([]);
+  const [repliQueue, setRepliQueue] = useState([]);
+  const [ecroulement, setEcroulement] = useState(null);
+  const currentDecision = decisionQueue[0] || null;
+  const currentRepli = repliQueue[0] || null;
   const [seedCount, setSeedCount] = useState(1);
   const [mancheNumber, setMancheNumber] = useState(1);
   const [activePlayerId, setActivePlayerId] = useState(() => titanState.detonateur);
@@ -274,6 +286,12 @@ export function useBoardGeneratorController() {
 
   useEffect(() => {
     if (gameOver) return; // la partie est finie : plus aucune phase ne s'enchaîne
+    /* Une décision née de la Phase en cours se règle DANS cette Phase.
+       Sans ce garde-fou, la Phase Action pouvait se clore sur un Dilemme
+       encore ouvert : le bandeau DIL et celui du Vol de Phase Repos se
+       retrouvaient à l'écran en même temps, et le bloc perdu tombait sur un
+       plateau que la Manche suivante avait déjà commencé à changer. */
+    if (currentDecision || currentRepli || ecroulement) return;
     const ids = titanState.ordreJeu;
     const allValidated = ids.every((id) => phaseValidated[id]);
     if (!allValidated) return;
@@ -304,7 +322,8 @@ export function useBoardGeneratorController() {
       setPhase(nextPhase);
     }
     setPhaseValidated({});
-  }, [phaseValidated, titanState.ordreJeu, phase, advanceManche, eventsEnabled, gameOver]);
+  }, [phaseValidated, titanState.ordreJeu, phase, advanceManche, eventsEnabled, gameOver,
+      currentDecision, currentRepli, ecroulement]);
 
   // Rainbow tracking
   // Bug remonté : "5 couleurs" attendu, mais le vert était explicitement
@@ -386,7 +405,6 @@ export function useBoardGeneratorController() {
   // Écroulement d'Amas en attente de répartition par le joueur :
   // { cellKey, blocs, energie, choix } — un choix de case par débris, posé
   // dans l'ordre. Nul quand aucune répartition n'est en cours.
-  const [ecroulement, setEcroulement] = useState(null);
 
   /* ── FILE DES REPLIS À TRANCHER ──
      Ruling Nikola du 2026-08-17 : quand un élément projeté s'arrête faute de
@@ -399,8 +417,6 @@ export function useBoardGeneratorController() {
      réaction en chaîne peut à son tour immobiliser un débris. Les résolveurs
      déposent donc leurs replis dans un tableau partagé (`gameState.replis`),
      et le joueur les tranche un par un, dans l'ordre où ils sont survenus. */
-  const [repliQueue, setRepliQueue] = useState([]);
-  const [decisionQueue, setDecisionQueue] = useState([]);
   const [progSelection, setProgSelection] = useState([]);
   /* Dernier échec de programmation, affiché DANS le panneau.
      Bug remonté par Nikola le 2026-08-17 : « en début de M4 je sélectionne
@@ -460,6 +476,23 @@ export function useBoardGeneratorController() {
   // plat leur état local, que la restauration de l'état de jeu ne touche pas.
   const [undoTick, setUndoTick] = useState(0);
 
+  /* ── CE QU'UN INSTANTANÉ DOIT CONTENIR ──
+     Demande de Nikola du 2026-08-18 : « Annuler annule bien les actions
+     jouées, donc placement, perte de débris, etc. — tout ce qu'une action
+     fait doit être annulable si on clique sur le bouton. »
+
+     L'instantané ne couvrait que le plateau, les Titans et les débris. Tout
+     ce qu'une action laisse EN ATTENTE en était absent, et pire, le retour
+     en arrière VIDAIT ces files au lieu de les restaurer : un Dilemme non
+     encore tranché, un repli en attente, une répartition d'Amas en cours ou
+     une comparaison Faut Pas Me Chauffer disparaissaient purement et
+     simplement — l'action était à moitié défaite, et le joueur se retrouvait
+     avec une carte jouée dont l'effet ne viendrait jamais.
+
+     La règle est donc simple et sans exception : tout état de JEU entre dans
+     l'instantané, y compris les décisions en suspens. Seuls restent dehors
+     les états d'INTERFACE (mode carte ouvert, compteur d'Adrénaline engagé,
+     animation), remis à plat par `undoTick`. */
   const captureSnapshot = useCallback(() => {
     setUndoStack((prev) => [...prev, {
       state: structuredClone(state),
@@ -469,6 +502,27 @@ export function useBoardGeneratorController() {
       phase,
       passifUsed: structuredClone(passifUsed),
       actionLog: [...actionLog],
+      // Décisions et placements en attente : ils font partie de l'action.
+      decisionQueue: structuredClone(decisionQueue),
+      repliQueue: structuredClone(repliQueue),
+      ecroulement: ecroulement ? structuredClone(ecroulement) : null,
+      fpmc: {
+        attackerId: fpmcAttackerId,
+        pendingIds: [...fpmcPendingIds],
+        nTargets: fpmcNTargets,
+        attackerBase: fpmcAttackerBase,
+        current: fpmcCurrent ? { ...fpmcCurrent } : null,
+      },
+      // Avancement de la partie et acquis de fin de partie.
+      mancheNumber,
+      phaseValidated: { ...phaseValidated },
+      volDirection,
+      currentEvent,
+      rainbowWinnerId,
+      vertAssignments: structuredClone(vertAssignments),
+      gameOver,
+      showScoring,
+      coutRentree: coutRentree ? { ...coutRentree } : null,
       // Bug #8 (tracker) : "Annuler une carte doit la rendre réellement
       // disponible, pas juste un rollback visuel". Ces deux valeurs
       // vivaient hors du snapshot : `waitingNextTitan` restait à `true`
@@ -480,7 +534,12 @@ export function useBoardGeneratorController() {
       waitingNextTitan,
       cardsPlayedCount: { ...cardsPlayedCountRef.current },
     }]);
-  }, [state, titanState, looseBlocks, activePlayerId, phase, passifUsed, actionLog, waitingNextTitan]);
+  }, [
+    state, titanState, looseBlocks, activePlayerId, phase, passifUsed, actionLog, waitingNextTitan,
+    decisionQueue, repliQueue, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcNTargets,
+    fpmcAttackerBase, fpmcCurrent, mancheNumber, phaseValidated, volDirection, currentEvent,
+    rainbowWinnerId, vertAssignments, gameOver, showScoring, coutRentree,
+  ]);
 
   // Vide l'historique quand le joueur actif change (tour terminé = irréversible)
   const prevActivePlayerRef = useRef(activePlayerId);
@@ -511,7 +570,29 @@ export function useBoardGeneratorController() {
     setActionLog([...snap.actionLog]);
     setMoveMode(false); setRecupMode(false); setBbMode(false); setBbDest(null);
     setJnpMode(false); setJnpSelected([]); setGraouMode(false);
-    setDecisionQueue([]);
+    /* Les files en attente sont RESTAURÉES, plus vidées. Les vider défaisait
+       le plateau sans défaire les décisions qu'il avait déclenchées : on
+       revenait avant la carte, mais le Dilemme qu'elle avait ouvert restait
+       dû — ou disparaissait, selon la file. Ni l'un ni l'autre n'est une
+       annulation. */
+    setDecisionQueue(structuredClone(snap.decisionQueue || []));
+    setRepliQueue(structuredClone(snap.repliQueue || []));
+    setEcroulement(snap.ecroulement ? structuredClone(snap.ecroulement) : null);
+    setFpmcAttackerId(snap.fpmc?.attackerId ?? null);
+    setFpmcPendingIds([...(snap.fpmc?.pendingIds || [])]);
+    setFpmcNTargets(snap.fpmc?.nTargets ?? 0);
+    setFpmcAttackerBase(snap.fpmc?.attackerBase ?? 0);
+    setFpmcCurrent(snap.fpmc?.current ? { ...snap.fpmc.current } : null);
+    setMancheNumber(snap.mancheNumber);
+    setPhaseValidated({ ...(snap.phaseValidated || {}) });
+    setVolDirection(snap.volDirection ?? null);
+    setCurrentEvent(snap.currentEvent ?? null);
+    setRainbowWinnerId(snap.rainbowWinnerId ?? null);
+    setVertAssignments(structuredClone(snap.vertAssignments || {}));
+    setGameOver(Boolean(snap.gameOver));
+    setShowScoring(Boolean(snap.showScoring));
+    setCoutRentree(snap.coutRentree ? { ...snap.coutRentree } : null);
+    setMovingTitanOverride(null);
     setAiPlayingSync(false);
     setWaitingNextTitan(snap.waitingNextTitan ?? false);
     cardsPlayedCountRef.current = { ...(snap.cardsPlayedCount || {}) };
@@ -527,10 +608,7 @@ export function useBoardGeneratorController() {
        du tour en cours, notamment) : ils ne peuvent pas le déduire du seul
        état de jeu restauré. */
     setTeaMode(false);
-    setEcroulement(null);
-    setRepliQueue([]);
     setPendingCardConfirm(null);
-    setFpmcAttackerId(null); setFpmcPendingIds([]); setFpmcCurrent(null);
     setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0);
     setAnimating(false); setAnimLabel("");
     setUndoTick((n) => n + 1);
@@ -579,7 +657,10 @@ export function useBoardGeneratorController() {
     // une Adrénaline pour retrouver de la marge.
     setCoutRentree(retour.rentre ? { titanId: activePlayerId, cout: retour.cout } : null);
     if (retour.rentre) setTitanState((p) => ({ ...p, players: [...p.players] }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Tout le reste est lu via les refs « live » : cet effet ne dépend
+    // réellement que du Titan actif et de la Phase, et le contrôle des
+    // dépendances n'a plus rien à redire — la désactivation qui vivait ici
+    // était devenue sans objet.
   }, [activePlayerId, phase]);
 
   // ── DÉCISIONS IA ──
@@ -1184,7 +1265,6 @@ export function useBoardGeneratorController() {
     ]);
   }, [autoResolveIaDecisions]);
 
-  const currentDecision = decisionQueue[0] || null;
 
   const dilAttackerPick = useCallback((color) => {
     setDecisionQueue((prev) => {
@@ -1215,6 +1295,10 @@ export function useBoardGeneratorController() {
       return;
     }
 
+    // À partir d'ici la décision se résout pour de bon : le Repaire de la
+    // cible va bouger. On fige l'état avant, pour que « Annuler » défasse la
+    // perte du bloc et repose la décision telle qu'elle était.
+    captureSnapshot();
     // Défenseur IA : il n'a jamais son mot à dire par l'interface, la
     // décision resterait en attente d'un clic qui ne viendrait pas. Même
     // heuristique que l'auto-résolution IA↔IA — il perd la couleur dont la
@@ -1259,12 +1343,13 @@ export function useBoardGeneratorController() {
       setTitanState((p) => ({ ...p, players: [...p.players] }));
     }
     setDecisionQueue((prev) => prev.slice(1));
-  }, [decisionQueue, titanState.players, acheminerBlocPerdu]);
+  }, [decisionQueue, titanState.players, acheminerBlocPerdu, captureSnapshot]);
 
   const resolveDilDefenderPick = useCallback(
     (color) => {
       const cur = decisionQueue[0];
       if (!cur) return;
+      captureSnapshot();
       const defender = titanState.players.find((t) => t.id === cur.defenderId);
       const attacker = titanState.players.find((t) => t.id === cur.attackerId);
       const suffixe = acheminerBlocPerdu(cur, defender, attacker, color);
@@ -1273,7 +1358,7 @@ export function useBoardGeneratorController() {
       setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
       setDecisionQueue((prev) => prev.slice(1));
     },
-    [decisionQueue, titanState.players, acheminerBlocPerdu]
+    [decisionQueue, titanState.players, acheminerBlocPerdu, captureSnapshot]
   );
 
   const resolveDilCancelWithAdrenaline = useCallback(() => {
@@ -1282,6 +1367,7 @@ export function useBoardGeneratorController() {
     const defender = titanState.players.find((t) => t.id === cur.defenderId);
     const attaquant = titanState.players.find((t) => t.id === cur.attackerId);
     if ((defender.adrenaline || 0) < 1) { return; }
+    captureSnapshot();
     defender.adrenaline -= 1;
     // Livret : « le défenseur peut DONNER 1 adrénaline À L'ATTAQUANT pour
     // annuler le DIL ». Elle était retirée au défenseur sans jamais arriver
@@ -1291,12 +1377,13 @@ export function useBoardGeneratorController() {
     setActionLog((prevLog) => [...prevLog, `DIL annulé par Titan ${cur.defenderId} : 1 Adrénaline donnée à Titan ${cur.attackerId}.`]);
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setDecisionQueue((prev) => prev.slice(1));
-  }, [decisionQueue, titanState.players]);
+  }, [decisionQueue, titanState.players, captureSnapshot]);
 
   const resolveRagePick = useCallback(
     (color) => {
       const cur = decisionQueue[0];
       if (!cur) return;
+      captureSnapshot();
       const defender = titanState.players.find((t) => t.id === cur.defenderId);
       const attacker = titanState.players.find((t) => t.id === cur.attackerId);
       const suffixe = acheminerBlocPerdu(cur, defender, attacker, color);
@@ -1304,7 +1391,7 @@ export function useBoardGeneratorController() {
       setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
       setDecisionQueue((prev) => prev.slice(1));
     },
-    [decisionQueue, titanState.players, acheminerBlocPerdu]
+    [decisionQueue, titanState.players, acheminerBlocPerdu, captureSnapshot]
   );
 
   const resolveRagePickAdrenaline = useCallback(() => {
@@ -1313,6 +1400,7 @@ export function useBoardGeneratorController() {
     const defender = titanState.players.find((t) => t.id === cur.defenderId);
     const attacker = titanState.players.find((t) => t.id === cur.attackerId);
     if ((defender.adrenaline || 0) < 1) return;
+    captureSnapshot();
     defender.adrenaline -= 1;
     // FAQ #5 : l'Adrénaline est une ressource comme une autre. RAGE la
     // PREND, elle ne s'évapore pas — l'attaquant la gagne.
@@ -1320,7 +1408,7 @@ export function useBoardGeneratorController() {
     setActionLog((prevLog) => [...prevLog, `RAGE (FAQ#5) : Titan ${cur.attackerId} prend 1 Adrénaline à Titan ${cur.defenderId}.`]);
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setDecisionQueue((prev) => prev.slice(1));
-  }, [decisionQueue, titanState.players]);
+  }, [decisionQueue, titanState.players, captureSnapshot]);
 
   const toggleProgCard = useCallback((cardId) => {
     setProgSelection((prev) => {
@@ -1435,12 +1523,16 @@ export function useBoardGeneratorController() {
      `pick` du domaine, donc par le même RNG que le reste de la partie. */
   useEffect(() => {
     if (phase !== "repos" || volDirection || gameOver) return;
+    // Même règle que ci-dessus : le Vol ne démarre pas par-dessus une
+    // décision non tranchée, fût-ce une IA qui le déclenche.
+    if (currentDecision || currentRepli || ecroulement) return;
     const detId = titanState.detonateur;
     if (titanModes[detId] !== "ia") return;
     const sens = pick(["gauche", "droite"]);
     setActionLog((prev) => [...prev, `🤖 Titan ${detId} (IA, Détonateur) choisit le sens de la chaîne.`]);
     chooseVolDirection(sens);
-  }, [phase, volDirection, gameOver, titanState.detonateur, titanModes, chooseVolDirection]);
+  }, [phase, volDirection, gameOver, titanState.detonateur, titanModes, chooseVolDirection,
+      currentDecision, currentRepli, ecroulement]);
 
   const canPlayCard = useCallback(
     (cardId) => {
@@ -1550,6 +1642,9 @@ export function useBoardGeneratorController() {
   // rulings (pool distinct de playedThisManche, éligible au Vol Repos).
   const discardCurrentCard = useCallback(
     (titanId, cardId) => {
+      // Une défausse consomme la carte du round et fait tourner le tour :
+      // c'est une action de jeu comme une autre, donc annulable.
+      captureSnapshot();
       let logMsg = "";
       setTitanState((prev) => {
         const updatedPlayers = prev.players.map((t) => {
@@ -1564,7 +1659,7 @@ export function useBoardGeneratorController() {
       if (logMsg) setActionLog((prevLog) => [...prevLog, logMsg]);
       advanceActionRound(titanId);
     },
-    [advanceActionRound]
+    [advanceActionRound, captureSnapshot]
   );
 
   // ── TEA : calcul des cibles disponibles ──────────────────────────────────
@@ -1785,8 +1880,16 @@ export function useBoardGeneratorController() {
       };
       const choix = choisirRepliIA(r, etat, profils[r.initiatorId]);
       if (choix && choix !== r.defaut) {
-        appliquerRepli(r, choix, etat);
-        setActionLog((prev) => [...prev, `🤖 Titan ${r.initiatorId} (IA) pose l'élément arrêté en ${choix} plutôt qu'en ${r.defaut}.`]);
+        // `appliquerRepli` remonte désormais son propre journal : depuis le
+        // ruling du 2026-08-18, poser l'élément peut chasser un Titan et
+        // rapporter une Bagarre. Sans ça, l'IA marquait un point que rien
+        // n'expliquait dans le journal d'actions.
+        const journal = appliquerRepli(r, choix, etat) || [];
+        setActionLog((prev) => [
+          ...prev,
+          `🤖 Titan ${r.initiatorId} (IA) pose l'élément arrêté en ${choix} plutôt qu'en ${r.defaut}.`,
+          ...journal,
+        ]);
       }
     }
 
@@ -1795,44 +1898,41 @@ export function useBoardGeneratorController() {
     if (aTrancher.length > 0) setRepliQueue((prev) => [...prev, ...aTrancher]);
   }, []);
 
-  const currentRepli = repliQueue[0] || null;
 
   /* Applique le choix du joueur puis dépile.
 
-     Deux natures d'élément, d'où `titanId` :
-     · un TITAN nommément — on le repose sur la case choisie ;
-     · un DÉBRIS — il vient d'être empilé sur la case par défaut par le
-       résolveur, on le déplace donc du sommet de cette pile vers la case
-       choisie. Le repli se tranche juste après la résolution de la carte,
-       avant que quoi que ce soit d'autre ne s'empile : le sommet est bien
-       l'élément concerné. */
+     Le DÉPLACEMENT lui-même n'est plus écrit ici : c'est une règle de jeu,
+     elle vit dans le domaine (`appliquerReplElement`), et l'IA comme le
+     simulateur passent par la même. La copie qui vivait à cet endroit ne
+     savait pas pousser le Titan occupant — depuis le ruling du 2026-08-18,
+     viser la case d'un adversaire est justement le coup qui rapporte une
+     case de piste ADN Bagarre. Le contrôleur ne fait donc plus que ce qui
+     lui revient : figer l'état pour l'annulation, appeler la règle,
+     journaliser, et redessiner. */
   const choisirRepli = useCallback((cellKey) => {
     const cur = repliQueue[0];
     if (!cur || !cur.cases.includes(cellKey)) return;
+    captureSnapshot();
     if (cellKey !== cur.defaut) {
-      if (cur.titanId != null) {
-        const titan = aiTitanStateRef.current.players.find((t) => t.id === cur.titanId);
-        if (titan) {
-          titan.cell = cellKey;
-          setActionLog((prev) => [...prev, `Titan ${cur.titanId} arrêté faute de puissance → posé en ${cellKey} (choix de l'initiateur).`]);
-        }
-        setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-      } else {
-        const lb = aiLooseBlocksRef.current;
-        const pile = lb[cur.defaut] || [];
-        const bloc = pile.pop();
-        if (bloc !== undefined) {
-          retirerPileVide(lb, cur.defaut);
-          if (!lb[cellKey]) lb[cellKey] = [];
-          lb[cellKey].push(bloc);
-          setActionLog((prev) => [...prev, `Élément arrêté faute de puissance → posé en ${cellKey} au lieu de ${cur.defaut} (choix de l'initiateur).`]);
-        }
-        setLooseBlocks((prev) => ({ ...prev }));
-      }
+      const res = appliquerReplElement(cur, cellKey, {
+        board: aiStateRef.current.board,
+        titans: aiTitanStateRef.current.players,
+        looseBlocks: aiLooseBlocksRef.current,
+      });
+      const quoi = cur.titanId != null ? `Titan ${cur.titanId}` : "Élément";
+      setActionLog((prev) => [
+        ...prev,
+        ...(res.applied
+          ? [`${quoi} arrêté faute de puissance → posé en ${cellKey} au lieu de ${cur.defaut} (choix de l'initiateur).`]
+          : []),
+        ...res.log,
+      ]);
+      setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+      setLooseBlocks((prev) => ({ ...prev }));
       setState((prev) => ({ ...prev }));
     }
     setRepliQueue((prev) => prev.slice(1));
-  }, [repliQueue]);
+  }, [repliQueue, captureSnapshot]);
 
   const ecroulementPoserDebris = useCallback((cellKey) => {
     setEcroulement((prev) => {
@@ -1845,6 +1945,7 @@ export function useBoardGeneratorController() {
   }, []);
   const ecroulementValider = useCallback(() => {
     if (!ecroulement || ecroulement.choix.length !== ecroulement.blocs.length) return;
+    captureSnapshot();
     const replis = [];
     const result = resolveEcroulementAmas(
       activePlayerId,
@@ -1858,7 +1959,7 @@ export function useBoardGeneratorController() {
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [ecroulement, activePlayerId, state.board, titanState.players, looseBlocks, enqueueReplis]);
+  }, [ecroulement, activePlayerId, state.board, titanState.players, looseBlocks, enqueueReplis, captureSnapshot]);
   const { reachable: moveReachable, classic: moveClassic, teleport: moveTeleport } = selectedTitan
     ? getMovementReachable(selectedTitan.cell, moveMaxRange, state.board, titansByCell, looseBlocks)
     : { reachable: new Set(), classic: new Set(), teleport: new Set() };
@@ -2006,6 +2107,7 @@ export function useBoardGeneratorController() {
     const attacker = titanState.players.find((t) => t.id === fpmcAttackerId);
     const defender = titanState.players.find((t) => t.id === cur.defenderId);
     if (!attacker || !defender) return;
+    captureSnapshot();
 
     // La résolution vit désormais dans le domaine, avec les cinq autres
     // cartes (cf. resolveFautPasMeChauffer). La version manuscrite qui
@@ -2027,7 +2129,7 @@ export function useBoardGeneratorController() {
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setFpmcCurrent(null);
-  }, [fpmcCurrent, fpmcAttackerId, fpmcNTargets, titanState.players, state.board, looseBlocks, enqueueDecisions]);
+  }, [fpmcCurrent, fpmcAttackerId, fpmcNTargets, titanState.players, state.board, looseBlocks, enqueueDecisions, captureSnapshot]);
 
   const jouerToutCasser = useCallback(() => {
     if (!selectedTitanId || !canPlayCard("tout_casser")) return;
@@ -2051,6 +2153,49 @@ export function useBoardGeneratorController() {
   }, [selectedTitanId, tcAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, canPlayCard, markCardPlayed, captureSnapshot]);
 
   const getVertCount = useCallback((titan) => titan.repaire.filter((c) => c === "vert").length, []);
+
+  /* ── LES IA PLACENT LEURS PROPRES BLOCS VERTS ──
+     Demande de Nikola du 2026-08-18 : « c'est les IA qui doivent placer
+     leurs propres blocs verts. »
+
+     L'écran de décompte posait un menu déroulant par Vert et PAR TITAN, y
+     compris pour les Titans pilotés par l'IA : c'était donc l'humain qui
+     affectait, à la fin, les Verts de ses trois adversaires — un choix qui
+     vaut plusieurs points et qui ne lui appartient pas. Pire, tant qu'il ne
+     les remplissait pas lui-même, le décompte restait annoncé comme « non
+     définitif » et les profils d'IA ne se dévoilaient jamais.
+
+     Chaque IA tranche donc elle-même, en mode EXACT : le glouton a un angle
+     mort connu sur l'Orange, qui ne marque que par paires (cf.
+     bestVertAssignment). Placer un Vert est le tout dernier geste de la
+     partie, il n'est joué qu'une fois — autant le jouer juste.
+
+     Le placement se fait à l'ouverture du décompte, une seule fois par
+     Titan : la condition sur `vertAssignments` empêche l'effet de le
+     recalculer et d'écraser un état restauré par « Annuler ». */
+  useEffect(() => {
+    if (!showScoring) return;
+    const aFaire = titanState.players.filter(
+      (t) => titanModes[t.id] === "ia"
+        && getVertCount(t) > 0
+        && (vertAssignments[t.id] || []).filter(Boolean).length < getVertCount(t)
+    );
+    if (aFaire.length === 0) return;
+    const dejaPosees = { ...vertAssignments };
+    const ajouts = {};
+    const journal = [];
+    for (const t of aFaire) {
+      const choix = bestVertAssignment(t.id, titanState.players, { exact: true, autres: dejaPosees });
+      ajouts[t.id] = choix;
+      dejaPosees[t.id] = choix;
+      const lisible = choix
+        .map((d) => (d.type === "color" ? `Barème ${d.target}` : `Piste ${d.target}`))
+        .join(", ");
+      journal.push(`🤖 ${titanDisplayName(t.id)} (IA) place ${choix.length} Bloc(s) Vert : ${lisible}.`);
+    }
+    setVertAssignments((prev) => ({ ...prev, ...ajouts }));
+    setActionLog((prev) => [...prev, ...journal]);
+  }, [showScoring, titanState.players, titanModes, vertAssignments, getVertCount, titanDisplayName]);
   const updateVertAssignment = useCallback((titanId, index, value) => {
     setVertAssignments((prev) => {
       const current = prev[titanId] ? [...prev[titanId]] : [];
@@ -2097,6 +2242,32 @@ export function useBoardGeneratorController() {
     }),
     [state, looseBlocks, titanState]
   );
+
+  /* ── UNE SEULE DÉCISION À L'ÉCRAN À LA FOIS ──
+     Demande de Nikola du 2026-08-18 : « n'affiche pas plusieurs panneaux,
+     fais panneau par panneau — là j'ai un DIL et une Phase Repos, ce n'est
+     pas possible, on fait DIL puis Phase Repos. »
+
+     Les quatre décisions bloquantes du jeu étaient montées côte à côte, et
+     chacune s'affichait dès qu'elle avait quelque chose à dire. Un Graouhhh
+     qui touche trois Titans, suivi d'un repli et d'une fin de Manche,
+     empilait donc trois bandeaux d'alerte au même moment, tous en rouge,
+     tous « bloquants » : impossible de savoir lequel répondre en premier.
+
+     L'ordre ci-dessous est celui de la résolution réelle, du plus imbriqué
+     au plus large : ce qu'une carte a déclenché se termine avant la carte,
+     et la carte se termine avant la Manche. C'est aussi ce qui garantit le
+     « Titan par Titan » sur Graouhhh — la file DIL se vide un Titan à la
+     fois, et rien d'autre ne s'affiche pendant ce temps. */
+  const decisionBloquante = currentDecision
+    ? "dil"
+    : currentRepli
+    ? "repli"
+    : ecroulement
+    ? "ecroulement"
+    : phase === "repos" && !gameOver
+    ? "vol"
+    : null;
 
   const perimeterCells = selectedTitan
     ? getPerimeter(selectedTitan.cell[0], Number(selectedTitan.cell.slice(1)))
@@ -2568,6 +2739,7 @@ export function useBoardGeneratorController() {
     stats,
     occupiedCount,
     phaseGuidance,
+    decisionBloquante,
     tcSel
   };
 }

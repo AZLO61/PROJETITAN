@@ -572,11 +572,23 @@ describe("Repli d'un élément sans la puissance de passer", () => {
     expect(getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans })).toContain("B8");
   });
 
-  it("un TITAN replié ne se pose jamais sur un autre Titan", () => {
-    // Invariant du jeu : deux Titans ne partagent jamais une case. C'est la
-    // seule exception à l'ouverture ci-dessus.
+  it("un TITAN replié PEUT viser la case d'un autre Titan, pour le pousser", () => {
+    // Ruling Nikola du 2026-08-18, qui revient sur celui du 2026-08-17 :
+    // « il peut aller sur une case d'un autre Titan si elle est dans la zone
+    // possible, ça permet de le pousser pour gagner une case sur la piste
+    // ADN Bagarre. » Ce n'est pas une superposition : l'occupant est chassé
+    // d'une case (cf. appliquerReplElement).
     const titans = [{ id: 1, cell: "B9" }, { id: 2, cell: "B8" }];
-    expect(getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans, movingTitanId: 1 })).not.toContain("B8");
+    expect(getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans, movingTitanId: 1 })).toContain("B8");
+  });
+
+  it("un TITAN replié ne peut jamais viser la case de l'initiateur", () => {
+    // Seule fermeture qui reste : le livret accorde l'immunité à l'auteur de
+    // la carte, il ne peut pas se pousser lui-même.
+    const titans = [{ id: 1, cell: "B9" }, { id: 3, cell: "B8" }];
+    expect(
+      getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans, movingTitanId: 1, initiatorId: 3 })
+    ).not.toContain("B8");
   });
 
   it("sa propre case reste proposée même si elle est occupée", () => {

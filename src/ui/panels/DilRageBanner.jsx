@@ -55,8 +55,22 @@ export default function DilRageBanner({ vm }) {
       }}>
         <span aria-hidden="true">⚠️</span>
         {currentDecision.type} — {currentDecision.cardLabel} · T{currentDecision.attackerId} vs T{currentDecision.defenderId}
-        {decisionQueue.length > 1 ? ` (+${decisionQueue.length - 1} en attente)` : ""}
       </div>
+      {/* TITAN PAR TITAN. Une seule carte peut ouvrir plusieurs décisions —
+          un Graouhhh qui aligne trois Titans en ouvre trois. Elles se
+          règlent une par une, et le compteur dit où l'on en est plutôt que
+          combien il en reste : « 1 sur 3 » se lit tout de suite, « +2 en
+          attente » demandait de faire le calcul (demande Nikola du
+          2026-08-18, « fais Titan par Titan pour Graouhhh »). */}
+      {decisionQueue.length > 1 && (
+        <div style={{
+          fontSize: ".72rem", color: "rgba(255,255,255,.65)", marginBottom: 8,
+          display: "flex", alignItems: "center", gap: 6,
+        }}>
+          <span aria-hidden="true">🎯</span>
+          Cible 1 sur {decisionQueue.length} — les suivantes s'afficheront une fois celle-ci tranchée.
+        </div>
+      )}
 
       {currentDecision.type === "DIL" && currentDecision.stage === "ATTACKER_PICK" && (() => {
         const defender = titanState.players.find((t) => t.id === currentDecision.defenderId);

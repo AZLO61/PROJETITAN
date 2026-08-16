@@ -49,6 +49,7 @@
 
 import {
   PORTEE_BOING_BOING,
+  appliquerReplElement,
   getBoingBoingReach,
   estSurLePlateau,
   indexerTitans,
@@ -613,17 +614,10 @@ export function choisirRepliIA(repli, gameState, profile = makeProfile()) {
    Deux natures d'élément, d'où `titanId` : un Titan nommément, ou — à null —
    le débris qui vient d'être posé sur la case par défaut. */
 export function appliquerRepli(repli, cellKey, etat) {
-  if (!repli || cellKey === repli.defaut) return;
-  if (repli.titanId != null) {
-    const titan = (etat.titans || []).find((t) => t.id === repli.titanId);
-    if (titan) titan.cell = cellKey;
-    return;
-  }
-  const lb = etat.looseBlocks || (etat.looseBlocks = {});
-  const pile = lb[repli.defaut] || [];
-  const bloc = pile.pop();
-  if (bloc === undefined) return;
-  if (pile.length === 0) delete lb[repli.defaut];
-  if (!lb[cellKey]) lb[cellKey] = [];
-  lb[cellKey].push(bloc);
+  // La règle elle-même vit dans le domaine, en un seul exemplaire
+  // (cf. appliquerReplElement) : l'IA, le simulateur et le contrôleur
+  // appliquent donc rigoureusement le même déplacement, poussée d'un Titan
+  // occupant comprise. Cette fonction n'est plus qu'un alias historique.
+  if (!etat.looseBlocks) etat.looseBlocks = {};
+  return appliquerReplElement(repli, cellKey, etat).log;
 }

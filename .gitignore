@@ -142,3 +142,6 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 simulations/
+
+# Reglages Claude Code personnels (mode autonome) : ne se partagent pas
+.claude/settings.local.json

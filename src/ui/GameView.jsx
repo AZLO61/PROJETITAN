@@ -21,17 +21,21 @@ export default function GameView(vm) {
       maxWidth: 820, margin: "0 auto", boxSizing: "border-box",
     }}>
       <HeaderPhase vm={vm} />
-      {/* Bug #6 : DIL/RAGE juste sous l'en-tête — décision bloquante,
-          ne doit plus être cachée en bas de l'écran après le plateau. */}
-      <DilRageBanner vm={vm} />
-      {/* Refonte UI façon DIL/RAGE (demande explicite) : la décision
-          bloquante "Vol Phase Repos" suit maintenant le même traitement
-          visuel et la même position qu'une décision DIL/RAGE. */}
-      <RepoVolBanner vm={vm} />
-      {/* Troisième décision bloquante du jeu : où se pose un élément arrêté
-          faute de puissance. Même traitement et même position que les deux
-          autres, le choix lui-même se faisant sur le plateau. */}
-      <RepliBanner vm={vm} />
+      {/* ── UNE SEULE DÉCISION À L'ÉCRAN ──
+          Demande de Nikola du 2026-08-18 : « n'affiche pas plusieurs
+          panneaux, fais panneau par panneau — là j'ai un DIL et une Phase
+          Repos, ce n'est pas possible, on fait DIL puis Phase Repos. »
+
+          Les trois bandeaux étaient montés côte à côte et chacun décidait
+          seul de s'afficher : trois alertes rouges pouvaient donc cohabiter,
+          sans rien indiquer de l'ordre dans lequel y répondre. C'est le
+          contrôleur qui tranche désormais (`decisionBloquante`), avec
+          l'ordre de la résolution réelle : ce qu'une carte a déclenché passe
+          avant la carte, et la carte avant la Manche. La règle vit à un
+          seul endroit, l'affichage ne fait plus que la suivre. */}
+      {vm.decisionBloquante === "dil" && <DilRageBanner vm={vm} />}
+      {vm.decisionBloquante === "repli" && <RepliBanner vm={vm} />}
+      {vm.decisionBloquante === "vol" && <RepoVolBanner vm={vm} />}
       {/* ── FIN DE PARTIE ──
           Bug remonté par Nikola le 2026-08-17 : « fais bien la transition de
           fin de partie, que je puisse placer mon Bloc Vert dans une

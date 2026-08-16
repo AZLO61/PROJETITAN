@@ -214,6 +214,37 @@ export default function DecisionPanels({ vm }) {
     occupiedCount,
     tcSel
   } = vm;
+
+  /* Une case du tableau de barème : « combien de blocs → combien de points ».
+     Le compte affiché est celui qui SERT AU CALCUL, Vert affecté compris, et
+     il est mis en évidence quand un Vert l'a fait monter — c'est là que se
+     joue la différence que Nikola ne voyait pas. */
+  const celluleBareme = (t, couleur) => {
+    const compte = finalScoreResult.adjCounts[t.id][couleur];
+    const base = countRepaireColors(t)[couleur];
+    const pts = finalScoreResult.baremeScores[t.id][couleur];
+    const boostéParVert = compte > base;
+    return (
+      <span
+        title={boostéParVert
+          ? `${base} bloc(s) ramassé(s) + ${compte - base} Vert affecté ici → ${pts} pts`
+          : `${compte} bloc(s) → ${pts} pts`}
+        style={{ display: "inline-flex", alignItems: "baseline", gap: 4, cursor: "help" }}
+      >
+        <strong style={{
+          color: compte === 0 ? "rgba(255,255,255,.3)" : boostéParVert ? "#7ef2a8" : "#fffaee",
+          fontVariantNumeric: "tabular-nums",
+        }}>
+          {compte}
+        </strong>
+        <span style={{ color: "rgba(255,255,255,.35)", fontSize: ".9em" }}>→</span>
+        <span style={{ color: pts > 0 ? "#FFD93D" : "rgba(255,255,255,.3)", fontVariantNumeric: "tabular-nums" }}>
+          {pts}
+        </span>
+      </span>
+    );
+  };
+
   return <>
       {/* ── LOG D'ACTIONS ── */}
       {actionLog.length > 0 && (
@@ -236,8 +267,27 @@ export default function DecisionPanels({ vm }) {
               Journal d'actions
               <span style={{ color: "rgba(255,255,255,.28)" }}>({actionLog.length})</span>
             </button>
+            {/* FERMER N'EST PAS VIDER — demande de Nikola du 2026-08-18 :
+                « j'aimerais pouvoir fermer les logs d'action sans les
+                vider ». Le seul bouton du bandeau était une croix qui
+                EFFAÇAIT tout l'historique de la partie ; refermer le
+                journal demandait de viser le titre lui-même, ce que rien
+                n'indiquait. Les deux gestes sont désormais distincts et
+                nommés, et le plus destructeur des deux n'est plus celui qui
+                porte la croix. */}
             {showLog && (
-              <button onClick={() => setActionLog([])} style={{ background: "none", border: "none", color: "rgba(255,255,255,.3)", cursor: "pointer", fontSize: ".68rem" }}>✕ vider</button>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <button
+                  onClick={() => setShowLog(false)}
+                  title="Replier le journal — rien n'est effacé"
+                  style={{ background: "none", border: "none", color: "rgba(255,255,255,.55)", cursor: "pointer", fontSize: ".68rem", fontFamily: "inherit" }}
+                >▲ Fermer</button>
+                <button
+                  onClick={() => setActionLog([])}
+                  title="Effacer définitivement l'historique de la partie"
+                  style={{ background: "none", border: "none", color: "rgba(255,255,255,.3)", cursor: "pointer", fontSize: ".68rem", fontFamily: "inherit" }}
+                >🗑 Vider</button>
+              </div>
             )}
           </div>
           {showLog && actionLog.map((line, i) => {
@@ -297,22 +347,48 @@ export default function DecisionPanels({ vm }) {
               const vertCount = getVertCount(t);
               if (vertCount === 0) return null;
               const owned = countRepaireColors(t);
+              /* CHACUN PLACE SES PROPRES VERTS — demande de Nikola du
+                 2026-08-18. L'écran posait un menu déroulant par Vert et par
+                 Titan, IA comprises : c'était donc l'humain qui affectait, à
+                 la fin, les Verts de ses trois adversaires. Un placement de
+                 Vert vaut plusieurs points et se décide en secret : ce choix
+                 ne lui appartient pas. Les IA tranchent désormais elles-mêmes
+                 (cf. le contrôleur), et leur ligne n'est plus qu'un compte
+                 rendu, en lecture seule. */
+              const estIA = titanModes[t.id] === "ia";
+              const places = (vertAssignments[t.id] || []).filter(Boolean);
               return (
                 <div key={t.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 6 }}>
                   <strong style={{ color: "#FFD93D", fontSize: ".74rem" }}>{titanDisplayName(t.id)}</strong>
-                  {Array.from({ length: vertCount }).map((_, i) => (
-                    <select key={i}
-                      value={vertAssignments[t.id]?.[i] ? `${vertAssignments[t.id][i].type}:${vertAssignments[t.id][i].target}` : ""}
-                      onChange={(e) => updateVertAssignment(t.id, i, e.target.value)}
-                      style={{ background: "rgba(255,255,255,.08)", color: "#fffaee", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "3px 6px", fontSize: ".7rem" }}>
-                      <option value="">Vert #{i + 1}…</option>
-                      {["bleu","rose","orange","rouge"].map((c) => (
-                        <option key={c} value={`color:${c}`} disabled={owned[c] < 1}>Barème {BLOCK_NAME[c]}{owned[c] < 1 ? " (0 bloc)" : ""}</option>
-                      ))}
-                      <option value="adn:bagarre">Piste Bagarre +1</option>
-                      <option value="adn:destruction">Piste Destruction +1</option>
-                    </select>
-                  ))}
+                  {estIA ? (
+                    <span style={{ fontSize: ".72rem", color: "rgba(255,255,255,.7)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span style={{ color: "#a855f7", fontWeight: 700 }}>🤖 placés par l'IA :</span>
+                      {places.length === 0
+                        ? <span style={{ opacity: .55 }}>en cours…</span>
+                        : places.map((a, i) => (
+                            <span key={i} style={{
+                              background: "rgba(168,85,247,.16)", border: "1px solid rgba(168,85,247,.45)",
+                              borderRadius: 6, padding: "2px 7px",
+                            }}>
+                              {a.type === "color" ? `Barème ${BLOCK_NAME[a.target] || a.target}` : `Piste ${a.target}`}
+                            </span>
+                          ))}
+                    </span>
+                  ) : (
+                    Array.from({ length: vertCount }).map((_, i) => (
+                      <select key={i}
+                        value={vertAssignments[t.id]?.[i] ? `${vertAssignments[t.id][i].type}:${vertAssignments[t.id][i].target}` : ""}
+                        onChange={(e) => updateVertAssignment(t.id, i, e.target.value)}
+                        style={{ background: "rgba(255,255,255,.08)", color: "#fffaee", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "3px 6px", fontSize: ".7rem" }}>
+                        <option value="">Vert #{i + 1}…</option>
+                        {["bleu","rose","orange","rouge"].map((c) => (
+                          <option key={c} value={`color:${c}`} disabled={owned[c] < 1}>Barème {BLOCK_NAME[c]}{owned[c] < 1 ? " (0 bloc)" : ""}</option>
+                        ))}
+                        <option value="adn:bagarre">Piste Bagarre +1</option>
+                        <option value="adn:destruction">Piste Destruction +1</option>
+                      </select>
+                    ))
+                  )}
                 </div>
               );
             })}
@@ -322,6 +398,21 @@ export default function DecisionPanels({ vm }) {
           </div>
           {finalScoreResult && (
             <div style={{ overflowX: "auto" }}>
+              {/* ── COMBIEN DE BLOCS, PAS SEULEMENT COMBIEN DE POINTS ──
+                  Remonté par Nikola le 2026-08-18 : « au scoring final avec
+                  les Verts, je n'ai pas de visuel clair sur les quantités de
+                  blocs de chaque Titan — j'ai 0 chez l'orange, mais peut-être
+                  qu'il en a 1, et donc le Vert en plus fait la différence. »
+
+                  Le tableau n'affichait que des POINTS. Or l'Orange ne marque
+                  que par paires : 1 bloc vaut 0 point, exactement comme 0
+                  bloc. Impossible, à l'écran, de savoir si un Vert allait
+                  compléter une paire à 5 points ou se perdre. Même angle mort
+                  au seuil de chaque barème.
+
+                  Chaque case porte donc le NOMBRE de blocs comptés (Vert
+                  affecté compris) et le score qu'il produit. Un compte gonflé
+                  par un Vert est signalé, pour qu'on voie d'où vient l'écart. */}
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".74rem" }}>
                 <thead>
                   <tr style={{ color: "#FFD93D" }}>
@@ -331,10 +422,10 @@ export default function DecisionPanels({ vm }) {
                 </thead>
                 <tbody>
                   {[
-                    [<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><BlockIcon color="bleu" size={18} />{BLOCK_NAME.bleu}</span>, (t) => finalScoreResult.baremeScores[t.id].bleu, "bleu"],
-                    [<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><BlockIcon color="rose" size={18} />{BLOCK_NAME.rose}</span>, (t) => finalScoreResult.baremeScores[t.id].rose, "rose"],
-                    [<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><BlockIcon color="orange" size={18} />{BLOCK_NAME.orange}</span>, (t) => finalScoreResult.baremeScores[t.id].orange, "orange"],
-                    [<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><BlockIcon color="rouge" size={18} />{BLOCK_NAME.rouge}</span>, (t) => finalScoreResult.baremeScores[t.id].rouge, "rouge"],
+                    [<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><BlockIcon color="bleu" size={18} />{BLOCK_NAME.bleu}</span>, (t) => celluleBareme(t, "bleu"), "bleu"],
+                    [<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><BlockIcon color="rose" size={18} />{BLOCK_NAME.rose}</span>, (t) => celluleBareme(t, "rose"), "rose"],
+                    [<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><BlockIcon color="orange" size={18} />{BLOCK_NAME.orange}</span>, (t) => celluleBareme(t, "orange"), "orange"],
+                    [<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><BlockIcon color="rouge" size={18} />{BLOCK_NAME.rouge}</span>, (t) => celluleBareme(t, "rouge"), "rouge"],
                     ["Bonus Rose +10", (t) => finalScoreResult.totals[t.id].roseBonus || "—"],
                     [<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                       <img src={`${import.meta.env.BASE_URL}assets/rules/socle.png`} alt="" aria-hidden="true"

@@ -266,13 +266,22 @@ export default function TitanResourceBand({
                         key={i}
                         title={libelle(c)}
                         style={{
-                          // `flexShrink: 0` : ces carrés vivent dans un
-                          // conteneur flex. Sans lui ils se laissent comprimer
-                          // en largeur quand la ligne est chargée, pendant que
-                          // la hauteur reste fixe — d'où les rectangles
-                          // verticaux remontés par Nikola le 2026-08-17.
-                          // `alignSelf` empêche l'étirement dans l'autre sens.
-                          width: 9, height: 9, flexShrink: 0, alignSelf: "center",
+                          /* FORMAT CARTE, DEMANDE DE NIKOLA DU 2026-08-18 :
+                             « fais des rectangles à la verticale, ça fera
+                             plus carte ». Ces marqueurs représentent des
+                             cartes, pas des jetons : le portrait 8×11 les
+                             rend lisibles comme telles d'un coup d'œil, là
+                             où le carré ne disait rien de ce qu'il comptait.
+                             Format appliqué aux pleins COMME aux vides : un
+                             carré déjà joué reste une carte, et mélanger
+                             deux silhouettes sur la même rangée ferait
+                             croire à deux objets différents.
+
+                             `flexShrink: 0` et `alignSelf` restent
+                             indispensables : sans eux le conteneur flex
+                             écrase la largeur quand la ligne est chargée
+                             (correction du 2026-08-17). */
+                          width: 8, height: 11, flexShrink: 0, alignSelf: "center",
                           borderRadius: 2, display: "inline-block", boxSizing: "border-box",
                           background: c.restante ? "#FFD93D" : "transparent",
                           border: "1.5px solid #FFD93D",

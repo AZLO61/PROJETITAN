@@ -424,6 +424,22 @@ function SectionTransversales() {
         <strong style={{ color: C.teal }}>Projection —</strong> un élément qui arrive sur une case
         occupée pousse ce qui s'y trouve, d'un nombre de cases égal à l'énergie restante. La chaîne
         peut se poursuivre indéfiniment, jusqu'à épuisement de l'énergie transmise.
+        <div style={{ marginTop: 10 }}>
+          <strong style={{ color: C.y1 }}>Un Titan pousse toujours un autre Titan</strong>, même
+          s'il ne lui reste qu'une énergie de 1 : il le décale alors d'une case. Deux Titans ne
+          partagent jamais une case, il faut donc bien que l'un cède. Chaque Titan{" "}
+          <strong>distinct</strong> déplacé rapporte 1 Bagarre à l'initiateur — et un Titan déjà en
+          mouvement dans la réaction n'est jamais poussé une seconde fois.
+        </div>
+      </Panel>
+      <Panel style={{ marginBottom: 10 }}>
+        <strong style={{ color: C.m1 }}>🥊 Poussé hors du ring —</strong> un Titan projeté au-delà du
+        bord quitte BIG CITY et ne revient qu'au début de son propre tour. Il réapparaît{" "}
+        <strong style={{ color: C.y1 }}>à l'opposé, en miroir</strong> : chaque axe sur lequel il
+        avançait le renvoie au bord d'en face. Sorti plein est en C9, il rentre par C1 ; sorti en
+        diagonale par un coin, il rentre par le coin opposé — poussé au sud-est depuis I8, il revient
+        en A1. Si la case est prise, il longe le rebord jusqu'à la première case libre. Il rentre
+        toujours, et cette rentrée lui coûte 1 déplacement de son Mouvement gratuit.
       </Panel>
       <Panel glow style={{ marginBottom: 10 }}>
         <strong style={{ color: C.y1 }}>Ricochet destructeur —</strong> si un élément percute un
