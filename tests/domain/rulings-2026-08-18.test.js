@@ -31,23 +31,27 @@ const bat = (cle, etages = 2) => ({
   [cle]: { row: cle[0], col: Number(cle.slice(1)), blocks: Array(etages).fill("bleu"), socle: etages, isTeleporter: false },
 });
 
-describe("Sortie du ring : on ressort à l'opposé, comme un miroir", () => {
-  it("une sortie en diagonale renvoie au coin opposé", () => {
-    // Le cas exact remonté par Nikola : « j'ai sorti un Titan de I8 en
-    // direction de J9, il aurait dû apparaître sur A1 ». L'ancien warp ne
-    // bouclait que sur la ligne et le laissait en A9, du même côté que
-    // celui d'où il venait de partir.
-    const titans = [t(1, "I8"), t(2, "H7")];
-    const res = projectInDirection("I", 8, 1, 1, 3, {
+describe("Sortie du ring : seul l'axe par lequel on sort boucle", () => {
+  it("une sortie en diagonale par un seul bord garde sa trajectoire sur l'autre axe", () => {
+    /* Le cas exact remonté par Nikola le 2026-08-18 : « j'étais en I2, un
+       Titan était en H1, j'ai fait un Boing Boing à valeur 5 : il aurait dû
+       être en G9, il était en I9. »
+
+       Le Titan de H1 poussé vers le nord-ouest sort par la COLONNE, pas par
+       la ligne : la colonne boucle de 0 à 9, la ligne suit sa route (H puis
+       G). La règle précédente le renvoyait au bord opposé sur chaque axe où
+       il avançait, coordonnée valide comprise, d'où le I9 constaté. */
+    const titans = [t(1, "H1"), t(2, "I2")];
+    const res = projectInDirection("H", 1, -1, -1, 3, {
       board: {}, looseBlocks: {}, titans, log: [], initiatorId: 2, movingTitanId: 1,
     });
     expect(res.ejecte).toBe(true);
-    expect(res.row + res.col).toBe("A1");
+    expect(res.row + res.col).toBe("G9");
     expect(titans[0].horsPlateau).toBe(true);
-    expect(titans[0].cell).toBe("A1");
+    expect(titans[0].cell).toBe("G9");
   });
 
-  it("une sortie droite reste inchangée, elle ne boucle que sur son axe", () => {
+  it("une sortie droite ne boucle que sur son axe", () => {
     const titans = [t(1, "E9"), t(2, "E8")];
     const res = projectInDirection("E", 9, 0, 1, 3, {
       board: {}, looseBlocks: {}, titans, log: [], initiatorId: 2, movingTitanId: 1,
@@ -55,12 +59,25 @@ describe("Sortie du ring : on ressort à l'opposé, comme un miroir", () => {
     expect(res.row + res.col).toBe("E1");
   });
 
-  it("le miroir vaut dans les quatre coins", () => {
-    const titans = [t(1, "A2"), t(2, "B3")];
-    const res = projectInDirection("A", 2, -1, -1, 3, {
+  it("une sortie par un coin fait boucler les deux axes, donc renvoie au coin opposé", () => {
+    // Les deux coordonnées dépassent en même temps : les deux bouclent, et
+    // le Titan réapparaît au coin diamétralement opposé.
+    const titans = [t(1, "I9"), t(2, "H8")];
+    const res = projectInDirection("I", 9, 1, 1, 3, {
       board: {}, looseBlocks: {}, titans, log: [], initiatorId: 2, movingTitanId: 1,
     });
-    expect(res.row + res.col).toBe("I9");
+    expect(res.row + res.col).toBe("A1");
+  });
+
+  it("un Titan et un débris ressortent par la même case", () => {
+    // Même départ, même direction : la case de réapparition est la même.
+    // Ce qui change, c'est la suite — le Titan quitte la partie jusqu'à son
+    // tour, le débris finit son déplacement de l'autre côté.
+    const log = [];
+    projectInDirection("H", 1, -1, -1, 5, {
+      board: {}, looseBlocks: {}, titans: [], log, initiatorId: 1,
+    });
+    expect(log.some((l) => l.includes("Faille") && l.includes("G9"))).toBe(true);
   });
 
   it("un coin occupé par un bâtiment fait rentrer JUSTE À CÔTÉ, sur l'un des deux rebords", () => {
@@ -74,6 +91,42 @@ describe("Sortie du ring : on ressort à l'opposé, comme un miroir", () => {
     expect(retour.rentre).toBe(true);
     expect(retour.cellule).toBe("A2"); // écart 1 sur la ligne, la colonne est bouchée
     expect(titans[0].horsPlateau).toBe(false);
+  });
+});
+
+describe("Un débris qui en rencontre un autre forme un tas", () => {
+  it("le débris projeté s'empile au lieu de chasser celui qui dormait", () => {
+    // « Lorsqu'un débris rencontre un autre débris, ça forme un tas de
+    // débris, et non pas ça le pousse. » C'est le tableau des combinaisons
+    // du livret : Bloc + Bloc → Amas. Le moteur transmettait l'énergie et
+    // expédiait le bloc dormant une case plus loin.
+    const looseBlocks = { E5: ["rouge"] };
+    const res = projectInDirection("E", 4, 0, 1, 5, {
+      board: {}, looseBlocks, titans: [], log: [], initiatorId: 1,
+    });
+    expect(res.row + res.col).toBe("E5");   // l'élément s'arrête sur le tas
+    expect(looseBlocks.E5).toEqual(["rouge"]); // le dormant n'a pas bougé
+    expect(looseBlocks.E6).toBeUndefined();    // rien n'a été transmis plus loin
+  });
+
+  it("un amas déjà formé arrête aussi la course, sans rien éjecter", () => {
+    const looseBlocks = { E5: ["rouge", "bleu"] };
+    const res = projectInDirection("E", 4, 0, 1, 5, {
+      board: {}, looseBlocks, titans: [], log: [], initiatorId: 1,
+    });
+    expect(res.row + res.col).toBe("E5");
+    expect(looseBlocks.E5).toHaveLength(2);
+  });
+
+  it("un TITAN en vol, lui, pousse toujours le débris qu'il croise", () => {
+    // La différence est voulue : le béton s'empile, le Titan bouscule.
+    const looseBlocks = { E5: ["rouge"] };
+    const titans = [t(1, "E4")];
+    projectInDirection("E", 4, 0, 1, 5, {
+      board: {}, looseBlocks, titans, log: [], initiatorId: 2, movingTitanId: 1,
+    });
+    expect(looseBlocks.E5).toBeUndefined();
+    expect(Object.values(looseBlocks).flat()).toContain("rouge");
   });
 });
 

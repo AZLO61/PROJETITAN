@@ -299,10 +299,21 @@ export default function BoardPanel({ vm }) {
      joueur suivant, hors contexte. Le ramassage souffrait du même défaut :
      proposé avant que le sort des blocs de la victime soit tranché, alors
      que le DIL peut justement en faire tomber un dans le Périmètre. */
-  // Un repli non tranché bloque le tour au même titre qu'un DIL/RAGE :
-  // l'élément n'est pas encore posé là où l'initiateur le veut, passer la
-  // main laisserait le plateau dans un état que personne n'a validé.
-  const decisionEnAttente = Boolean(currentDecision) || Boolean(vm.currentRepli);
+  /* TOUTES les décisions bloquantes comptent, pas seulement le DIL et le
+     repli. Nikola le 2026-08-18 : « je ne veux pas que le panneau Ramasser
+     apparaisse alors qu'il y a un Dilemme ou une Rage à résoudre, il y a un
+     ordre précis à respecter. »
+
+     Cette ligne énumérait deux cas sur cinq. La répartition d'un Amas
+     écroulé et la comparaison de Faut Pas Me Chauffer passaient au travers :
+     le Ramassage et « ▶ Titan suivant » s'affichaient par-dessus, alors que
+     ces deux résolutions peuvent encore faire tomber des blocs dans le
+     Périmètre — ramasser avant qu'elles soient tranchées, c'est ramasser sur
+     un plateau qui n'est pas le bon.
+
+     L'ordre lui-même vit dans le contrôleur (`decisionBloquante`), au même
+     endroit que celui des bandeaux : une seule liste, un seul ordre. */
+  const decisionEnAttente = Boolean(vm.decisionBloquante);
   /* Le panneau Ramasser ne s'affiche que s'il y a réellement quelque chose
      à ramasser (`recupPool.size > 0`). Il se montrait aussi quand le
      Périmètre était vide, avec son seul bouton grisé « (rien à portée) » —
@@ -464,6 +475,23 @@ export default function BoardPanel({ vm }) {
                     <div style={{ fontSize: ".7rem", color: "rgba(255,255,255,.5)", marginBottom: 7 }}>
                       Jusqu'à {moveMaxRange} case{moveMaxRange > 1 ? "s" : ""}. C'est facultatif, et ça change ton Périmètre donc ton Énergie.
                     </div>
+                    {/* CE QUE COÛTE UNE RENTRÉE — remonté par Nikola le
+                        2026-08-18 : « il faut bien indiquer que quand on est
+                        éjecté de BIG CITY, le fait de rentrer coûte un de
+                        passif. » La règle existait et était appliquée : le
+                        Mouvement gratuit passait de 2 à 1 case au tour du
+                        retour. Mais rien ne le disait, alors le joueur lisait
+                        simplement « jusqu'à 1 case » et croyait à un bug. */}
+                    {vm.coutRentreeCeTour > 0 && (
+                      <div style={{
+                        fontSize: ".7rem", color: "#ff8fa3", marginBottom: 7,
+                        background: "rgba(255,46,99,.1)", border: "1px solid rgba(255,46,99,.3)",
+                        borderRadius: 8, padding: "5px 8px",
+                      }}>
+                        🥊 Tu rentres de hors de BIG CITY : ta rentrée a coûté {vm.coutRentreeCeTour} déplacement
+                        {vm.coutRentreeCeTour > 1 ? "s" : ""} sur ton Mouvement gratuit. Dépense une Adrénaline pour retrouver de la marge.
+                      </div>
+                    )}
                     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                       <button
                         onClick={toggleMoveMode}

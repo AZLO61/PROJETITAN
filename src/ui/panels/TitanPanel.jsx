@@ -203,8 +203,12 @@ export default function TitanPanel({ vm }) {
     tcSel
   } = vm;
   return <>
-      {/* ── FAUT PAS ME CHAUFFER (hors du panneau Titan) ── */}
-      {fpmcAttackerId && (fpmcPendingIds.length > 0 || fpmcCurrent) && (
+      {/* ── FAUT PAS ME CHAUFFER (hors du panneau Titan) ──
+          Affiché seulement quand c'est LA décision du moment : la carte peut
+          ouvrir un Dilemme, et deux panneaux de décision à l'écran, c'est
+          exactement ce que la règle « une seule décision à la fois » a
+          supprimé partout ailleurs (cf. `decisionBloquante`). */}
+      {vm.decisionBloquante === "fpmc" && (
         <div style={{
           background: "rgba(244,67,54,.1)", border: "1px solid rgba(244,67,54,.4)",
           borderRadius: 12, padding: "10px 12px", marginBottom: 12, fontSize: ".78rem",

@@ -322,6 +322,12 @@ function SectionPermanentes() {
         <div style={{ marginTop: 8, fontSize: ".82rem", color: C.muted }}>
           Ton Périmètre, donc ton Énergie, change après chaque déplacement. Recompte avant de jouer.
         </div>
+        <div style={{ marginTop: 8, fontSize: ".82rem", color: C.muted }}>
+          🥊 Si tu rentres de <strong style={{ color: C.m1 }}>hors de BIG CITY</strong> ce tour-ci,
+          ta rentrée se paie ici : <strong style={{ color: C.y1 }}>1 case en moins</strong>, et 1 de
+          plus par obstacle à contourner. Il te reste donc 1 case, et il faut dépenser une
+          Adrénaline pour retrouver ta marge.
+        </div>
       </Panel>
 
       <Panel style={{ borderColor: "rgba(22,224,140,.35)", background: "rgba(22,224,140,.07)" }}>
@@ -421,9 +427,10 @@ function SectionTransversales() {
         au deuxième obstacle, l'élément s'arrête.
       </Panel>
       <Panel style={{ marginBottom: 10 }}>
-        <strong style={{ color: C.teal }}>Projection —</strong> un élément qui arrive sur une case
-        occupée pousse ce qui s'y trouve, d'un nombre de cases égal à l'énergie restante. La chaîne
-        peut se poursuivre indéfiniment, jusqu'à épuisement de l'énergie transmise.
+        <strong style={{ color: C.teal }}>Projection —</strong> un <strong>Titan</strong> qui arrive
+        sur une case occupée pousse ce qui s'y trouve, d'un nombre de cases égal à l'énergie
+        restante. La chaîne peut se poursuivre indéfiniment, jusqu'à épuisement de l'énergie
+        transmise.
         <div style={{ marginTop: 10 }}>
           <strong style={{ color: C.y1 }}>Un Titan pousse toujours un autre Titan</strong>, même
           s'il ne lui reste qu'une énergie de 1 : il le décale alors d'une case. Deux Titans ne
@@ -431,14 +438,20 @@ function SectionTransversales() {
           <strong>distinct</strong> déplacé rapporte 1 Bagarre à l'initiateur — et un Titan déjà en
           mouvement dans la réaction n'est jamais poussé une seconde fois.
         </div>
+        <div style={{ marginTop: 10 }}>
+          <strong style={{ color: C.g1 }}>Un débris, lui, ne pousse pas :</strong> le béton qui
+          rencontre du béton s'arrête dessus et forme un Amas. Bloc + Bloc = Amas, Bloc + Amas =
+          Amas. Seule la cible directement frappée par une carte est projetée.
+        </div>
       </Panel>
       <Panel style={{ marginBottom: 10 }}>
         <strong style={{ color: C.m1 }}>🥊 Poussé hors du ring —</strong> un Titan projeté au-delà du
         bord quitte BIG CITY et ne revient qu'au début de son propre tour. Il réapparaît{" "}
-        <strong style={{ color: C.y1 }}>à l'opposé, en miroir</strong> : chaque axe sur lequel il
-        avançait le renvoie au bord d'en face. Sorti plein est en C9, il rentre par C1 ; sorti en
-        diagonale par un coin, il rentre par le coin opposé — poussé au sud-est depuis I8, il revient
-        en A1. Si la case est prise, il longe le rebord jusqu'à la première case libre. Il rentre
+        <strong style={{ color: C.y1 }}>de l'autre côté</strong> : seul l'axe par lequel il est
+        SORTI boucle, l'autre garde la coordonnée que sa trajectoire lui donne. Sorti plein est en
+        C9, il rentre par C1 ; poussé au nord-ouest depuis H1, il sort par la colonne et rentre en
+        G9 ; sorti par un coin, où les deux axes dépassent en même temps, il rentre par le coin
+        opposé. Si la case est prise, il longe le rebord jusqu'à la première case libre. Il rentre
         toujours, et cette rentrée lui coûte 1 déplacement de son Mouvement gratuit.
       </Panel>
       <Panel glow style={{ marginBottom: 10 }}>

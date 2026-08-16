@@ -993,31 +993,34 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
          Seuil 4, faille au-dessus. C'est la seule différence de traitement
          entre un Titan et un débris sur un bord, et elle est voulue. */
       if (ctx.movingTitanId != null) {
-        /* ── PAR OÙ IL REVIENT : LE MIROIR ──
+        /* ── PAR OÙ IL REVIENT : LA MÊME TRAVERSÉE QUE LES DÉBRIS ──
            Ruling Nikola du 2026-08-18, en réponse au cas remonté en test
-           réel : « j'ai sorti un Titan de I8 en direction de J9, il aurait
-           dû apparaître sur A1 ». On va à l'opposé, comme un miroir.
+           réel : « j'étais en I2, un Titan était en H1, j'ai fait un Boing
+           Boing à valeur 5 : il aurait dû être en G9, il était en I9. »
 
-           La version précédente ne bouclait que sur le bord RÉELLEMENT
-           franchi : de I8 vers J9, seule la ligne dépasse (J n'existe pas),
-           la colonne 9 est valide — le Titan ressortait donc en A9, du même
-           côté du plateau que celui d'où il venait de partir. Sur une sortie
-           en diagonale, c'est illisible à la table.
+           Un SEUL axe boucle : celui par lequel le Titan sort réellement du
+           plateau. L'autre garde la coordonnée que sa trajectoire lui donne.
+           Le Titan de H1 poussé vers le nord-ouest sort par la colonne, la
+           colonne passe donc de 0 à 9 et la ligne suit sa route, H puis G.
+             · sortie droite : E9 vers l'est ressort en E1 ;
+             · sortie en diagonale par un seul bord : H1 vers le nord-ouest
+               ressort en G9 ;
+             · sortie par un coin, où les deux axes dépassent en même temps :
+               les deux bouclent, I9 vers le sud-est ressort en A1.
 
-           La règle est désormais géométrique et vaut pour les trois cas :
-           CHAQUE AXE SUR LEQUEL LE TITAN AVANCE le renvoie au bord opposé,
-           l'axe où il n'avance pas ne bouge pas.
-             · sortie droite (dr=0 ou dc=0) → inchangée, E9 vers l'est
-               ressort toujours en E1 ;
-             · sortie en diagonale → coin opposé, I8 vers le sud-est ressort
-               en A1, A2 vers le nord-ouest ressort en I9.
+           La version précédente renvoyait le Titan au bord opposé sur CHAQUE
+           axe où il avançait, coordonnée valide comprise : elle transformait
+           le G9 attendu en I9. Elle avait été écrite pour obtenir A1 sur une
+           sortie diagonale, ce que la sortie par un coin donne maintenant
+           d'elle-même, sans casser les sorties par un seul bord.
 
-           Les DÉBRIS, eux, gardent la faille spatio-temporelle : ils
-           FINISSENT leur déplacement de l'autre côté, leur trajectoire doit
-           donc rester continue et ne peut pas sauter d'un coin à l'autre.
-           C'est la seule différence de traitement, et elle est voulue. */
-        const sortieR = curDr > 0 ? 0 : curDr < 0 ? 8 : r;
-        const sortieC = curDc > 0 ? 1 : curDc < 0 ? 9 : c;
+           C'est aussi la règle de la faille spatio-temporelle appliquée aux
+           débris, quelques lignes plus bas : un seul comportement de
+           traversée à retenir pour tout le jeu. Ce qui reste propre au Titan,
+           c'est de quitter la partie jusqu'à son tour au lieu de finir son
+           déplacement. */
+        const sortieR = nr < 0 ? 8 : nr > 8 ? 0 : nr;
+        const sortieC = nc < 1 ? 9 : nc > 9 ? 1 : nc;
 
         // Il quitte le plateau et ATTEND son tour pour y revenir : c'est le
         // marqueur `horsPlateau`, posé par l'appelant à partir de ce
@@ -1320,13 +1323,36 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
       break;
     }
 
+    /* ── UN DÉBRIS QUI EN RENCONTRE UN AUTRE FORME UN TAS ──
+       Ruling Nikola du 2026-08-18 : « lorsqu'un débris rencontre un autre
+       débris, ça forme un tas de débris, et non pas ça le pousse. »
+
+       C'est le tableau des combinaisons du livret V36.2, qui ne connaît que
+       deux résultats pour deux blocs sur une case : Bloc + Bloc → Amas, et
+       Bloc + Amas → Amas. La transmission d'énergie que le moteur appliquait
+       ici — le débris arrivant chassait celui qui dormait, avec l'énergie
+       restante — n'y figure nulle part : elle ne vaut que pour l'élément
+       FRAPPÉ par une carte, pas pour ceux qu'une projection croise en
+       chemin. Elle produisait des réactions en chaîne que personne ne
+       pouvait anticiper à la table, un seul débris cassé pouvant redistribuer
+       la moitié d'une rangée.
+
+       Le TITAN en vol, lui, garde la poussée : le livret est explicite
+       (« dès qu'un élément arrive sur une case occupée, il projette les
+       éléments présents »), et un Titan a la masse pour ça — c'est même par
+       là qu'il se fraie un chemin. La différence de traitement est voulue et
+       tient en une phrase : le béton s'empile, le Titan bouscule. */
+    const elementEstUnDebris = ctx.movingTitanId == null;
+    if (stack && stack.length > 0 && (elementEstUnDebris || stack.length >= 2 || remainingAfterArrival <= 1)) {
+      // Formation d'Amas : l'élément se pose sur ce qui est déjà là.
+      avancerVers(nr, nc);
+      remaining = 0;
+      break;
+    }
+
+    // Seul cas restant : un TITAN en vol, un seul débris sur la case, et
+    // assez d'énergie pour le pousser. Tout le reste s'est empilé au-dessus.
     if (stack && stack.length === 1) {
-      if (remainingAfterArrival <= 1) {
-        // Accumulation par défaut (Formation d'Amas) : pas de poussée.
-        avancerVers(nr, nc);
-        remaining = 0;
-        break;
-      }
       const pushedColor = stack.pop();
       retirerPileVide(looseBlocks, nextKey);
       // Un bloc est transmis, pas un Titan : même raison qu'au ricochet.
@@ -1356,13 +1382,9 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
       break;
     }
 
-    if (stack && stack.length >= 2) {
-      // Amas déjà en place : accumulation par défaut (Formation), pas de
-      // Patatras automatique ici (mécanique de carte à part, Seuil 4).
-      avancerVers(nr, nc);
-      remaining = 0;
-      break;
-    }
+    // (L'amas déjà en place — deux débris ou plus — est traité plus haut avec
+    // la Formation d'Amas. Pas de Patatras automatique ici : c'est une
+    // mécanique de carte à part, au Seuil 4.)
 
     // Case libre : on avance normalement.
     avancerVers(nr, nc);

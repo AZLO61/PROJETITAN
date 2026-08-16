@@ -134,7 +134,7 @@ export default function TitanResourceBand({
                       l'infobulle, juste à côté de la case. */}
                   {enAttenteIds.has(t.id) && (
                     <span
-                      title={`Hors de BIG CITY — ${titanDisplayName ? titanDisplayName(t.id) : `Titan ${t.id}`} rentre par ${t.cell} au début de son tour, pas avant`}
+                      title={`Hors de BIG CITY — ${titanDisplayName ? titanDisplayName(t.id) : `Titan ${t.id}`} rentre par ${t.cell} au début de son tour, pas avant. Sa rentrée lui coûtera 1 case de Mouvement gratuit, et 1 de plus par obstacle à contourner.`}
                       style={{ cursor: "help" }}
                       aria-label="Hors du ring"
                     >

@@ -2273,6 +2273,12 @@ export function useBoardGeneratorController() {
     ? "repli"
     : ecroulement
     ? "ecroulement"
+    : // Faut Pas Me Chauffer entre ici le 2026-08-18 : la comparaison de
+      // mises est une décision bloquante comme les autres, mais elle vivait
+      // hors de cette liste. Le tour pouvait donc être rendu « terminé »
+      // pendant qu'une cible attendait encore d'être désignée.
+      fpmcAttackerId && (fpmcPendingIds.length > 0 || fpmcCurrent)
+    ? "fpmc"
     : phase === "repos" && !gameOver
     ? "vol"
     : null;
