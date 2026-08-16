@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FORCES,
+  FORCE_SETTINGS,
   TEMPERAMENTS,
   allProfiles,
   bestVertAssignment,
@@ -154,13 +155,28 @@ describe("valeur à portée — l'IA voit ce qui traîne autour d'elle", () => {
     expect(avecSocle).toBeGreaterThan(avecBloc);
   });
 
-  it("le Confirmé et l'Expert en tiennent compte, le Novice l'ignore", () => {
+  it("les trois forces en tiennent compte, Novice compris", () => {
+    // Le Novice IGNORAIT la valeur à portée jusqu'au 2026-08-17. C'était le
+    // rendre plus faible qu'un débutant humain : lire ce qu'on a sous la
+    // main est de l'observation élémentaire, pas du calcul d'expert, et un
+    // vrai débutant ne laisse pas trois blocs sur sa propre case.
+    // Ouvert dans le cadre de la demande « améliore de 30 % l'IA Novice »
+    // (cf. FORCE_SETTINGS et scripts/mesure-novice.mjs).
     const vide = etat([titan(1), titan(2)]);
     const entoure = etat([titan(1), titan(2)], {}, { E5: ["bleu", "bleu", "bleu"] });
-    const novice = makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE);
-    const confirme = makeProfile(FORCES.CONFIRME, TEMPERAMENTS.OPPORTUNISTE);
-    expect(evaluatePosition(1, entoure, novice)).toBe(evaluatePosition(1, vide, novice));
-    expect(evaluatePosition(1, entoure, confirme)).toBeGreaterThan(evaluatePosition(1, vide, confirme));
+    for (const force of [FORCES.NOVICE, FORCES.CONFIRME, FORCES.EXPERT]) {
+      const profil = makeProfile(force, TEMPERAMENTS.OPPORTUNISTE);
+      expect(evaluatePosition(1, entoure, profil)).toBeGreaterThan(evaluatePosition(1, vide, profil));
+    }
+  });
+
+  it("le Novice reste plus myope que le Confirmé", () => {
+    // Ce qui le distingue toujours : il ne voit ni le score complet (bonus
+    // Rose, trophées, Pistes ADN, Adrénaline) ni les adversaires. Ouvrir la
+    // valeur à portée ne devait pas effacer la hiérarchie des forces.
+    expect(FORCE_SETTINGS[FORCES.NOVICE].voitScoreComplet).toBe(false);
+    expect(FORCE_SETTINGS[FORCES.NOVICE].voitAdversaires).toBe(false);
+    expect(FORCE_SETTINGS[FORCES.CONFIRME].voitScoreComplet).toBe(true);
   });
 });
 
@@ -306,5 +322,58 @@ describe("profils — inventaire", () => {
 
   it("s'affiche en clair pour la révélation en fin de partie", () => {
     expect(profileLabel(makeProfile(FORCES.EXPERT, TEMPERAMENTS.AGRESSIF))).toBe("Expert Agressif");
+  });
+});
+
+describe("tirage pondéré — le Novice revient vers son meilleur coup", () => {
+  /* Le tirage était UNIFORME dans la fenêtre des `topN` meilleurs coups :
+     le Novice jetait donc son meilleur coup deux fois sur trois, ce qui le
+     rendait bien plus faible qu'un débutant. Le `biais` pondère le tirage
+     sans jamais rendre l'IA déterministe — elle se trompe encore, mais
+     plausiblement. */
+
+  const candidats = [{ note: 10, id: "A" }, { note: 8, id: "B" }, { note: 6, id: "C" }];
+
+  const distribution = (profil, tirages = 3000) => {
+    setSeed(12345);
+    const compte = { A: 0, B: 0, C: 0 };
+    for (let i = 0; i < tirages; i++) compte[chooseAmongBest(candidats, profil).id]++;
+    return compte;
+  };
+
+  it("le meilleur coup sort nettement plus souvent que le troisième", () => {
+    const d = distribution(makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE));
+    expect(d.A).toBeGreaterThan(d.B);
+    expect(d.B).toBeGreaterThan(d.C);
+    // Poids 9 / 3 / 1 pour un biais de 3 : le meilleur doit dominer largement.
+    expect(d.A).toBeGreaterThan(d.C * 4);
+  });
+
+  it("il se trompe encore : les autres coups sortent réellement", () => {
+    // Un Novice qui prendrait toujours le meilleur coup serait un Expert
+    // myope, pas un débutant. La molette de bruit doit rester audible.
+    const d = distribution(makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE));
+    expect(d.B).toBeGreaterThan(0);
+    expect(d.C).toBeGreaterThan(0);
+  });
+
+  it("l'Expert prend toujours le meilleur, sans tirage", () => {
+    const d = distribution(makeProfile(FORCES.EXPERT, TEMPERAMENTS.OPPORTUNISTE));
+    expect(d.A).toBe(3000);
+  });
+
+  it("un biais de 1 redonne exactement le tirage uniforme", () => {
+    // Garde-fou : la pondération ne doit pas changer le comportement des
+    // profils qui n'en demandent pas.
+    setSeed(999);
+    const uniforme = { note: 0 };
+    const deux = [{ note: 5, id: "X" }, { note: 4, id: "Y" }];
+    const profil = { force: FORCES.CONFIRME, temperament: TEMPERAMENTS.OPPORTUNISTE };
+    const compte = { X: 0, Y: 0 };
+    for (let i = 0; i < 2000; i++) compte[chooseAmongBest(deux, profil).id]++;
+    // Le Confirmé a un biais de 2 : X domine, mais Y sort quand même.
+    expect(compte.X).toBeGreaterThan(compte.Y);
+    expect(compte.Y).toBeGreaterThan(0);
+    expect(uniforme.note).toBe(0);
   });
 });

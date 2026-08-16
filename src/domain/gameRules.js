@@ -711,26 +711,33 @@ function getCasesRepliDebris(depuis, cible, dr, dc, { board, looseBlocks = {}, t
   const cc = Number(cible.slice(1));
   const titansByCell = indexerTitans(titans);
 
-  /* CE QUI COMPTE COMME « LIBRE » — précision de Nikola du 2026-08-17 :
-     « la coordonnée en plus n'est valable que si c'est libre ; en tout cas
-     elle ne peut pas cohabiter avec un bâtiment ».
+  /* CE QUI INTERDIT UNE CASE — précisions successives de Nikola, 2026-08-17.
 
-     Une case de repli ne s'ouvre donc que si elle est réellement vide : pas
-     de bâtiment debout, pas de débris déjà au sol, pas de Titan. L'élément
-     est ARRÊTÉ, il n'a plus la puissance de rien bousculer — lui laisser
-     former un amas ou se poser sur quelqu'un reviendrait à lui accorder
-     gratuitement l'effet qu'il vient justement de rater.
+     La seule contrainte dure est le BÂTIMENT : « en tout cas elle ne peut pas
+     cohabiter avec un bâtiment ». C'est la règle transversale du jeu, un
+     élément ne repose jamais sur un bâtiment encore debout.
 
-     SEULE EXCEPTION, sa propre case d'origine. Elle est toujours proposée,
-     même occupée : il en vient, il y était, il peut y rester. C'est le
-     « il peut revenir sur la case où il était » du ruling, et c'est aussi ce
-     qui garantit qu'il reste toujours au moins une issue. */
-  const libre = (key) => {
+     Tout le reste est ouvert, et volontairement :
+     · un débris déjà au sol — « on peut poser le débris qui rebondit sur un
+       débris, ça forme un tas ». C'est même la façon normale de constituer
+       un Amas, donc un coup à part entière ;
+     · un Titan — c'est au contraire une case que l'attaquant peut vouloir
+       viser (cf. la préférence de l'IA dans choisirRepliIA).
+
+     Une seule exception à cette ouverture : un TITAN qu'on replie ne peut pas
+     atterrir sur un autre Titan, deux Titans ne partagent jamais une case.
+     Un DÉBRIS, lui, a parfaitement le droit de reposer sur celle d'un Titan.
+
+     Et la case d'origine reste toujours proposée, quoi qu'elle porte : il en
+     vient, il y était. C'est le « il peut revenir sur la case où il était »
+     du ruling, et ce qui garantit qu'il reste toujours une issue. */
+  const posable = (key) => {
     const b = board && board[key];
     if (b && b.blocks && b.blocks.length > 0) return false;
-    if ((looseBlocks[key] || []).length > 0) return false;
-    const occ = titansByCell[key];
-    if (occ && occ !== movingTitanId) return false;
+    if (movingTitanId != null) {
+      const occ = titansByCell[key];
+      if (occ && occ !== movingTitanId) return false;
+    }
     return true;
   };
 
@@ -769,7 +776,7 @@ function getCasesRepliDebris(depuis, cible, dr, dc, { board, looseBlocks = {}, t
   // La case d'origine échappe au filtre : l'élément en vient, il peut y
   // rester quoi qu'il s'y trouve. Toutes les autres doivent être vides.
   return [...new Set(candidates)].filter(
-    (k) => k !== cible && (k === depuis || libre(k))
+    (k) => k !== cible && (k === depuis || posable(k))
   );
 }
 

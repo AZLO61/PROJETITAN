@@ -33,7 +33,7 @@ export const BADGES = [
   {
     code: "⊣",
     nom: "Arrêt faute de puissance",
-    def: "Un élément projeté qui percute quelque chose sans avoir l'énergie de le déplacer ou de le casser ne finit PAS son déplacement : il s'arrête là. Le Titan initiateur choisit alors où le poser, parmi sa propre case et celles qui touchent à la fois sa case et la case visée. Ces voisines doivent être LIBRES — ni bâtiment, ni débris, ni Titan ; sa case d'origine fait exception et reste toujours disponible. S'il sortait d'une faille et n'a donc pas de case précédente de ce côté du plateau, on prend les cases voisines de la case visée qui ne franchissent pas l'obstacle. Exemple : un élément qui ressort à l'ouest sur une case bloquée en C9 se pose en B9 ou D9.",
+    def: "Un élément projeté qui percute quelque chose sans avoir l'énergie de le déplacer ou de le casser ne finit PAS son déplacement : il s'arrête là. Le Titan initiateur choisit alors où le poser, parmi sa propre case et celles qui touchent à la fois sa case et la case visée. Ces voisines ne peuvent jamais porter un bâtiment debout, c'est la seule interdiction : un débris déjà au sol est autorisé (l'élément s'empile et forme un Amas) et une case portant un Titan aussi. Seul un Titan replié ne peut pas se poser sur un autre Titan. Sa case d'origine reste toujours disponible. S'il sortait d'une faille et n'a donc pas de case précédente de ce côté du plateau, on prend les cases voisines de la case visée qui ne franchissent pas l'obstacle. Exemple : un élément qui ressort à l'ouest sur une case bloquée en C9 se pose en B9 ou D9.",
     color: "#FB923C",
   },
   {

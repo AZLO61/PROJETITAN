@@ -558,28 +558,35 @@ describe("Repli d'un élément sans la puissance de passer", () => {
     expect(getCasesRepliDebris("B9", "C9", 1, 0, { board })).not.toContain("B8");
   });
 
-  it("une case de repli doit être LIBRE : ni Titan, ni débris déjà au sol", () => {
-    // Précision de Nikola du 2026-08-17 : « la coordonnée en plus n'est
-    // valable que si c'est libre ». L'élément est ARRÊTÉ, il n'a plus la
-    // puissance de rien bousculer — lui laisser former un amas ou se poser
-    // sur quelqu'un lui accorderait gratuitement l'effet qu'il vient de
-    // rater. Vaut pour un Titan projeté comme pour un débris.
+  it("un débris PEUT se poser sur un autre débris — ça forme un tas", () => {
+    // Précision de Nikola du 2026-08-17 : « on peut poser le débris qui
+    // rebondit sur un débris, ça forme un tas ». C'est la façon normale de
+    // constituer un Amas, donc un coup à part entière, pas un accident.
+    const cases = getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, looseBlocks: { C8: ["rose"] } });
+    expect(cases).toContain("C8");
+  });
+
+  it("un débris PEUT se poser sur la case d'un Titan", () => {
+    // C'est même une case que l'attaquant peut vouloir viser.
+    const titans = [{ id: 1, cell: "E4" }, { id: 2, cell: "B8" }];
+    expect(getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans })).toContain("B8");
+  });
+
+  it("un TITAN replié ne se pose jamais sur un autre Titan", () => {
+    // Invariant du jeu : deux Titans ne partagent jamais une case. C'est la
+    // seule exception à l'ouverture ci-dessus.
     const titans = [{ id: 1, cell: "B9" }, { id: 2, cell: "B8" }];
     expect(getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans, movingTitanId: 1 })).not.toContain("B8");
-    expect(getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans })).not.toContain("B8");
-
-    const avecDebris = getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, looseBlocks: { C8: ["rose"] } });
-    expect(avecDebris).not.toContain("C8");
   });
 
   it("sa propre case reste proposée même si elle est occupée", () => {
-    // Seule exception au filtre : « il peut revenir sur la case où il
-    // était ». Il en vient, il y était. C'est aussi ce qui garantit qu'il
-    // reste toujours au moins une issue, quel que soit l'encombrement.
-    const cases = getCasesRepliDebris("B9", "C9", 1, 0, {
-      board: {}, looseBlocks: { B9: ["rouge"], B8: ["bleu"], C8: ["vert"] },
-    });
-    expect(cases).toEqual(["B9"]);
+    // « Il peut revenir sur la case où il était ». C'est aussi ce qui
+    // garantit qu'il reste toujours une issue, quel que soit l'encombrement.
+    const board = {
+      B8: { row: "B", col: 8, blocks: ["bleu"], socle: 1, isTeleporter: false },
+      C8: { row: "C", col: 8, blocks: ["bleu"], socle: 1, isTeleporter: false },
+    };
+    expect(getCasesRepliDebris("B9", "C9", 1, 0, { board })).toEqual(["B9"]);
   });
 
   it("la case visée n'est jamais proposée — c'est justement celle qu'il ne peut pas atteindre", () => {
