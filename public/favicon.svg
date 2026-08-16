@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Icône d'onglet de PROJET TITAN.
+       Le dégradé violet reprend la palette du livret (titan-style.css) :
+       --p4 #5421A0 vers --p2 #26124A, sur le même angle que les cartes.
+       Un T crème (--cream #fffaee) suffit à 16 px, où tout dessin de Titan
+       deviendrait une tache illisible. -->
+  <defs>
+    <linearGradient id="violet" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6b2ac9"/>
+      <stop offset="55%" stop-color="#5421A0"/>
+      <stop offset="100%" stop-color="#26124A"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#violet)"/>
+  <path d="M14 17h36v10H38v22H26V27H14z" fill="#fffaee"/>
+</svg>

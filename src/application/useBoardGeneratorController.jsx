@@ -2172,9 +2172,16 @@ export function useBoardGeneratorController() {
 
      Le placement se fait à l'ouverture du décompte, une seule fois par
      Titan : la condition sur `vertAssignments` empêche l'effet de le
-     recalculer et d'écraser un état restauré par « Annuler ». */
+     recalculer et d'écraser un état restauré par « Annuler ».
+
+     ⚠️ La condition est `gameOver`, PAS `showScoring`. `showScoring` n'est
+     qu'un panneau consultable à tout moment par le bouton « 🏆 Scoring » :
+     l'ouvrir en Manche 2 faisait placer aux IA des Verts calculés sur un
+     plateau intermédiaire, et comme le placement n'est fait qu'une fois, il
+     n'était plus jamais recalculé — les IA finissaient la partie avec des
+     Verts posés d'après un état qui n'existait plus. */
   useEffect(() => {
-    if (!showScoring) return;
+    if (!gameOver) return;
     const aFaire = titanState.players.filter(
       (t) => titanModes[t.id] === "ia"
         && getVertCount(t) > 0
@@ -2188,14 +2195,15 @@ export function useBoardGeneratorController() {
       const choix = bestVertAssignment(t.id, titanState.players, { exact: true, autres: dejaPosees });
       ajouts[t.id] = choix;
       dejaPosees[t.id] = choix;
-      const lisible = choix
-        .map((d) => (d.type === "color" ? `Barème ${d.target}` : `Piste ${d.target}`))
-        .join(", ");
-      journal.push(`🤖 ${titanDisplayName(t.id)} (IA) place ${choix.length} Bloc(s) Vert : ${lisible}.`);
+      // Le journal dit QUE l'IA a placé, jamais OÙ. Il est consultable à
+      // tout moment : y écrire le détail rouvrait par la porte de derrière
+      // le secret que l'écran de placement vient de fermer. Le détail
+      // s'affiche dans ce même écran, une fois tout le monde placé.
+      journal.push(`🤖 ${titanDisplayName(t.id)} (IA) place ses ${choix.length} Bloc(s) Vert, en secret.`);
     }
     setVertAssignments((prev) => ({ ...prev, ...ajouts }));
     setActionLog((prev) => [...prev, ...journal]);
-  }, [showScoring, titanState.players, titanModes, vertAssignments, getVertCount, titanDisplayName]);
+  }, [gameOver, titanState.players, titanModes, vertAssignments, getVertCount, titanDisplayName]);
   const updateVertAssignment = useCallback((titanId, index, value) => {
     setVertAssignments((prev) => {
       const current = prev[titanId] ? [...prev[titanId]] : [];

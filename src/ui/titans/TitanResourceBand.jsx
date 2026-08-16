@@ -193,9 +193,19 @@ export default function TitanResourceBand({
               marginTop: 6, paddingTop: 5, borderTop: "1px solid rgba(255,255,255,.07)",
               minHeight: 22,
             }}>
+              {/* COMBIEN DE SOCLES, PAS COMBIEN DE POINTS — demande de Nikola
+                  du 2026-08-18. Le chiffre affiché était le total des VALEURS,
+                  et il entrait en concurrence avec les comptes de blocs juste
+                  au-dessus, qui sont des quantités : à 4 Titans, on lisait
+                  « 7 » chez l'un et « 3 » chez l'autre sans savoir si c'était
+                  des pièces ou des points. Or ce qui se surveille en cours de
+                  partie, c'est le NOMBRE : c'est lui qui décide du trophée
+                  Collectionneur, et c'est lui qu'on compare d'un coup d'œil.
+                  La valeur, elle, ne sert qu'au décompte : elle passe dans
+                  l'infobulle, avec le détail pièce par pièce. */}
               <span
                 title={(t.socles || []).length > 0
-                  ? `Socles collectés : ${t.socles.join(" + ")} = ${soclesTotal} pts`
+                  ? `${t.socles.length} Socle(s) collecté(s) — valeurs : ${t.socles.join(" + ")} = ${soclesTotal} pts`
                   : "Aucun socle collecté"}
                 style={{ cursor: "help", display: "inline-flex", alignItems: "center", gap: 4 }}
               >
@@ -207,7 +217,7 @@ export default function TitanResourceBand({
                   // voisins : l'icone flottait au-dessus des chiffres.
                   style={{ width: 17, height: 17, objectFit: "contain", filter: "brightness(1.2)", display: "block", position: "relative", top: 1 }}
                 />
-                {soclesTotal}
+                {(t.socles || []).length}
               </span>
               <span title="Piste ADN Bagarre" style={{ cursor: "help" }}>💪 {t.bagarre || 0}</span>
               <span title="Piste ADN Destruction" style={{ cursor: "help" }}>💥 {t.destruction || 0}</span>
