@@ -743,3 +743,41 @@ describe("Repli — l'IA le joue vraiment", () => {
     expect(etat.looseBlocks.A1).toBeUndefined();
   });
 });
+
+describe("DIL — le Vert échappe au Dilemme", () => {
+  /* Ruling Nikola du 2026-08-17 : « on ne peut pas faire de DIL sur du Vert,
+     sauf si c'est la seule couleur ».
+
+     Le Vert n'est pas une couleur comme les autres : sa valeur n'existe pas
+     avant le décompte final, où son propriétaire la fixe en secret. Le viser
+     ferait perdre une carte dont personne à la table ne connaît le prix.
+     L'exception « seule couleur » empêche qu'un Titan devienne intouchable
+     en ne collectant que du Vert. */
+
+  const cible = (repaire, socles = []) => ({ titans: [{ id: 2, repaire, socles }] });
+
+  it("le Vert est écarté dès qu'une autre couleur existe", () => {
+    expect(getDilOptions(2, cible(["bleu", "vert"]))).toEqual(["bleu"]);
+    expect(getDilOptions(2, cible(["bleu", "rose", "vert"]))).toEqual(["bleu", "rose"]);
+  });
+
+  it("un Repaire « 1 couleur + du Vert » redevient donc immunisé", () => {
+    // Conséquence directe et voulue : il n'y a plus 2 options distinctes.
+    expect(canDil(2, cible(["bleu", "vert"]))).toBe(false);
+  });
+
+  it("le Vert redevient ciblable quand c'est la seule couleur", () => {
+    expect(getDilOptions(2, cible(["vert", "vert"]))).toEqual(["vert"]);
+  });
+
+  it("Vert seul PLUS un Socle : le Dilemme est possible", () => {
+    // Sans quoi un Titan tout-Vert deviendrait intouchable, ce que
+    // l'exception vise précisément à éviter.
+    expect(getDilOptions(2, cible(["vert"], [3]))).toEqual(["vert", SOCLE_OPTION]);
+    expect(canDil(2, cible(["vert"], [3]))).toBe(true);
+  });
+
+  it("le Vert ne bloque pas un Dilemme entre deux autres couleurs", () => {
+    expect(canDil(2, cible(["bleu", "rose", "vert", "vert"]))).toBe(true);
+  });
+});

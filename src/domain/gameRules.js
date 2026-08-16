@@ -2486,7 +2486,20 @@ const SOCLE_OPTION = "socle";
 function getDilOptions(defenderId, gameState) {
   const t = gameState.titans.find((x) => x.id === defenderId);
   if (!t) return [];
-  const options = [...new Set(t.repaire)];
+  const couleurs = [...new Set(t.repaire)];
+
+  /* LE VERT ÉCHAPPE AU DILEMME — ruling Nikola du 2026-08-17 : « on ne peut
+     pas faire de DIL sur du Vert, sauf si c'est la seule couleur ».
+
+     Le Vert n'est pas une couleur comme les autres : sa valeur n'existe pas
+     avant le décompte final, où son propriétaire la fixe en secret. Le
+     désigner reviendrait à faire perdre une carte dont personne à la table
+     ne connaît le prix — ni l'attaquant qui la vise, ni la cible qui la
+     lâche. L'exception « seule couleur » évite qu'un Titan devienne
+     intouchable en ne collectant que du Vert. */
+  const sansVert = couleurs.filter((c) => c !== "vert");
+  const options = sansVert.length > 0 ? sansVert : couleurs;
+
   if ((t.socles || []).length > 0) options.push(SOCLE_OPTION);
   return options;
 }

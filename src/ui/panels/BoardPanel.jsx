@@ -654,6 +654,27 @@ export default function BoardPanel({ vm }) {
                   </div>
                 ) : (
                   <>
+                    {/* Pourquoi la programmation précédente a échoué. Sans
+                        ça, un refus vide la sélection et represente le même
+                        panneau : le joueur reboucle sans savoir pourquoi
+                        (bug remonté par Nikola le 2026-08-17 en début de
+                        Manche 4). La raison est précise côté moteur, elle
+                        n'était simplement affichée nulle part. */}
+                    {vm.progErreur && (
+                      <div style={{
+                        background: "rgba(227,35,71,.16)", border: "1.5px solid #e32347",
+                        borderRadius: 8, padding: "7px 10px", marginBottom: 7,
+                        fontSize: ".72rem", color: "#ff8fa3",
+                      }}>
+                        ⚠️ La programmation précédente a été refusée : {vm.progErreur}
+                        <button
+                          onClick={() => vm.setProgErreur(null)}
+                          style={{ ...cancelBtn(), marginLeft: 8, fontSize: ".66rem" }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
                     <div style={{ fontSize: ".68rem", color: "rgba(255,255,255,.5)", marginBottom: 6 }}>
                       Sélectionne 3 cartes à programmer ({progSelection.length}/3) :
                     </div>

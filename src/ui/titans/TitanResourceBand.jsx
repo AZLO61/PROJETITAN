@@ -266,7 +266,14 @@ export default function TitanResourceBand({
                         key={i}
                         title={libelle(c)}
                         style={{
-                          width: 9, height: 9, borderRadius: 2, display: "inline-block",
+                          // `flexShrink: 0` : ces carrés vivent dans un
+                          // conteneur flex. Sans lui ils se laissent comprimer
+                          // en largeur quand la ligne est chargée, pendant que
+                          // la hauteur reste fixe — d'où les rectangles
+                          // verticaux remontés par Nikola le 2026-08-17.
+                          // `alignSelf` empêche l'étirement dans l'autre sens.
+                          width: 9, height: 9, flexShrink: 0, alignSelf: "center",
+                          borderRadius: 2, display: "inline-block", boxSizing: "border-box",
                           background: c.restante ? "#FFD93D" : "transparent",
                           border: "1.5px solid #FFD93D",
                         }}

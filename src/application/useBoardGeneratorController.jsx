@@ -25,7 +25,7 @@ const {
   scoreBareme, PODIUM_POINTS, rankWithTies, countRepaireColors, computeFinalScore, classementFinal,
   pick,
   // IA : profils et choix de coup (cf. src/domain/aiEvaluation.js et aiPlanner.js)
-  FORCES, TEMPERAMENTS, makeProfile, profileLabel, bestVertAssignment,
+  FORCES, FORCE_SETTINGS, TEMPERAMENTS, makeProfile, profileLabel, bestVertAssignment,
   planMovement, planCardPlay, planRecuperation, planProgrammation, choisirRepartitionEcroulement
 } = Domain;
 
@@ -402,6 +402,17 @@ export function useBoardGeneratorController() {
   const [repliQueue, setRepliQueue] = useState([]);
   const [decisionQueue, setDecisionQueue] = useState([]);
   const [progSelection, setProgSelection] = useState([]);
+  /* Dernier échec de programmation, affiché DANS le panneau.
+     Bug remonté par Nikola le 2026-08-17 : « en début de M4 je sélectionne
+     mes 3 cartes et ça me redemande de sélectionner mes 3 cartes ». Quand
+     `programCards` refuse, la sélection est vidée et le panneau se
+     represente à l'identique : le joueur boucle sans jamais savoir pourquoi,
+     la raison ne partant que dans le journal d'actions, tout en bas.
+     Le refus a toujours une raison précise — cartes déjà programmées, Titan
+     ayant déjà joué cette Manche, carte absente de la main. La montrer à
+     l'endroit où le joueur est bloqué est la seule façon de trancher entre
+     ces causes au prochain test à la table. */
+  const [progErreur, setProgErreur] = useState(null);
   const [progCountdown, setProgCountdown] = useState(null);   // null | 1-3
   const [progCountdownTimer, setProgCountdownTimer] = useState(null); // setInterval id
   // Vol Phase Repos (refonte session) : sens de rotation choisi UNE FOIS
@@ -1218,6 +1229,30 @@ export function useBoardGeneratorController() {
       }));
       const defChoice = defValued.reduce((best, curr) => (curr.defVal < best.defVal ? curr : best));
       const attacker = titanState.players.find((t) => t.id === cur.attackerId);
+
+      /* PAYER OU ENCAISSER — demande de Nikola du 2026-08-17 : « c'est l'IA
+         qui décide si elle dépense une Adrénaline si je lui fais un DIL ».
+         Elle n'avait pas le choix : elle perdait toujours un bloc, alors que
+         le livret laisse au défenseur la possibilité d'annuler en donnant
+         1 Adrénaline à l'attaquant.
+
+         L'arbitrage se fait au vrai barème, sans table de poids : une
+         Adrénaline vaut 3 points au décompte final. La donner en coûte donc
+         3, et 6 en différentiel pour qui suit ses adversaires, puisqu'elle
+         passe chez l'attaquant. Elle paie quand le bloc menacé lui coûte
+         davantage — typiquement un Socle de valeur, ou une couleur qui casse
+         une paire d'Orange. */
+      const voitAdversaires = FORCE_SETTINGS[aiTitanProfilesRef.current[cur.defenderId]?.force]?.voitAdversaires;
+      const coutAdrenaline = voitAdversaires ? 6 : 3;
+      if ((defender.adrenaline || 0) >= 1 && defChoice.defVal > coutAdrenaline) {
+        defender.adrenaline -= 1;
+        if (attacker) attacker.adrenaline = (attacker.adrenaline || 0) + 1;
+        setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} (IA) préfère donner 1 Adrénaline à Titan ${cur.attackerId} plutôt que de perdre ${defChoice.color} (${defChoice.defVal} pts en jeu).`]);
+        setTitanState((p) => ({ ...p, players: [...p.players] }));
+        setDecisionQueue((prev) => prev.slice(1));
+        return;
+      }
+
       const suffixe = acheminerBlocPerdu(cur, defender, attacker, defChoice.color);
       const quoi = defChoice.color === SOCLE_OPTION ? "1 Socle" : `1 bloc ${defChoice.color}`;
       setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} (IA) perd ${quoi} (décision automatique)${suffixe}`]);
@@ -1245,9 +1280,15 @@ export function useBoardGeneratorController() {
     const cur = decisionQueue[0];
     if (!cur) return;
     const defender = titanState.players.find((t) => t.id === cur.defenderId);
+    const attaquant = titanState.players.find((t) => t.id === cur.attackerId);
     if ((defender.adrenaline || 0) < 1) { return; }
     defender.adrenaline -= 1;
-    setActionLog((prevLog) => [...prevLog, `DIL annulé par Titan ${cur.defenderId} (1 Adrénaline dépensée).`]);
+    // Livret : « le défenseur peut DONNER 1 adrénaline À L'ATTAQUANT pour
+    // annuler le DIL ». Elle était retirée au défenseur sans jamais arriver
+    // chez l'attaquant — elle disparaissait du jeu, comme les blocs de DIL
+    // et de RAGE corrigés plus haut.
+    if (attaquant) attaquant.adrenaline = (attaquant.adrenaline || 0) + 1;
+    setActionLog((prevLog) => [...prevLog, `DIL annulé par Titan ${cur.defenderId} : 1 Adrénaline donnée à Titan ${cur.attackerId}.`]);
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setDecisionQueue((prev) => prev.slice(1));
   }, [decisionQueue, titanState.players]);
@@ -1326,12 +1367,14 @@ export function useBoardGeneratorController() {
                   setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
                   setPhaseValidated((prev) => ({ ...prev, [selectedTitanId]: true }));
                   setActionLog((p) => [...p, `✅ T${selectedTitanId} programme : ${cur.map((c) => CARD_LABEL[c]).join(", ")}`]);
+                  setProgErreur(null);
                 } else {
                   // Échec (ex. état déjà modifié entre-temps) : on informe le
                   // joueur au lieu de valider silencieusement une phase non
                   // réellement programmée — ce silence était la cause du gel
                   // de tour ("en attente des autres Titans").
                   setActionLog((p) => [...p, `⚠️ Programmation T${selectedTitanId} échouée : ${res.reason}`]);
+                  setProgErreur(res.reason);
                 }
               }
               return [];
@@ -2410,6 +2453,8 @@ export function useBoardGeneratorController() {
     setDecisionQueue,
     progSelection,
     setProgSelection,
+    progErreur,
+    setProgErreur,
     progCountdown,
     setProgCountdown,
     progCountdownTimer,
