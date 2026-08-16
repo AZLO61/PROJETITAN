@@ -49,7 +49,7 @@
 
 import {
   PORTEE_BOING_BOING,
-  chebyshevDistance,
+  getBoingBoingReach,
   estSurLePlateau,
   indexerTitans,
   getEcroulementCells,
@@ -411,28 +411,29 @@ export function candidatsPourCarte(cardId, titanId, gameState) {
   }
 
   if (cardId === "boing_boing") {
-    const r0 = rowIndex(titan.cell[0]);
-    const c0 = Number(titan.cell.slice(1));
     // Bug trouvé au scan : toutes les cases portant un Titan étaient exclues
     // des destinations. Or c'est précisément le cas le plus intéressant de
     // la carte — ruling confirmé : l'occupant subit Fatigue et DIL, et
     // l'initiateur prend sa place (resolveBoingBoing le gère sur 45 lignes).
     // L'interface humaine, elle, proposait bien ces cases. L'IA se privait
     // donc d'un pan entier de la carte, et les campagnes sous-estimaient
-    // mécaniquement sa force. Seule la case du Titan qui joue reste exclue :
-    // un saut de distance 0 est refusé par le résolveur de toute façon.
+    // mécaniquement sa force.
+    //
+    // L'énumération se faisait en distance de Chebyshev brute, alors que le
+    // livret compte les éléments contigus pour 1 seule case. Deux effets, et
+    // les deux faussaient les campagnes : l'IA ne VOYAIT pas les cases
+    // ouvertes derrière un mur (elle sous-évaluait encore la carte), et elle
+    // proposait des cases hors de portée que le résolveur refusait ensuite —
+    // autant de coups simulés pour rien. Elle énumère désormais depuis
+    // `getBoingBoingReach`, la même fonction que le résolveur et que
+    // l'interface : les trois ne peuvent plus diverger.
     const out = [];
     for (const mise of mises) {
-      const portee = PORTEE_BOING_BOING + mise;
-      for (let r = 0; r <= 8; r++) {
-        for (let c = 1; c <= 9; c++) {
-          const d = chebyshevDistance(r0, c0, r, c);
-          if (d < 1 || d > portee) continue;
-          const key = rowFromIndex(r) + c;
-          if (key === titan.cell) continue;
-          out.push({ cardId, bbDest: key, mise });
-        }
-      }
+      const reach = getBoingBoingReach(titan.cell, PORTEE_BOING_BOING + mise, gameState);
+      reach.forEach((_d, key) => {
+        if (key === titan.cell) return;
+        out.push({ cardId, bbDest: key, mise });
+      });
     }
     return out;
   }

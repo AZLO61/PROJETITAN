@@ -443,33 +443,34 @@ export default function HeaderPhase({ vm }) {
       )}
 
 
-      {/* ── FIN DE PARTIE ALERT ── */}
-      {/* Fin de partie : l'alerte se contentait d'un encart discret. Elle
-          annonce maintenant clairement que la partie s'arrete a la fin de la
-          Manche, et propose directement l'ecran de resultats plutot que de
-          laisser chercher le bouton Scoring. */}
+      {/* ── FIN DE PARTIE EN APPROCHE ──
+          Demande de Nikola (2026-08-17) : « supprime le bouton Voir les
+          scores du panneau dernière Manche, et rends l'information de fin de
+          partie en approche claire mais beaucoup moins grosse. »
+
+          Le bouton partait de la bonne intention — éviter de chercher l'écran
+          de résultats — mais il ouvrait le scoring EN COURS DE PARTIE, avec
+          les Blocs Verts encore à placer et les totaux de tout le monde
+          étalés : de quoi jouer la dernière Manche en sachant exactement quoi
+          viser chez les autres. L'écran de résultats s'ouvre désormais tout
+          seul, une fois la Manche terminée (cf. `gameOver`).
+
+          L'encart passe d'un pavé à une seule ligne : le motif du
+          déclenchement, qu'on ne lit qu'une fois, va dans l'infobulle. */}
       {endGameReasons.length > 0 && (
-        <div style={{
-          background: "rgba(227,35,71,.14)", border: "1.5px solid #e32347",
-          borderRadius: 12, padding: "8px 14px", marginBottom: 10, fontSize: ".78rem",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <strong style={{ color: "#ff8fa3", fontSize: ".92rem", fontFamily: "'Bowlby One', sans-serif" }}>
-              🛑 Dernière Manche
-            </strong>
-            <span style={{ color: "rgba(255,255,255,.7)" }}>
-              La partie s'arrête à la fin de la Manche {mancheNumber}, jamais en plein tour.
-            </span>
-            <button
-              onClick={() => setShowScoring(true)}
-              style={{ ...btnStyle("#FFD93D", "#F59E0B"), marginLeft: "auto" }}
-            >
-              🏆 Voir les scores
-            </button>
-          </div>
-          {endGameReasons.map((r, i) => (
-            <div key={i} style={{ marginTop: 5, color: "rgba(255,255,255,.7)" }}>{r}</div>
-          ))}
+        <div
+          title={endGameReasons.join("\n")}
+          style={{
+            display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+            background: "rgba(227,35,71,.1)", border: "1px solid rgba(227,35,71,.45)",
+            borderRadius: 8, padding: "5px 10px", marginBottom: 8,
+            fontSize: ".72rem", cursor: "help",
+          }}
+        >
+          <strong style={{ color: "#ff8fa3", whiteSpace: "nowrap" }}>🛑 Dernière Manche</strong>
+          <span style={{ color: "rgba(255,255,255,.6)" }}>
+            la partie s'arrête à la fin de la Manche {mancheNumber}.
+          </span>
         </div>
       )}
 

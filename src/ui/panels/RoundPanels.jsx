@@ -204,6 +204,7 @@ export default function RoundPanels({ vm }) {
     jouerGraouhhh,
     bbMaxRange,
     bbReachable,
+    bbReach,
     toggleBbMode,
     bbSelectCell,
     jouerBoingBoing,
@@ -360,12 +361,25 @@ export default function RoundPanels({ vm }) {
             </div>
           );
         };
+        /* PLATEAU CARRÉ (demande de Nikola, 2026-08-17 : « rends les cases du
+           plateau 2D plus carrées pour une meilleure lisibilité »).
+
+           Les colonnes étaient en `1fr` et s'étiraient donc jusqu'à ~80 px sur
+           un écran large, pendant que la hauteur restait figée à 30 px : le
+           9×9 se lisait comme une grille d'aplats très plats, où les icônes de
+           blocs et les badges de Titan se noyaient. Chaque case tient
+           désormais sa hauteur de sa largeur (`aspectRatio`), et la grille est
+           bornée pour que la case ne dépasse pas ~52 px — au-delà, le plateau
+           repousse les contrôles hors de l'écran sur une tablette. */
         return (
       <div className="titan-grid" style={{
         display: "grid",
         gridTemplateColumns: "24px 18px repeat(9, minmax(30px, 1fr)) 24px",
-        gridTemplateRows: "18px 24px repeat(9, minmax(30px, 1fr)) 24px",
+        gridAutoRows: "auto",
+        gridTemplateRows: "18px 24px repeat(9, auto) 24px",
         gap: 2, marginBottom: 14,
+        maxWidth: 24 + 18 + 24 + 9 * 52 + 12 * 2,
+        marginLeft: "auto", marginRight: "auto",
         overflowX: "auto",
       }}>
         {/* Ligne des numéros de colonne */}
@@ -391,11 +405,20 @@ export default function RoundPanels({ vm }) {
               const inPerimeter = perimeterKeys.has(key);
               const jnpSelectable = jnpMode && jnpPool.has(key);
               const jnpIsSelected = jnpMode && jnpSelected.includes(key);
-              // Boing Boing : la portee ne suffit pas, il faut une case
-              // libre. Un batiment encore debout ou un Titan bloquent
-              // l'atterrissage — rien ne le disait, on cliquait dans le vide.
+              /* Boing Boing : seul un BÂTIMENT ENCORE DEBOUT interdit
+                 l'atterrissage. Un Titan sur la case, lui, est une cible
+                 parfaitement légitime — c'est même l'effet principal de la
+                 carte : « Titan présent → DIL, projeté de la valeur
+                 restante, +1 Bagarre » (livret, carte 04). Le moteur le
+                 gère depuis toujours (cf. resolveBoingBoing), c'est
+                 l'interface qui refusait le clic et peignait la case en
+                 rouge « atterrissage impossible ». Bug remonté par Nikola
+                 le 2026-08-17 : « je ne peux pas sauter sur un Titan alors
+                 qu'il est seul sur sa case ».
+                 `bbReachable` filtre déjà les bâtiments debout, ce test
+                 n'est donc plus qu'une ceinture de sécurité. */
               const bbBloquee = bbMode && bbReachable.has(key)
-                && ((isBldg && cellData && cellData.blocks.length > 0) || Boolean(titansByCell[key]));
+                && isBldg && cellData && cellData.blocks.length > 0;
               const bbSelectable = bbMode && bbReachable.has(key) && !bbBloquee;
               const bbIsSelected = bbMode && bbDest === key;
               const moveSelectable = moveMode && moveReachable.has(key);
@@ -493,7 +516,11 @@ export default function RoundPanels({ vm }) {
                   // du haut vers le bas, et la case garde des reperes
                   // d'etages discrets sur son bord gauche.
                   title={bbBloquee
-                    ? `${key} — atterrissage impossible : ${titansByCell[key] ? "un Titan occupe la case" : "le bâtiment est encore debout"}`
+                    ? `${key} — atterrissage impossible : le bâtiment est encore debout`
+                    : bbSelectable && titansByCell[key]
+                    ? `${key} — sauter sur ce Titan : Dilemme, projection et +1 Bagarre (distance ${bbReach.get(key)})`
+                    : bbSelectable
+                    ? `${key} — atterrissage possible (distance ${bbReach.get(key)}, éléments contigus comptés pour 1 case)`
                     : cellData
                     ? `${key} · ${cellData.blocks.length} étage${cellData.blocks.length > 1 ? "s" : ""} · socle ${cellData.socle}${
                         cellData.blocks.length
@@ -503,7 +530,10 @@ De haut en bas : ${[...cellData.blocks].reverse().map((c) => BLOCK_NAME[c] || c)
                       }`
                     : key}
                   style={{
-                    minWidth: 28, height: 30, borderRadius: 4, position: "relative",
+                    // `aspectRatio` : la case prend sa hauteur de sa largeur
+                    // réelle, elle reste carrée quelle que soit la taille de
+                    // l'écran. `height: 30` la figeait en rectangle plat.
+                    minWidth: 28, aspectRatio: "1 / 1", borderRadius: 4, position: "relative",
                     zIndex: hoverCell === key ? 55 : undefined,
                     cursor: jnpSelectable || bbSelectable || teaSelectable || moveSelectable || recupSelectable || titansByCell[key] ? "pointer" : "default",
                     background: cellBg,
@@ -545,8 +575,15 @@ De haut en bas : ${[...cellData.blocks].reverse().map((c) => BLOCK_NAME[c] || c)
                         : cellData.blocks.length}
                     </span>
                   )}
-                  {cellData && cellData.isTeleporter && (
-                    <span style={{ position: "absolute", top: 1, left: 2, fontSize: ".68rem" }}>🌀</span>
+                  {/* Un Téléporteur ne fonctionne que TANT QU'IL LUI RESTE
+                      DES BLOCS (cf. getActiveTeleporterCells). Le 🌀 était
+                      posé sur `isTeleporter` seul : une fois le bâtiment
+                      cassé et vidé, l'icône restait affichée sur une case
+                      devenue un simple couloir. Le joueur voyait deux
+                      téléporteurs là où le moteur n'en comptait plus qu'un
+                      (bug remonté par Nikola le 2026-08-17). */}
+                  {cellData && cellData.isTeleporter && cellData.blocks.length > 0 && (
+                    <span title={`${key} — Téléporteur actif`} style={{ position: "absolute", top: 1, left: 2, fontSize: ".68rem" }}>🌀</span>
                   )}
                   {moveIsTeleport && (
                     <span style={{ position: "absolute", top: 1, right: 2, fontSize: "8px", opacity: .8 }}>🌀</span>

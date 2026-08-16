@@ -1,5 +1,5 @@
 import React from "react";
-import { CARD_LABEL } from "../../domain/cards.js";
+import { CARD_LABEL, CARD_FORCE } from "../../domain/cards.js";
 import { TITAN_COLORS } from "./constants.js";
 import { TitanIcon } from "./TitanVisuals.jsx";
 import BlockIcon from "../BlockIcon.jsx";
@@ -185,32 +185,49 @@ export default function TitanResourceBand({
                 const joueesOuDefaussees = t.playedThisManche.length + (t.discardedHidden || []).length;
                 const total = joueesOuDefaussees + t.programmed.length;
                 if (total === 0) return null;
+                /* CE QUE LE SURVOL RÉVÈLE — arbitrage Nikola du 2026-08-17.
+
+                   · CARRÉ PLEIN (carte encore à jouer) : le nom n'apparaît
+                     que sur SON PROPRE Titan, c'est-à-dire celui à qui c'est
+                     le tour et donc celui qui tient l'appareil. Sur tous les
+                     autres, le carré ne dit rien de plus que « il lui en
+                     reste une ». C'est la nuance qui manquait le 2026-08-15 :
+                     le survol avait alors été retiré POUR TOUT LE MONDE parce
+                     que la tablette circule, alors qu'il suffisait de le
+                     réserver au propriétaire des cartes.
+
+                   · CARRÉ VIDE (carte jouée ou défaussée) : nom ET Force,
+                     sur TOUS les Titans. Une carte résolue est publique, et
+                     sa Force sert à estimer une Bagarre à venir — c'est
+                     précisément pour ça que Nikola la demande.
+
+                   Réserve assumée : une carte DÉFAUSSÉE face cachée reste
+                   anonyme (elle n'a jamais été révélée à la table), seul son
+                   carré passe en vide. */
+                const estMoi = activePlayerId === t.id;
+                const cases = [
+                  ...t.programmed.map((cardId) => ({ restante: true, cardId })),
+                  ...t.playedThisManche.map((cardId) => ({ restante: false, cardId })),
+                  ...(t.discardedHidden || []).map(() => ({ restante: false, cardId: null })),
+                ];
+                const libelle = (c) => {
+                  if (c.restante) {
+                    return estMoi
+                      ? `Encore à jouer : ${CARD_LABEL[c.cardId]} (Force ${CARD_FORCE[c.cardId]})`
+                      : "Carte encore à jouer — programmation secrète";
+                  }
+                  if (!c.cardId) return "Carte défaussée face cachée — jamais révélée";
+                  return `Déjà jouée : ${CARD_LABEL[c.cardId]} (Force ${CARD_FORCE[c.cardId]})`;
+                };
                 return (
                   <span
                     title={`${t.programmed.length} carte(s) encore à jouer sur ${total} cette Manche`}
                     style={{ display: "inline-flex", gap: 3, alignItems: "center", cursor: "help", marginLeft: "auto" }}
                   >
-                    {/* Les cartes encore à jouer sont pleines, les autres
-                        gardent leur contour jaune. SEUL LE NOMBRE est public.
-
-                        Fuite d'information corrigée le 2026-08-15, remontée
-                        par Nikola en test réel : le survol d'un carré
-                        révélait le NOM de la carte encore à jouer sur le
-                        Titan actif. L'intention d'origine — « c'est son jeu,
-                        il a le droit de le relire » — oublie que l'appareil
-                        circule de main en main : à l'inter-tour, c'est
-                        l'adversaire qui le tient, et il lui suffisait de
-                        survoler pour lire la programmation restante. Une
-                        carte programmée reste secrète jusqu'à sa résolution,
-                        sans exception. */}
-                    {[
-                      ...t.programmed.map(() => ({ restante: true })),
-                      ...t.playedThisManche.map(() => ({ restante: false })),
-                      ...(t.discardedHidden || []).map(() => ({ restante: false })),
-                    ].map((c, i) => (
+                    {cases.map((c, i) => (
                       <span
                         key={i}
-                        title={c.restante ? "Carte encore à jouer" : "Carte déjà passée"}
+                        title={libelle(c)}
                         style={{
                           width: 9, height: 9, borderRadius: 2, display: "inline-block",
                           background: c.restante ? "#FFD93D" : "transparent",
@@ -222,9 +239,21 @@ export default function TitanResourceBand({
                 );
               })()}
               {(t.repos || []).length > 0 && (() => {
-                // Respecte faceUp : une carte volée en Phase Repos est publique,
-                // une carte mise en Repos par Fatigue reste anonyme ici.
-                const visibleNames = t.repos.filter((e) => e.faceUp).map((e) => CARD_LABEL[e.cardId]);
+                /* Respecte faceUp : une carte volée en Phase Repos est
+                   publique, une carte mise en Repos par Fatigue reste anonyme
+                   POUR LES ADVERSAIRES.
+
+                   Demande de Nikola (2026-08-17) : « je peux consulter mes
+                   cartes en Fatigue au survol de l'icône dans mon encart de
+                   Titan. » Ce sont ses cartes, il subit la Fatigue, il a le
+                   droit de savoir laquelle lui a été prise — sans quoi il ne
+                   peut pas anticiper sa Manche suivante. Même garde-fou que
+                   les carrés de programmation ci-dessus : le détail n'est
+                   lisible que sur SON propre Titan, celui à qui c'est le tour
+                   et qui tient donc l'appareil. */
+                const visibleNames = t.repos
+                  .filter((e) => e.faceUp || estMoi)
+                  .map((e) => `${CARD_LABEL[e.cardId]}${e.faceUp ? "" : " (Fatigue)"}`);
                 const hiddenCount = t.repos.length - visibleNames.length;
                 const detail = [
                   visibleNames.length ? visibleNames.join(", ") : null,

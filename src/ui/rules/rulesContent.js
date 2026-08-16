@@ -28,8 +28,14 @@ export const LEXIQUE = [
 ];
 
 export const BADGES = [
-  { code: "DIL", nom: "Dilemme", def: "L'attaquant désigne 2 couleurs différentes du Repaire de la cible ; la cible choisit laquelle elle perd, ou paie 1 Adrénaline pour annuler. Impossible si la cible n'a pas 2 couleurs différentes.", color: "#FFD93D" },
-  { code: "RAGE", nom: "Rage", def: "L'attaquant choisit librement 1 ressource dans le Repaire de la cible, sans étape de défense. Possible dès que la cible possède 1 seule ressource.", color: "#FF2E63" },
+  { code: "DIL", nom: "Dilemme", def: "L'attaquant désigne 2 options différentes chez la cible : une couleur de son Repaire, ou « un Socle tiré au sort » si elle en possède au moins un. La cible choisit laquelle des 2 elle perd, ou paie 1 Adrénaline pour annuler. L'option Socle est anonyme : personne ne choisit lequel partira ni ne connaît sa valeur avant le tirage. Impossible s'il n'y a pas 2 options distinctes — mais « 1 couleur + 1 Socle » suffit. Où va l'élément perdu dépend de la CARTE jouée, voir le tableau ci-dessous.", color: "#FFD93D" },
+  { code: "RAGE", nom: "Rage", def: "L'attaquant choisit librement 1 ressource dans le Repaire de la cible, sans étape de défense. Possible dès que la cible possède 1 seule ressource. Où va la ressource dépend de la CARTE jouée, voir le tableau ci-dessous. Une Adrénaline volée rejoint toujours la réserve de l'attaquant : elle ne se pose pas au sol.", color: "#FF2E63" },
+  {
+    code: "→",
+    nom: "Où va le bloc perdu",
+    def: "Tout Casser : au sol dans les deux cas (DIL comme RAGE). Tête en Avant : DIL au sol, RAGE dans le Repaire de l'attaquant. Boing Boing : DIL au sol, RAGE dans le Repaire de l'attaquant. Graouhhh : au sol, cette carte n'a pas de RAGE. Faut Pas Me Chauffer : dans le Repaire de l'attaquant dans les deux cas. « Au sol » veut dire sur la case où la cible a encaissé le coup, AVANT sa projection éventuelle — le bloc y redevient ramassable par n'importe qui. Un Socle perdu en Dilemme suit la même route et conserve sa valeur.",
+    color: "#16E08C",
+  },
 ];
 
 export const PHASES_MANCHE = [
@@ -91,13 +97,14 @@ export const CARTES = [
     force: 2,
     icon: "🦘",
     couleur: "#FFD93D",
-    resume: "Destination au choix, 3 cases max, tous azimuts, obstacles ignorés.",
+    resume: "Destination au choix, 3 cases max, tous azimuts, obstacles ignorés. Éléments collés = 1 seule case.",
     effets: [
       "Bloc libre à l'arrivée : ramassé.",
       "Bâtiment (Seuil 4) : Écroulement, les blocs sont distribués sur les cases adjacentes.",
       "Titan présent : DIL, projeté de la valeur restante, +1 Bagarre.",
+      "Titan présent (Seuil 4) : RAGE, le bloc part directement dans ton Repaire. Impossible sans Adrénaline.",
     ],
-    note: "🦘 La projection du Titan sur lequel tu atterris est égale à la distance restante de ton saut.",
+    note: "🦘 La projection du Titan sur lequel tu atterris est égale à la distance restante de ton saut. 🧱 Un groupe d'éléments bloquants COLLÉS les uns aux autres (bâtiments, débris, Titans) ne compte que pour 1 case dans ton décompte, quelle que soit sa longueur : un mur de trois bâtiments te coûte autant qu'une seule case.",
   },
   {
     num: "05",

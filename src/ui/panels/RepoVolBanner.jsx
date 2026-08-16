@@ -13,12 +13,19 @@ import { TitanIcon } from "../titans/TitanVisuals.jsx";
 // bloquantes du jeu (DIL/RAGE et Vol Phase Repos) soient immédiatement
 // reconnaissables comme telles, où qu'on soit dans l'écran.
 export default function RepoVolBanner({ vm }) {
-  const { phase, mancheNumber, titanState, volDirection, chooseVolDirection } = vm;
+  const { phase, mancheNumber, titanState, titanModes, volDirection, chooseVolDirection } = vm;
   if (phase !== "repos") return null;
 
   const mainColor = "#e32347";
   const glowColor = "rgba(227,35,71,.45)";
   const detonateurId = titanState.detonateur;
+  /* Le sens de la chaîne appartient au DÉTONATEUR. Les deux boutons étaient
+     posés à l'écran quel que soit le propriétaire du jeton : c'était donc
+     toujours l'humain qui tranchait, même quand le Détonateur était une IA
+     (bug remonté par Nikola le 2026-08-17). Une IA Détonateur décide
+     désormais elle-même — voir l'effet dédié dans le contrôleur — et ce
+     bandeau se contente de l'annoncer. */
+  const detonateurEstIa = titanModes && titanModes[detonateurId] === "ia";
 
   return (
     <div style={{
@@ -40,6 +47,11 @@ export default function RepoVolBanner({ vm }) {
           <p style={{ marginBottom: 8, color: "rgba(255,255,255,.85)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <TitanIcon titanId={detonateurId} size={18} /> Titan {detonateurId} (Détonateur) choisit le sens de la chaîne :
           </p>
+          {detonateurEstIa ? (
+            <div style={{ color: "#a855f7", fontWeight: 700, fontSize: ".8rem" }}>
+              🤖 Ce n'est pas ton choix — le Détonateur est une IA, elle tranche elle-même…
+            </div>
+          ) : (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <button onClick={() => chooseVolDirection("gauche")} style={smallBtn(true, "#e32347", "#C2185B")}>
               ⬅️ Gauche
@@ -48,6 +60,7 @@ export default function RepoVolBanner({ vm }) {
               ➡️ Droite
             </button>
           </div>
+          )}
           <p style={{ marginTop: 8, fontSize: ".72rem", color: "rgba(255,255,255,.5)" }}>
             Dans ce sens, chaque Titan vole ensuite, à l'aveugle, 1 carte à son voisin — posée face visible en Zone Repos (consultable en permanence dans le bandeau de chaque Titan, jusqu'à la Manche {mancheNumber + 2}).
           </p>

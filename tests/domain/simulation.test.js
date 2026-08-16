@@ -85,7 +85,14 @@ describe("simulateur — l'échelle de force est bien ordonnée", () => {
     };
     const { stats } = lancerCampagne({ parties: 12, nbJoueurs: 4, seed: 77, profils });
     expect(stats.parForce.expert.scoreMoyen).toBeGreaterThan(stats.parForce.novice.scoreMoyen);
-  });
+    // Délai explicite : 12 parties complètes à 4 Titans, c'est le test le
+    // plus lourd de la suite (~4 s seul, davantage quand les fichiers
+    // tournent en parallèle). Il vivait sur le défaut de 5 s, donc à ~66 %
+    // de son budget, et basculait en échec au moindre alourdissement du
+    // planificateur — ce que la règle des éléments contigus a suffi à
+    // provoquer. Ce n'est pas une régression de perf à masquer, c'est un
+    // budget qui n'a jamais correspondu au coût réel du test.
+  }, 30000);
 });
 
 describe("agrégation — les indicateurs utiles à un auteur", () => {

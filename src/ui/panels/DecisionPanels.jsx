@@ -52,6 +52,7 @@ export default function DecisionPanels({ vm }) {
     rainbowWinnerId,
     setRainbowWinnerId,
     showScoring,
+    gameOver,
     setShowScoring,
     show3D,
     setShow3D,
@@ -268,6 +269,26 @@ export default function DecisionPanels({ vm }) {
           borderRadius: 14, padding: "14px 16px", marginBottom: 12, fontSize: ".78rem",
         }}>
           <div style={{ fontFamily: "'Bowlby One', sans-serif", color: "#FFD93D", fontSize: "1rem", marginBottom: 10 }}>🏆 Scoring final</div>
+          {/* Le décompte ne commence pas tant que chaque Vert n'a pas trouvé
+              sa catégorie : c'est le dernier geste de la partie, et il était
+              invisible tant que l'écran restait enterré sous le plateau. */}
+          {gameOver && (() => {
+            const restants = titanState.players.reduce(
+              (n, t) => n + Math.max(0, getVertCount(t) - (vertAssignments[t.id] || []).filter(Boolean).length), 0
+            );
+            return (
+              <div style={{
+                background: restants > 0 ? "rgba(34,197,94,.14)" : "rgba(255,217,61,.12)",
+                border: `1.5px solid ${restants > 0 ? "#22C55E" : "rgba(255,217,61,.5)"}`,
+                borderRadius: 10, padding: "8px 12px", marginBottom: 12,
+                fontSize: ".78rem", color: "rgba(255,255,255,.8)",
+              }}>
+                {restants > 0
+                  ? <>🟢 <strong style={{ color: "#7ef2a8" }}>Partie terminée.</strong> Il reste {restants} Bloc{restants > 1 ? "s" : ""} Vert{restants > 1 ? "s" : ""} à placer avant que le décompte soit définitif.</>
+                  : <>🏁 <strong style={{ color: "#FFD93D" }}>Partie terminée.</strong> Tous les Blocs Verts sont placés, le décompte ci-dessous est définitif.</>}
+              </div>
+            );
+          })()}
           <div style={{ marginBottom: 12 }}>
             <div style={{ color: "#22C55E", fontWeight: 700, marginBottom: 6, fontSize: ".76rem" }}>
               Placement secret des Blocs Verts

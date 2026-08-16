@@ -1332,12 +1332,12 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percus
 
     if (seuil4) {
       if (canRage(targetId, gameState)) {
-        decisions.push(makeDecisionRequest("RAGE", titanId, targetId, "Tout Casser"));
+        decisions.push(makeDecisionRequest("RAGE", titanId, targetId, "Tout Casser", caseAvant));
       } else {
         log.push(`${key} : RAGE sans effet sur Titan ${targetId} (aucune ressource à prendre).`);
       }
     } else if (canDil(targetId, gameState)) {
-      decisions.push(makeDecisionRequest("DIL", titanId, targetId, "Tout Casser"));
+      decisions.push(makeDecisionRequest("DIL", titanId, targetId, "Tout Casser", caseAvant));
     } else {
       log.push(`${key} : DIL impossible sur Titan ${targetId} (< 2 couleurs différentes en Repaire).`);
     }
@@ -1540,12 +1540,12 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
       const mode = seuil4 ? "RAGE" : "DIL";
       if (seuil4) {
         if (canRage(occupantId, gameState)) {
-          decisions.push(makeDecisionRequest("RAGE", titanId, occupantId, "Tête en Avant"));
+          decisions.push(makeDecisionRequest("RAGE", titanId, occupantId, "Tête en Avant", key));
         } else {
           log.push(`${key} : RAGE sans effet sur Titan ${occupantId} (aucune ressource à prendre).`);
         }
       } else if (canDil(occupantId, gameState)) {
-        decisions.push(makeDecisionRequest("DIL", titanId, occupantId, "Tête en Avant"));
+        decisions.push(makeDecisionRequest("DIL", titanId, occupantId, "Tête en Avant", key));
       } else {
         log.push(`${key} : DIL impossible sur Titan ${occupantId} (< 2 couleurs différentes en Repaire).`);
       }
@@ -1706,7 +1706,7 @@ function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
     // Bagarre. Un Titan touché mais coincé contre un mur ne compte pas.
     if (occupant.cell !== caseAvant) bagarreSet.add(t.id);
     const dilOk = canDil(t.id, gameState);
-    if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, t.id, "Graouhhh"));
+    if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, t.id, "Graouhhh", caseAvant));
     const fatigue = resolveFatigue(titanId, t.id, mancheNumber, titans);
     if (fatigue.ok && fatigue.fromProgrammed) fatiguedProgrammed.push(t.id);
     log.push(
@@ -1873,6 +1873,93 @@ function chebyshevDistance(r1, c1, r2, c2) {
   return Math.max(Math.abs(r1 - r2), Math.abs(c1 - c2));
 }
 
+/* ============================================================
+   BOING BOING — PORTÉE RÉELLE, RÈGLE DES ÉLÉMENTS CONTIGUS
+   ============================================================
+   Livret V36.2, encart de la carte 04 : « Destination au choix · 3 cases
+   max · tous azimuts · obstacles ignorés. [Contigus] Éléments collés =
+   1 seule case. »
+
+   La seconde phrase n'était implémentée NULLE PART : le moteur comme
+   l'interface se contentaient d'une distance de Chebyshev brute, donc un
+   mur de trois bâtiments accolés coûtait 3 cases de saut au lieu d'1.
+   C'est le défaut remonté par Nikola le 2026-08-17 (« le calcul de saut
+   est mal fait avec l'histoire des obstacles contigus »).
+
+   PÉRIMÈTRE DE LA RÈGLE (arbitrage Nikola du 2026-08-17) : « tout obstacle
+   bloquant » — bâtiment encore debout, débris/amas/socle au sol, ET Titan.
+   Un groupe de cases-obstacles adjacentes (voisinage de Moore, comme le
+   reste du jeu) compte pour 1 seule case, quelle que soit sa longueur.
+
+   MODÈLE DE COÛT. Parcours 0-1 BFS sur les 8 directions ; entrer sur une
+   case coûte :
+     · 0 si cette case ET la précédente sont toutes deux des obstacles
+       (on est encore dans le même groupe collé) ;
+     · 1 sinon.
+   La case de départ n'est jamais traitée comme un obstacle, même si le
+   Titan sauteur s'y trouve — sans quoi son propre pion collerait au
+   premier mur voisin et offrirait un saut gratuit.
+
+   Exemple validé avec Nikola, Titan en A1, portée 3 :
+     A1[Titan] A2[bâtiment] A3[débris] A4[Titan] A5[ ] A6[ ]
+   A2·A3·A4 forment un seul groupe collé → 1 case. A5 est donc à 2, A6 à 3,
+   et A6 devient atteignable alors que Chebyshev l'excluait.
+
+   RETOUR : Map cellule → distance, restreinte aux cases où l'on peut
+   ATTERRIR. Un bâtiment encore debout est exclu (saute-mouton autorisé en
+   vol, jamais d'arrêt dessus) ; une case portant un Titan reste incluse,
+   c'est tout l'objet de la carte (DIL, projection, +1 Bagarre). */
+function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, titans = [] }) {
+  const titansByCell = indexerTitans(titans);
+  const isObstacle = (key) => {
+    const b = board[key];
+    if (b && b.blocks.length > 0) return true;
+    if ((looseBlocks[key] || []).length > 0) return true;
+    return Boolean(titansByCell[key]);
+  };
+  const isStandingBuilding = (key) => {
+    const b = board[key];
+    return Boolean(b && b.blocks.length > 0);
+  };
+
+  const dist = new Map([[startCell, 0]]);
+  // 0-1 BFS : les arêtes de coût 0 passent en tête de file, celles de
+  // coût 1 en queue. Une simple file FIFO donnerait des distances fausses
+  // dès qu'un groupe collé se traverse par plusieurs entrées.
+  const deque = [startCell];
+  while (deque.length > 0) {
+    const cell = deque.shift();
+    const d = dist.get(cell);
+    if (d >= maxRange) continue;
+    const r = rowIndex(cell[0]);
+    const c = Number(cell.slice(1));
+    // Le départ ne compte jamais comme obstacle (cf. commentaire ci-dessus).
+    const fromObstacle = cell !== startCell && isObstacle(cell);
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = r + dr, nc = c + dc;
+        if (nr < 0 || nr > 8 || nc < 1 || nc > 9) continue;
+        const key = rowFromIndex(nr) + nc;
+        const cost = fromObstacle && isObstacle(key) ? 0 : 1;
+        const nd = d + cost;
+        if (nd > maxRange) continue;
+        if (dist.has(key) && dist.get(key) <= nd) continue;
+        dist.set(key, nd);
+        if (cost === 0) deque.unshift(key); else deque.push(key);
+      }
+    }
+  }
+
+  const reach = new Map();
+  dist.forEach((d, key) => {
+    if (key === startCell || d === 0) return;
+    if (isStandingBuilding(key)) return; // atterrissage interdit sur un bâtiment debout
+    reach.set(key, d);
+  });
+  return reach;
+}
+
 function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameState) {
   const { board, titans, looseBlocks } = gameState;
   const titan = titans.find((t) => t.id === titanId);
@@ -1885,11 +1972,6 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
 
   // Meme regle que Tete en Avant : +1 case par Adrenaline depensee.
   const maxRange = PORTEE_BOING_BOING + (Number(useAdrenaline) || 0);
-  const distance = chebyshevDistance(originRowIdx, originCol, destRowIdx, destCol);
-  if (distance === 0 || distance > maxRange) {
-    log.push(`⚠️ Destination invalide (distance ${distance}, max ${maxRange}).`);
-    return { log, applied: false, decisions: [] };
-  }
 
   const bldg = board[destKey];
   if (bldg && bldg.blocks.length > 0) {
@@ -1897,6 +1979,15 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
     // pour Boing Boing (obstacle ignoré en vol, cohérent avec "tous azimuts
     // · obstacles ignorés") — mais on ne peut jamais S'ARRÊTER dessus.
     log.push(`${destKey} : Bâtiment — saute-mouton autorisé en vol, mais atterrissage interdit dessus (confirmé Nikola). Destination refusée.`);
+    return { log, applied: false, decisions: [] };
+  }
+
+  // Distance selon la règle « Éléments collés = 1 seule case » du livret,
+  // et non plus une distance de Chebyshev brute (cf. getBoingBoingReach).
+  const reach = getBoingBoingReach(titan.cell, maxRange, gameState);
+  const distance = reach.get(destKey);
+  if (distance === undefined) {
+    log.push(`⚠️ Destination invalide (${destKey} hors de portée, max ${maxRange} en comptant les éléments contigus pour 1 case).`);
     return { log, applied: false, decisions: [] };
   }
 
@@ -1946,16 +2037,34 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
       }
     }
     target.cell = landingKey;
-    // Boing Boing ne badge PAS de RAGE au Seuil 4 (contrairement à Tout
-    // Casser/Tête en Avant) — seul "Tombe sur la case" change
-    // mécaniquement. Le sous-cas Titan est donc toujours un DIL.
-    const dilOk = canDil(occupantId, gameState);
-    if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, occupantId, "Boing Boing"));
+    /* SEUIL 4 SUR BOING BOING = RAGE — ruling Nikola du 2026-08-17.
+       Jusqu'ici le sous-cas Titan était TOUJOURS un DIL : le livret V36.2
+       donne bien une ligne Seuil 4 à cette carte, mais son effet y était
+       « Tombe sur la case », que le résolveur appliquait de toute façon
+       en permanence. Le palier ne changeait donc rigoureusement rien.
+
+       Il badge désormais une RAGE, et le bloc part directement dans le
+       Repaire de l'attaquant (cf. DESTINATION_BLOC_PERDU).
+
+       CE QUI ÉQUILIBRE CE RENFORCEMENT, et c'est l'argument de Nikola :
+       l'énergie vaut `3 + Adrénaline − (distance − 1)`. Sans Adrénaline,
+       le maximum atteignable est 3, sur une case adjacente — le Seuil 4
+       est donc STRICTEMENT INACCESSIBLE gratuitement. Il faut au minimum
+       1 Adrénaline, et le coût monte avec la portée : sauter sur un Titan
+       à 2 cases en RAGE en demande 2, à 3 cases en demande 3. La carte ne
+       devient forte que si on la paie. */
+    const rageOk = seuil4 && canRage(occupantId, gameState);
+    const dilOk = !seuil4 && canDil(occupantId, gameState);
+    if (rageOk) decisions.push(makeDecisionRequest("RAGE", titanId, occupantId, "Boing Boing", destKey));
+    else if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, occupantId, "Boing Boing", destKey));
     const fatigue = resolveFatigue(titanId, occupantId, mancheNumber, titans);
     fatiguedProgrammed = fatigue.ok && fatigue.fromProgrammed ? [occupantId] : [];
     titan.bagarre += bagarreSet.size;
+    const verdict = seuil4
+      ? (rageOk ? "RAGE en attente" : "RAGE sans effet (aucune ressource à prendre)")
+      : (dilOk ? "DIL en attente" : "DIL impossible (< 2 couleurs différentes en Repaire)");
     log.push(
-      `${destKey} : Titan ${occupantId} percuté (énergie ${energie}${seuil4 ? ", Seuil 4" : ""}) → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${dilOk ? "DIL en attente" : "DIL impossible (< 2 couleurs différentes en Repaire)"} · +${bagarreSet.size} Bagarre (Titan ${titanId} → ${titan.bagarre}, FAQ #12) · projeté vers ${target.cell}` +
+      `${destKey} : Titan ${occupantId} percuté (énergie ${energie}${seuil4 ? ", Seuil 4" : ""}) → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${verdict} · +${bagarreSet.size} Bagarre (Titan ${titanId} → ${titan.bagarre}, FAQ #12) · projeté vers ${target.cell}` +
         (landing.hasBounced ? " (après rebond)" : "")
     );
     titan.cell = destKey;
@@ -2164,13 +2273,124 @@ function canRage(defenderId, gameState) {
 // quand DIL est impossible » : il n'y en a pas. Quand la cible n'a pas
 // 2 couleurs différentes en Repaire, l'action est simplement notée au
 // journal et ne produit aucun effet. Le point est clos.
-function canDil(defenderId, gameState) {
+/* ============================================================
+   OPTIONS D'UN DILEMME — couleurs ET socle
+   ============================================================
+   Livret V36.2 : « L'attaquant désigne 2 couleurs différentes du Repaire du
+   défenseur — OU 1 socle tiré au sort si applicable. »
+
+   La seconde moitié de cette phrase n'était pas implémentée : seules les
+   couleurs du Repaire étaient proposées, et les Socles échappaient
+   totalement au Dilemme. Implémentée le 2026-08-17 à la demande de Nikola.
+
+   CE QUE « TIRÉ AU SORT » VEUT DIRE, et c'est la clé de l'équilibre : le
+   Socle est une option ANONYME. L'attaquant peut mettre « un Socle » sur la
+   table, mais il ne choisit pas LEQUEL — un Socle vaut de 1 à 4 points selon
+   la hauteur qu'avait le bâtiment. Sans cet anonymat, le Dilemme deviendrait
+   un sniper à 4 points ; avec lui, l'attaquant prend le risque d'arracher un
+   Socle de 1 pendant qu'un Socle de 4 dort à côté. Symétriquement, la cible
+   qui accepte de lâcher un Socle ne sait pas non plus lequel elle y laisse.
+
+   Le tirage passe par le `pick` semé du domaine, comme la Fatigue : une
+   partie rejouée avec la même graine reste identique au point près.
+
+   CONSÉQUENCE SUR `canDil` : le seuil n'est plus « 2 couleurs différentes »
+   mais « 2 OPTIONS distinctes ». Une cible avec 1 seule couleur et 1 Socle
+   peut désormais subir un Dilemme, alors qu'elle y était immunisée. C'est
+   voulu : c'est exactement la cible que la règle du livret visait avec son
+   « si applicable ».
+
+   L'option Socle est représentée par la clé sentinelle SOCLE_OPTION. Aucune
+   couleur ne porte ce nom, la confusion est impossible.
+============================================================ */
+
+const SOCLE_OPTION = "socle";
+
+function getDilOptions(defenderId, gameState) {
   const t = gameState.titans.find((x) => x.id === defenderId);
-  return new Set(t.repaire).size >= 2;
+  if (!t) return [];
+  const options = [...new Set(t.repaire)];
+  if ((t.socles || []).length > 0) options.push(SOCLE_OPTION);
+  return options;
 }
 
-function makeDecisionRequest(type, attackerId, defenderId, cardLabel) {
-  return { type, attackerId, defenderId, cardLabel };
+function canDil(defenderId, gameState) {
+  // Anciennement `new Set(t.repaire).size >= 2` : les Socles n'entraient pas
+  // dans le compte, donc une cible « 1 couleur + des Socles » était immunisée.
+  return getDilOptions(defenderId, gameState).length >= 2;
+}
+
+/* Retire un Socle AU HASARD du Repaire de la cible et le renvoie sous forme
+   de marqueur (`socleMarker`), directement posable au sol ou transférable.
+   Renvoie null si la cible n'a aucun Socle. */
+function retirerSocleAuSort(defender) {
+  const socles = defender.socles || [];
+  if (socles.length === 0) return null;
+  const idx = randomInt(socles.length);
+  const [valeur] = socles.splice(idx, 1);
+  return { valeur, marker: socleMarker(valeur) };
+}
+
+/* `cellAtImpact` — ruling Nikola du 2026-08-17.
+   « Quand un Titan doit perdre un bloc sans qu'il soit pris par le Titan
+   initiateur, il le perd sur la case où il est, et ensuite il est déplacé
+   si besoin par rapport à l'action. »
+
+   Le bloc perdu en DIL tombe donc au sol sur la case que la victime
+   occupait À L'INSTANT DE L'IMPACT, pas sur celle où elle atterrit après
+   projection. Or les résolveurs projettent la cible immédiatement et
+   n'enfilent que la DEMANDE de décision : au moment où le joueur clique
+   enfin la couleur perdue, `defender.cell` a déjà bougé, et l'information
+   d'origine est perdue. Elle est donc figée ici, à la création de la
+   demande, et c'est elle que l'appelant utilise pour poser le bloc au sol.
+
+   Deux bugs corrigés du même coup côté contrôleur : le bloc perdu en DIL
+   ne tombait nulle part (il disparaissait du jeu), et le bloc pris en
+   RAGE n'arrivait jamais dans le Repaire de l'attaquant. */
+/* OÙ VA LE BLOC PERDU — table par CARTE et par TYPE d'effet.
+   Arbitrage de Nikola du 2026-08-17, carte par carte. Il n'y a délibérément
+   PAS de règle générale : la destination dépend de la carte jouée, et deux
+   cartes peuvent traiter la même RAGE différemment.
+
+   · "sol"     → le bloc tombe sur la case d'impact et redevient ramassable
+                 par n'importe qui, y compris la victime.
+   · "repaire" → le bloc passe directement dans le Repaire de l'attaquant.
+
+   La logique du tableau, telle que Nikola l'a tranchée : plus l'attaquant
+   est LOIN de sa cible, plus il doit se contenter de faire tomber le bloc au
+   sol. Tout Casser frappe tout le Périmètre sans bouger et éparpille donc
+   tout autour de lui — il ne pourra en ramasser qu'un. Tête en Avant charge
+   physiquement la cible et arrache le bloc au Seuil 4. Faut Pas Me Chauffer
+   est un bras de fer gagné de haute lutte : tout revient à l'attaquant.
+
+   NOTE sur l'Adrénaline : une RAGE peut prendre une Adrénaline plutôt qu'un
+   bloc (FAQ #5). Une Adrénaline ne se pose pas au sol — il n'existe pas de
+   pile d'Adrénaline sur le plateau. Elle va donc TOUJOURS à l'attaquant,
+   quelle que soit la ligne du tableau. */
+const DESTINATION_BLOC_PERDU = {
+  "Tout Casser":          { DIL: "sol",     RAGE: "sol" },
+  "Tête en Avant":        { DIL: "sol",     RAGE: "repaire" },
+  // Graouhhh n'a aucune ligne Seuil 4 au livret, et aucune Adrénaline n'y
+  // est dépensable : elle ne peut structurellement pas produire de RAGE.
+  "Graouhhh":             { DIL: "sol" },
+  // Boing Boing gagne sa RAGE au Seuil 4 le 2026-08-17. Inatteignable sans
+  // Adrénaline (énergie max 3), d'où le bloc qui revient à l'attaquant.
+  "Boing Boing":          { DIL: "sol",     RAGE: "repaire" },
+  "Faut Pas Me Chauffer": { DIL: "repaire", RAGE: "repaire" },
+};
+
+function destinationBlocPerdu(cardLabel, type) {
+  // "sol" par défaut : c'est le cas majoritaire, et surtout le plus sûr —
+  // un bloc mal routé vers le sol reste dans la partie et se rattrape, un
+  // bloc mal routé vers un Repaire est un point volé à tort.
+  return (DESTINATION_BLOC_PERDU[cardLabel] || {})[type] || "sol";
+}
+
+function makeDecisionRequest(type, attackerId, defenderId, cardLabel, cellAtImpact = null) {
+  return {
+    type, attackerId, defenderId, cardLabel, cellAtImpact,
+    destination: destinationBlocPerdu(cardLabel, type),
+  };
 }
 
 /* ============================================================
@@ -2838,12 +3058,12 @@ function resolveFautPasMeChauffer(attackerId, defenderId, nTargets, gameState, {
 
   if (mode === "RAGE") {
     if (canRage(defenderId, gameState)) {
-      decisions.push(makeDecisionRequest("RAGE", attackerId, defenderId, "Faut Pas Me Chauffer"));
+      decisions.push(makeDecisionRequest("RAGE", attackerId, defenderId, "Faut Pas Me Chauffer", caseAvant));
     } else {
       log.push(`RAGE sans effet sur Titan ${defenderId} (aucune ressource à prendre).`);
     }
   } else if (canDil(defenderId, gameState)) {
-    decisions.push(makeDecisionRequest("DIL", attackerId, defenderId, "Faut Pas Me Chauffer"));
+    decisions.push(makeDecisionRequest("DIL", attackerId, defenderId, "Faut Pas Me Chauffer", caseAvant));
   } else {
     log.push(`DIL impossible sur Titan ${defenderId} (< 2 couleurs différentes en Repaire).`);
   }
@@ -3168,11 +3388,17 @@ export {
   resolveJeNePartagePas,
   PORTEE_BOING_BOING,
   chebyshevDistance,
+  getBoingBoingReach,
   resolveBoingBoing,
   getEcroulementCells,
   resolveEcroulementAmas,
   canRage,
   canDil,
+  SOCLE_OPTION,
+  getDilOptions,
+  retirerSocleAuSort,
+  DESTINATION_BLOC_PERDU,
+  destinationBlocPerdu,
   makeDecisionRequest,
   getActiveTeleporterCells,
   getFreeAdjacentCells,

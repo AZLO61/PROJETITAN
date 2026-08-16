@@ -1,8 +1,32 @@
 import React from "react";
-import { COLOR_HEX } from "../../domain/index.js";
+import { COLOR_HEX, SOCLE_OPTION, getDilOptions } from "../../domain/index.js";
 import { smallBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
 import { BLOCK_NAME } from "../blockNames.js";
+
+/* Vignette d'une option de Dilemme. Une option est soit une COULEUR du
+   Repaire, soit « un Socle tiré au sort » (livret V36.2). Le Socle est
+   volontairement ANONYME : on affiche combien la cible en possède, jamais
+   leurs valeurs. Ni l'attaquant qui le propose ni la cible qui l'abandonne ne
+   savent lequel partira — c'est ce qui empêche le Dilemme de devenir un
+   sniper à 4 points. */
+function OptionIcon({ option, size = 30 }) {
+  if (option !== SOCLE_OPTION) return <BlockIcon color={option} size={size} />;
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}assets/rules/socle.png`}
+      alt="" aria-hidden="true"
+      style={{ width: size, height: size, objectFit: "contain", filter: "brightness(1.25)", display: "block" }}
+    />
+  );
+}
+
+const optionAccent = (option) => (option === SOCLE_OPTION ? "#d8d8d8" : COLOR_HEX[option]);
+const optionNom = (option) => (option === SOCLE_OPTION ? "Socle" : BLOCK_NAME[option]);
+const compteOption = (defender, option) =>
+  option === SOCLE_OPTION
+    ? (defender.socles || []).length
+    : defender.repaire.filter((x) => x === option).length;
 
 // Bug #6 (tracker) : DIL/RAGE était rendu tout en bas de l'écran (dans
 // DecisionPanels, après plateau 3D + panneau Titans), donc facilement
@@ -36,35 +60,44 @@ export default function DilRageBanner({ vm }) {
 
       {currentDecision.type === "DIL" && currentDecision.stage === "ATTACKER_PICK" && (() => {
         const defender = titanState.players.find((t) => t.id === currentDecision.defenderId);
-        const availableColors = [...new Set(defender.repaire)];
+        // Couleurs du Repaire + « un Socle tiré au sort » si la cible en a.
+        const options = getDilOptions(currentDecision.defenderId, { titans: titanState.players });
         return (
           <div>
-            <p style={{ marginBottom: 6 }}>T{currentDecision.attackerId} désigne 2 couleurs de T{currentDecision.defenderId} :</p>
+            <p style={{ marginBottom: 6 }}>T{currentDecision.attackerId} désigne 2 options chez T{currentDecision.defenderId} :</p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
-              {availableColors.length === 0 && <span style={{ color: "rgba(255,255,255,.5)" }}>Repaire vide.</span>}
-              {availableColors.map((c) => {
+              {options.length === 0 && <span style={{ color: "rgba(255,255,255,.5)" }}>Repaire vide.</span>}
+              {options.map((c) => {
                 const on = currentDecision.attackerChoices.includes(c);
+                const accent = optionAccent(c);
                 return (
                   <button
                     key={c}
                     onClick={() => dilAttackerPick(c)}
-                    title={`${BLOCK_NAME[c]} — ${defender.repaire.filter((x) => x === c).length} en Repaire`}
+                    title={c === SOCLE_OPTION
+                      ? `Un Socle TIRÉ AU SORT parmi les ${compteOption(defender, c)} de T${currentDecision.defenderId} — tu ne choisis pas lequel, et tu ne connais pas sa valeur avant le tirage`
+                      : `${BLOCK_NAME[c]} — ${compteOption(defender, c)} en Repaire`}
                     style={{
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
-                      background: on ? `${COLOR_HEX[c]}33` : "rgba(255,255,255,.06)",
-                      border: `2px solid ${on ? COLOR_HEX[c] : "rgba(255,255,255,.2)"}`,
+                      background: on ? `${accent}33` : "rgba(255,255,255,.06)",
+                      border: `2px ${c === SOCLE_OPTION ? "dashed" : "solid"} ${on ? accent : "rgba(255,255,255,.2)"}`,
                       borderRadius: 10, color: "#fff", padding: "7px 12px", cursor: "pointer",
-                      boxShadow: on ? `0 0 12px ${COLOR_HEX[c]}66` : "none",
+                      boxShadow: on ? `0 0 12px ${accent}66` : "none",
                     }}
                   >
-                    <BlockIcon color={c} size={30} />
+                    <OptionIcon option={c} />
                     <span style={{ fontSize: ".7rem", fontWeight: 700 }}>
-                      {defender.repaire.filter((x) => x === c).length}
+                      {c === SOCLE_OPTION ? `? ×${compteOption(defender, c)}` : compteOption(defender, c)}
                     </span>
                   </button>
                 );
               })}
             </div>
+            {options.includes(SOCLE_OPTION) && (
+              <p style={{ margin: "0 0 8px", fontSize: ".72rem", color: "rgba(255,255,255,.55)" }}>
+                🗿 L'option Socle est tirée au sort : tu ne choisis pas lequel, et personne n'en connaît la valeur avant le tirage.
+              </p>
+            )}
             <button onClick={dilValidateAttackerPick} disabled={currentDecision.attackerChoices.length !== 2}
               style={smallBtn(currentDecision.attackerChoices.length === 2, "#2D8DF5", "#1E3A8A")}>
               Valider ({currentDecision.attackerChoices.length}/2)
@@ -82,7 +115,7 @@ export default function DilRageBanner({ vm }) {
               T{currentDecision.defenderId} : laquelle perdre ?
               {currentDecision.autoAttackerPick && (
                 <span style={{ color: "rgba(255,255,255,.55)", fontSize: ".78rem" }}>
-                  {" "}— l'attaquant n'avait pas le choix, ce sont les 2 seules couleurs de ton Repaire.
+                  {" "}— l'attaquant n'avait pas le choix, ce sont les 2 seules options de ton Repaire.
                 </span>
               )}
             </p>
@@ -91,15 +124,20 @@ export default function DilRageBanner({ vm }) {
                 <button
                   key={c}
                   onClick={() => resolveDilDefenderPick(c)}
-                  title={`Perdre 1 ${BLOCK_NAME[c]}`}
+                  title={c === SOCLE_OPTION
+                    ? `Perdre 1 Socle TIRÉ AU SORT parmi tes ${compteOption(defender, c)} — tu ne choisis pas lequel`
+                    : `Perdre 1 ${BLOCK_NAME[c]}`}
                   style={{
                     display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-                    background: `${COLOR_HEX[c]}22`, border: `2px solid ${COLOR_HEX[c]}`,
+                    background: `${optionAccent(c)}22`,
+                    border: `2px ${c === SOCLE_OPTION ? "dashed" : "solid"} ${optionAccent(c)}`,
                     borderRadius: 10, color: "#fff", padding: "8px 14px", cursor: "pointer",
                   }}
                 >
-                  <BlockIcon color={c} size={34} />
-                  <span style={{ fontSize: ".7rem", fontWeight: 700 }}>Perdre</span>
+                  <OptionIcon option={c} size={34} />
+                  <span style={{ fontSize: ".7rem", fontWeight: 700 }}>
+                    {c === SOCLE_OPTION ? `Socle au hasard (${compteOption(defender, c)})` : "Perdre"}
+                  </span>
                 </button>
               ))}
               <button onClick={resolveDilCancelWithAdrenaline} disabled={!canPay} style={{

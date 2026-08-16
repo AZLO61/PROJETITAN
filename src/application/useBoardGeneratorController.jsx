@@ -16,8 +16,8 @@ const {
   rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, releaseSocle, projectInDirection, estSurLePlateau, indexerTitans, rentrerEnJeu,
   resolveToutCasserBatiments, resolveToutCasserBlocs,
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
-  resolveGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, chebyshevDistance, resolveBoingBoing,
-  canRage, canDil, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
+  resolveGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
+  canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
   getRecuperationPool, resolveRecuperation, programCards, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
   resolveFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, resolveFautPasMeChauffer, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS,
@@ -105,6 +105,15 @@ export function useBoardGeneratorController() {
   const [currentEvent, setCurrentEvent] = useState(null);
   const [rainbowWinnerId, setRainbowWinnerId] = useState(null);
   const [showScoring, setShowScoring] = useState(false);
+  // Fin de partie atteinte. Distinct de `showScoring`, qui n'est qu'un
+  // panneau consultable : `gameOver` arrête réellement la partie et empêche
+  // la boucle de phases de repartir en Programmation. Sans lui, la fin de
+  // partie détectée dans advanceManche relançait quand même une Manche
+  // fantôme — le jeu revenait en Programmation sur la dernière Manche, sans
+  // cartes à programmer, et restait figé là (bug remonté par Nikola le
+  // 2026-08-17 : « je suis repassé en programmation mais en manche 4, donc
+  // il n'y a rien qui se passe »).
+  const [gameOver, setGameOver] = useState(false);
   const [show3D, setShow3D] = useState(false);
   // Page Règles : simple drapeau d'affichage. Le contrôleur n'est jamais
   // démonté quand elle s'ouvre, donc la partie en cours (plateau, Titans,
@@ -126,6 +135,7 @@ export function useBoardGeneratorController() {
     setCurrentEvent(null);
     setRainbowWinnerId(null);
     setShowScoring(false);
+    setGameOver(false);
     setActionLog([]);
     setLooseBlocks({});
     setSelectedTitanId(null);
@@ -174,8 +184,12 @@ export function useBoardGeneratorController() {
     if (raisonsFin.length > 0) {
       setActionLog((prev) => [...prev, `🏁 Fin de partie après ${mancheNumber} Manche(s) :`, ...raisonsFin]);
       setShowScoring(true);
+      setGameOver(true);
       setActivePlayerId(null);
-      return;
+      // `false` = la partie ne continue pas. L'appelant s'en sert pour NE PAS
+      // enchaîner sur la phase suivante : il remettait jusqu'ici la phase à
+      // "Programmation" dans tous les cas, y compris celui-ci.
+      return false;
     }
     // Repere de Manche dans le journal : sans separateur, retrouver ce qui
     // s'est passe au tour precedent obligeait a tout relire.
@@ -213,6 +227,7 @@ export function useBoardGeneratorController() {
     setRecupMode(false);
     setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0);
     setVolDirection(null); // Phase Repos suivante : le nouveau Détonateur devra rechoisir un sens
+    return true; // la partie continue
     // Dépendance sur `state` et non `state.board` : les résolveurs mutent le
     // plateau en place puis forcent le rendu par `setState((p) => ({ ...p }))`,
     // donc la référence de `.board` ne change jamais (même raison que pour le
@@ -256,11 +271,16 @@ export function useBoardGeneratorController() {
   }, [phase, currentEvent, mancheNumber, eventsEnabled]);
 
   useEffect(() => {
+    if (gameOver) return; // la partie est finie : plus aucune phase ne s'enchaîne
     const ids = titanState.ordreJeu;
     const allValidated = ids.every((id) => phaseValidated[id]);
     if (!allValidated) return;
     if (phase === "repos") {
-      advanceManche();
+      // advanceManche renvoie false quand elle a détecté la fin de partie.
+      // La phase ne doit alors PAS repartir en Programmation : c'est ce qui
+      // laissait le jeu figé sur la dernière Manche, écran de score enterré
+      // en bas de page.
+      if (advanceManche() === false) return;
       setPhase(getActivePhases(eventsEnabled)[0]);
       setCurrentEvent(null);
     } else {
@@ -282,7 +302,7 @@ export function useBoardGeneratorController() {
       setPhase(nextPhase);
     }
     setPhaseValidated({});
-  }, [phaseValidated, titanState.ordreJeu, phase, advanceManche, eventsEnabled]);
+  }, [phaseValidated, titanState.ordreJeu, phase, advanceManche, eventsEnabled, gameOver]);
 
   // Rainbow tracking
   // Bug remonté : "5 couleurs" attendu, mais le vert était explicitement
@@ -410,6 +430,9 @@ export function useBoardGeneratorController() {
   // (annulation du tour complet). Dès que activePlayerId change pour un autre
   // joueur, l'historique est vidé (le tour est définitivement joué).
   const [undoStack, setUndoStack] = useState([]);
+  // Incrémenté à chaque rollback. Les panneaux s'en servent pour remettre à
+  // plat leur état local, que la restauration de l'état de jeu ne touche pas.
+  const [undoTick, setUndoTick] = useState(0);
 
   const captureSnapshot = useCallback(() => {
     setUndoStack((prev) => [...prev, {
@@ -466,6 +489,24 @@ export function useBoardGeneratorController() {
     setAiPlayingSync(false);
     setWaitingNextTitan(snap.waitingNextTitan ?? false);
     cardsPlayedCountRef.current = { ...(snap.cardsPlayedCount || {}) };
+    /* Le rollback restaurait le PLATEAU sans remettre l'interface à plat.
+       Restaient debout : le mode Tête en Avant, une répartition d'Amas en
+       cours, une comparaison Faut Pas Me Chauffer, la carte marquée comme
+       cliquée, et les compteurs d'Adrénaline engagés. Résultat remonté par
+       Nikola le 2026-08-17 : après avoir ouvert Boing Boing puis annulé, le
+       plateau restait capté par un mode carte invisible et les clics de
+       déplacement ne produisaient plus rien.
+
+       `undoTick` sert aux panneaux à réinitialiser LEUR état local (l'étape
+       du tour en cours, notamment) : ils ne peuvent pas le déduire du seul
+       état de jeu restauré. */
+    setTeaMode(false);
+    setEcroulement(null);
+    setPendingCardConfirm(null);
+    setFpmcAttackerId(null); setFpmcPendingIds([]); setFpmcCurrent(null);
+    setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0);
+    setAnimating(false); setAnimLabel("");
+    setUndoTick((n) => n + 1);
     setUndoStack((prev) => prev.slice(0, -1));
   }, [undoStack]);
 
@@ -475,6 +516,17 @@ export function useBoardGeneratorController() {
       ...prev,
       [activePlayerId]: { ...(prev[activePlayerId] || {}), move: false },
     }));
+    /* Les quatre compteurs d'Adrénaline sont des réglages d'INTERFACE, pas
+       de l'état de jeu : ils vivaient d'un tour à l'autre sans jamais être
+       remis à zéro, et se retrouvaient appliqués au Titan suivant, qui n'a
+       pas le même stock. D'où le décalage remonté par Nikola le 2026-08-17
+       — un rayon de déplacement ou de saut visiblement trop large, et un
+       sélecteur qui affichait « 2/0 ». Chaque Titan reprend donc son tour à
+       zéro Adrénaline engagée, et l'engage explicitement s'il le veut. */
+    setMoveAdrenaline(0);
+    setTeaAdrenaline(0);
+    setTcAdrenaline(0);
+    setBbAdrenaline(0);
   }, [activePlayerId]);
 
   // ── RETOUR EN JEU D'UN TITAN ÉJECTÉ ──
@@ -861,6 +913,102 @@ export function useBoardGeneratorController() {
     return delta;
   }
 
+  /* VALEUR D'UN SOCLE POUR L'IA — espérance, pas certitude.
+     Le Socle du Dilemme est tiré AU SORT : ni l'attaquant ni la cible ne
+     savent lequel partira. La seule évaluation honnête est donc la valeur
+     MOYENNE des Socles de la cible. Prendre le maximum ferait surestimer
+     l'option à l'IA et lui ferait proposer le Socle bien trop souvent ;
+     prendre le minimum la lui ferait ignorer. */
+  function esperanceSocle(defender) {
+    const socles = defender.socles || [];
+    if (socles.length === 0) return 0;
+    return socles.reduce((s, v) => s + v, 0) / socles.length;
+  }
+
+  /* Ce que l'option rapporte à l'ATTAQUANT s'il la désigne.
+     Quand la carte envoie le bloc au sol, l'attaquant ne gagne rien
+     directement : il ne fait que retirer des points à sa cible. La valeur du
+     coup est donc le COÛT pour la cible, pas le gain marginal chez lui. Sans
+     cette distinction, l'IA évaluait une RAGE de Tout Casser — désormais « au
+     sol » — comme si elle encaissait le bloc. */
+  function valeurOptionDil(option, defender, attacker, allPlayers, decision) {
+    const versRepaire = decision.destination === "repaire";
+    if (option === SOCLE_OPTION) return esperanceSocle(defender);
+    if (versRepaire) return marginalValue(option, attacker.repaire, allPlayers, attacker.id);
+    return marginalValue(option, defender.repaire, allPlayers, defender.id);
+  }
+
+  /* Ce que l'option coûte à la CIBLE si elle l'abandonne. Elle choisit
+     toujours la moins chère des deux. */
+  function coutOptionDil(option, defender, allPlayers) {
+    if (option === SOCLE_OPTION) return esperanceSocle(defender);
+    return marginalValue(option, defender.repaire, allPlayers, defender.id);
+  }
+
+  /* ── OÙ VA LE BLOC PERDU ── (arbitrage Nikola du 2026-08-17, carte par carte)
+     Le bloc quittait le Repaire de la victime et n'arrivait NULLE PART : ni
+     au sol, ni chez l'attaquant. Il disparaissait de la partie, sur le
+     chemin humain comme sur le chemin IA du DIL — et le journal annonçait
+     quand même « T1 prend rouge à T2 ».
+
+     La destination n'est pas une règle générale : elle dépend de la carte
+     jouée ET du type d'effet, et c'est le domaine qui tranche (cf.
+     DESTINATION_BLOC_PERDU). Le contrôleur ne fait qu'appliquer le
+     `destination` figé à la création de la demande, en même temps que la
+     case d'impact. Coder ici un « DIL au sol, RAGE au Repaire » aurait été
+     faux sur trois cartes sur cinq.
+
+     `looseBlocks` est muté en place puis notifié par setLooseBlocks, exactement
+     comme le font les résolveurs du domaine. */
+  const retirerBlocDuRepaire = (defender, color) => {
+    const idx = defender.repaire.indexOf(color);
+    if (idx === -1) return null;
+    return defender.repaire.splice(idx, 1)[0];
+  };
+
+  const poserBlocAuSol = useCallback((cellKey, bloc) => {
+    if (!cellKey || !bloc) return false;
+    const lb = aiLooseBlocksRef.current;
+    if (!lb[cellKey]) lb[cellKey] = [];
+    lb[cellKey].push(bloc);
+    setLooseBlocks((prev) => ({ ...prev }));
+    return true;
+  }, []);
+
+  /* Route le bloc perdu vers sa destination, et renvoie de quoi journaliser.
+     Un seul endroit pour les quatre chemins d'appel (DIL humain, DIL IA,
+     DIL IA↔IA, RAGE humaine) : c'est exactement le motif qui avait laissé la
+     RAGE correcte côté IA et cassée côté humain. */
+  const acheminerBlocPerdu = useCallback((decision, defender, attacker, color) => {
+    const chute = decision.cellAtImpact || defender.cell;
+
+    /* OPTION SOCLE (livret : « ou 1 socle tiré au sort si applicable »).
+       Le Socle suit exactement la même route que les blocs — sol ou Repaire
+       selon la carte — mais il vit dans `socles`, pas dans `repaire`, et sa
+       VALEUR compte pour le score. Au sol, il se pose sous forme de marqueur
+       et redevient ramassable comme n'importe quel débris, en conservant sa
+       valeur. Chez l'attaquant, il rejoint sa pile de Socles. */
+    if (color === SOCLE_OPTION) {
+      const tire = retirerSocleAuSort(defender);
+      if (!tire) return "";
+      if (decision.destination === "repaire" && attacker) {
+        attacker.socles.push(tire.valeur);
+        return ` → Socle de ${tire.valeur} tiré au sort, passe chez Titan ${attacker.id}.`;
+      }
+      return poserBlocAuSol(chute, tire.marker)
+        ? ` → Socle de ${tire.valeur} tiré au sort, tombe au sol en ${chute}, ramassable.`
+        : ` → Socle de ${tire.valeur} tiré au sort.`;
+    }
+
+    const bloc = retirerBlocDuRepaire(defender, color);
+    if (!bloc) return "";
+    if (decision.destination === "repaire" && attacker) {
+      attacker.repaire.push(bloc);
+      return ` → passe dans le Repaire de Titan ${attacker.id}.`;
+    }
+    return poserBlocAuSol(chute, bloc) ? ` → tombe au sol en ${chute}, ramassable.` : ".";
+  }, [poserBlocAuSol]);
+
   const autoResolveIaDecisions = useCallback((rawDecisions, curTitanModes, curPlayers) => {
     const needHuman = [];
     for (const d of rawDecisions) {
@@ -887,49 +1035,63 @@ export function useBoardGeneratorController() {
             const val = marginalValue(color, attacker.repaire, curPlayers, d.attackerId);
             if (val > bestScore) { bestScore = val; bestIdx = idx; }
           });
-          const [taken] = defender.repaire.splice(bestIdx, 1);
-          attacker.repaire.push(taken);
-          setActionLog((prev) => [...prev, `RAGE IA (T${d.attackerId} attaquant) : prend ${taken} (+${bestScore}pts) à T${d.defenderId}.`]);
+          // Ce chemin poussait systématiquement le bloc dans le Repaire de
+          // l'attaquant. C'est juste pour Tête en Avant et Faut Pas Me
+          // Chauffer, faux pour la RAGE de Tout Casser, que Nikola a tranchée
+          // « au sol » le 2026-08-17.
+          const couleur = defender.repaire[bestIdx];
+          const suffixe = acheminerBlocPerdu(d, defender, attacker, couleur);
+          setActionLog((prev) => [...prev, `RAGE IA (T${d.attackerId} attaquant, ${d.cardLabel}) : arrache ${couleur} (+${bestScore}pts) à T${d.defenderId}${suffixe}`]);
         } else if (defender.adrenaline >= 1) {
+          // FAQ #5. Une Adrénaline ne se pose pas au sol : elle va toujours
+          // à l'attaquant, quelle que soit la ligne du tableau des
+          // destinations. Elle n'était créditée nulle part.
           defender.adrenaline -= 1;
+          attacker.adrenaline = (attacker.adrenaline || 0) + 1;
           setActionLog((prev) => [...prev, `RAGE IA (T${d.attackerId} attaquant, FAQ#5) : prend 1 Adrénaline à T${d.defenderId}.`]);
         }
         continue;
       }
 
       // DIL
+      /* Les options sont désormais les couleurs DU REPAIRE PLUS, le cas
+         échéant, « un Socle tiré au sort » (livret). L'IA raisonnait sur
+         `defender.repaire` seul : elle n'aurait jamais proposé le Socle, et
+         aurait planté sur une cible « 1 couleur + 1 Socle » que canDil
+         accepte maintenant. */
+      const optionsDil = getDilOptions(d.defenderId, { titans: curPlayers });
+
       if (atkIsIa && defIsIa) {
         // Les deux étapes auto, comme avant.
-        const rep = defender.repaire;
-        if (rep.length < 1) continue;
-        const ranked = rep
-          .map((color, idx) => ({ color, idx, atkVal: marginalValue(color, attacker.repaire, curPlayers, d.attackerId) }))
+        if (optionsDil.length < 1) continue;
+        const ranked = optionsDil
+          .map((color) => ({ color, atkVal: valeurOptionDil(color, defender, attacker, curPlayers, d) }))
           .sort((a, b) => b.atkVal - a.atkVal);
         const offered = ranked.slice(0, Math.min(2, ranked.length));
         if (offered.length === 0) continue;
+        // Le bloc perdu suit la même route que côté humain : sol ou Repaire
+        // selon la carte jouée (cf. acheminerBlocPerdu). Il n'allait
+        // jusqu'ici nulle part et disparaissait de la partie.
         if (offered.length === 1) {
-          const loseIdx = rep.indexOf(offered[0].color);
-          if (loseIdx !== -1) rep.splice(loseIdx, 1);
-          setActionLog((prev) => [...prev, `DIL IA↔IA : T${d.defenderId} perd ${offered[0].color} (seul choix).`]);
+          const suffixe = acheminerBlocPerdu(d, defender, attacker, offered[0].color);
+          setActionLog((prev) => [...prev, `DIL IA↔IA (${d.cardLabel}) : T${d.defenderId} perd ${offered[0].color} (seul choix)${suffixe}`]);
         } else {
-          const defValued = offered.map((o) => ({ ...o, defVal: marginalValue(o.color, rep, curPlayers, d.defenderId) }));
+          const defValued = offered.map((o) => ({ ...o, defVal: coutOptionDil(o.color, defender, curPlayers) }));
           const defChoice = defValued.reduce((best, curr) => curr.defVal < best.defVal ? curr : best);
-          const loseIdx = rep.indexOf(defChoice.color);
-          if (loseIdx !== -1) rep.splice(loseIdx, 1);
-          setActionLog((prev) => [...prev, `DIL IA↔IA : T${d.defenderId} perd ${defChoice.color} (valeur marginale ${defChoice.defVal}).`]);
+          const suffixe = acheminerBlocPerdu(d, defender, attacker, defChoice.color);
+          setActionLog((prev) => [...prev, `DIL IA↔IA (${d.cardLabel}) : T${d.defenderId} perd ${defChoice.color} (valeur marginale ${defChoice.defVal})${suffixe}`]);
         }
         continue;
       }
 
       if (atkIsIa && !defIsIa) {
-        // Attaquant IA choisit seul ses 2 options (marginalValue la plus
-        // haute pour l'attaquant), puis la décision est poussée à la queue
-        // humaine DÉJÀ au stade DEFENDER_PICK — le défenseur humain choisit
-        // laquelle des 2 il perd (via resolveDilDefenderPick, inchangé).
-        const rep = defender.repaire;
-        if (rep.length < 1) continue;
-        const ranked = rep
-          .map((color) => ({ color, atkVal: marginalValue(color, attacker.repaire, curPlayers, d.attackerId) }))
+        // Attaquant IA choisit seul ses 2 options (la valeur la plus haute
+        // pour lui), puis la décision est poussée à la queue humaine DÉJÀ au
+        // stade DEFENDER_PICK — le défenseur humain choisit laquelle des 2 il
+        // perd (via resolveDilDefenderPick, inchangé).
+        if (optionsDil.length < 1) continue;
+        const ranked = optionsDil
+          .map((color) => ({ color, atkVal: valeurOptionDil(color, defender, attacker, curPlayers, d) }))
           .sort((a, b) => b.atkVal - a.atkVal);
         const offered = [...new Set(ranked.slice(0, Math.min(2, ranked.length)).map((o) => o.color))];
         needHuman.push({ ...d, presetAttackerChoices: offered });
@@ -973,9 +1135,12 @@ export function useBoardGeneratorController() {
         // son étape plutôt que de lui faire cliquer une seule option
         // possible.
         if (!preset && d.type === "DIL") {
-          const defenseur = aiTitanStateRef.current.players.find((t) => t.id === d.defenderId);
-          const couleurs = defenseur ? [...new Set(defenseur.repaire)] : [];
-          if (couleurs.length === 2) preset = couleurs;
+          // Options = couleurs du Repaire + « un Socle tiré au sort » le cas
+          // échéant. Lire `repaire` seul ratait la combinaison unique
+          // « 1 couleur + 1 Socle », et faisait cliquer l'attaquant sur une
+          // liste d'un seul élément qu'il ne pouvait pas valider.
+          const options = getDilOptions(d.defenderId, { titans: aiTitanStateRef.current.players });
+          if (options.length === 2) preset = options;
         }
 
         return {
@@ -1028,29 +1193,33 @@ export function useBoardGeneratorController() {
     if (defender) {
       const defValued = cur.attackerChoices.map((color) => ({
         color,
-        defVal: marginalValue(color, defender.repaire, titanState.players, cur.defenderId),
+        // `coutOptionDil` sait traiter l'option Socle, dont le coût est
+        // l'espérance de valeur (le tirage étant au sort).
+        defVal: coutOptionDil(color, defender, titanState.players),
       }));
       const defChoice = defValued.reduce((best, curr) => (curr.defVal < best.defVal ? curr : best));
-      const idx = defender.repaire.indexOf(defChoice.color);
-      if (idx !== -1) defender.repaire.splice(idx, 1);
-      setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} (IA) perd 1 bloc ${defChoice.color} (décision automatique).`]);
+      const attacker = titanState.players.find((t) => t.id === cur.attackerId);
+      const suffixe = acheminerBlocPerdu(cur, defender, attacker, defChoice.color);
+      const quoi = defChoice.color === SOCLE_OPTION ? "1 Socle" : `1 bloc ${defChoice.color}`;
+      setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} (IA) perd ${quoi} (décision automatique)${suffixe}`]);
       setTitanState((p) => ({ ...p, players: [...p.players] }));
     }
     setDecisionQueue((prev) => prev.slice(1));
-  }, [decisionQueue, titanState.players]);
+  }, [decisionQueue, titanState.players, acheminerBlocPerdu]);
 
   const resolveDilDefenderPick = useCallback(
     (color) => {
       const cur = decisionQueue[0];
       if (!cur) return;
       const defender = titanState.players.find((t) => t.id === cur.defenderId);
-      const idx = defender.repaire.indexOf(color);
-      if (idx !== -1) defender.repaire.splice(idx, 1);
-      setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} perd 1 bloc ${color}.`]);
+      const attacker = titanState.players.find((t) => t.id === cur.attackerId);
+      const suffixe = acheminerBlocPerdu(cur, defender, attacker, color);
+      const quoi = color === SOCLE_OPTION ? "1 Socle" : `1 bloc ${color}`;
+      setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} perd ${quoi}${suffixe}`]);
       setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
       setDecisionQueue((prev) => prev.slice(1));
     },
-    [decisionQueue, titanState.players]
+    [decisionQueue, titanState.players, acheminerBlocPerdu]
   );
 
   const resolveDilCancelWithAdrenaline = useCallback(() => {
@@ -1069,21 +1238,25 @@ export function useBoardGeneratorController() {
       const cur = decisionQueue[0];
       if (!cur) return;
       const defender = titanState.players.find((t) => t.id === cur.defenderId);
-      const idx = defender.repaire.indexOf(color);
-      if (idx !== -1) defender.repaire.splice(idx, 1);
-      setActionLog((prevLog) => [...prevLog, `RAGE : Titan ${cur.attackerId} prend ${color} à Titan ${cur.defenderId}.`]);
+      const attacker = titanState.players.find((t) => t.id === cur.attackerId);
+      const suffixe = acheminerBlocPerdu(cur, defender, attacker, color);
+      setActionLog((prevLog) => [...prevLog, `RAGE (${cur.cardLabel}) : Titan ${cur.attackerId} arrache ${color} à Titan ${cur.defenderId}${suffixe}`]);
       setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
       setDecisionQueue((prev) => prev.slice(1));
     },
-    [decisionQueue, titanState.players]
+    [decisionQueue, titanState.players, acheminerBlocPerdu]
   );
 
   const resolveRagePickAdrenaline = useCallback(() => {
     const cur = decisionQueue[0];
     if (!cur) return;
     const defender = titanState.players.find((t) => t.id === cur.defenderId);
+    const attacker = titanState.players.find((t) => t.id === cur.attackerId);
     if ((defender.adrenaline || 0) < 1) return;
     defender.adrenaline -= 1;
+    // FAQ #5 : l'Adrénaline est une ressource comme une autre. RAGE la
+    // PREND, elle ne s'évapore pas — l'attaquant la gagne.
+    if (attacker) attacker.adrenaline = (attacker.adrenaline || 0) + 1;
     setActionLog((prevLog) => [...prevLog, `RAGE (FAQ#5) : Titan ${cur.attackerId} prend 1 Adrénaline à Titan ${cur.defenderId}.`]);
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setDecisionQueue((prev) => prev.slice(1));
@@ -1184,6 +1357,28 @@ export function useBoardGeneratorController() {
     },
     [volDirection, mancheNumber, titanState.ordreJeu, titanState.players, titanState.detonateur, captureSnapshot]
   );
+
+  /* PHASE REPOS : LE SENS APPARTIENT AU DÉTONATEUR, PAS AU PORTEUR DE LA
+     TABLETTE. Bug remonté par Nikola le 2026-08-17 : « si c'est une IA qui a
+     le jeton Détonateur, ce n'est pas à moi de choisir le sens. » La bannière
+     posait les deux boutons à l'écran quel que soit le propriétaire du jeton,
+     et c'était donc systématiquement l'humain qui tranchait un choix qui ne
+     lui revenait pas — un choix qui décide de qui vole qui pour toute la
+     Manche.
+
+     Une IA Détonateur tranche donc elle-même, ici, dès l'ouverture de la
+     Phase. Le tirage est neutre (aucune des deux directions n'est
+     structurellement meilleure : la chaîne est circulaire, chacun vole et se
+     fait voler exactement une fois dans les deux sens), et il passe par le
+     `pick` du domaine, donc par le même RNG que le reste de la partie. */
+  useEffect(() => {
+    if (phase !== "repos" || volDirection || gameOver) return;
+    const detId = titanState.detonateur;
+    if (titanModes[detId] !== "ia") return;
+    const sens = pick(["gauche", "droite"]);
+    setActionLog((prev) => [...prev, `🤖 Titan ${detId} (IA, Détonateur) choisit le sens de la chaîne.`]);
+    chooseVolDirection(sens);
+  }, [phase, volDirection, gameOver, titanState.detonateur, titanModes, chooseVolDirection]);
 
   const canPlayCard = useCallback(
     (cardId) => {
@@ -1315,7 +1510,9 @@ export function useBoardGeneratorController() {
   // obstacle valide dans la portée (3 + éventuellement +1 Adrénaline).
   // Obstacle valide = bâtiment avec blocs, bloc libre, socle libre au sol
   // (bâtiment vide sans bloc libre = couloir, on traverse), Titan adverse.
-  const teaMaxRange = PORTEE_TETE_EN_AVANT + teaAdrenaline;
+  // Bornée au stock réel, comme Boing Boing et le Mouvement gratuit : sans
+  // cela le plateau surligne des cibles de charge que la résolution refuse.
+  const teaMaxRange = PORTEE_TETE_EN_AVANT + Math.min(teaAdrenaline, selectedTitan?.adrenaline || 0);
   const teaTargets = selectedTitan && teaMode
     ? (() => {
         const targets = new Map(); // key → { dr, dc }
@@ -1425,19 +1622,30 @@ export function useBoardGeneratorController() {
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
   }, [selectedTitanId, direction, state.board, titanState.players, looseBlocks, enqueueDecisions, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
 
-  const bbMaxRange = PORTEE_BOING_BOING + bbAdrenaline;
-  const bbReachable = selectedTitan
-    ? (() => {
-        const set = new Set();
-        const oR = rowIndex(selectedTitan.cell[0]);
-        const oC = Number(selectedTitan.cell.slice(1));
-        for (let r = 0; r < 9; r++) for (let c = 1; c <= 9; c++) {
-          const d = chebyshevDistance(oR, oC, r, c);
-          if (d > 0 && d <= bbMaxRange) set.add(rowFromIndex(r) + c);
-        }
-        return set;
-      })()
-    : new Set();
+  /* PORTÉE AFFICHÉE = PORTÉE RÉELLE.
+     Deux écarts corrigés ici, tous deux remontés par Nikola le 2026-08-17.
+
+     1) L'interface dessinait un simple carré de Chebyshev autour du Titan,
+        alors que le livret compte les éléments contigus pour 1 seule case.
+        Le plateau proposait donc des cases hors de portée et en cachait
+        d'autres, réellement atteignables derrière un mur. Le calcul passe
+        sur `getBoingBoingReach`, la MÊME fonction que le résolveur : ce que
+        le joueur voit ne peut plus diverger de ce que le moteur accepte.
+
+     2) La portée ajoutait `bbAdrenaline` sans jamais la borner au stock
+        réel du Titan. Un compteur laissé à 2 par un tour précédent gonflait
+        le rayon affiché d'un Titan qui n'avait plus une seule Adrénaline —
+        « j'ai beaucoup trop de cases en choix ». La résolution, elle,
+        bornait déjà (`Math.min`) : l'affichage promettait un saut que le
+        moteur refusait. Même borne des deux côtés désormais. */
+  const bbAdrenalineDispo = Math.min(bbAdrenaline, selectedTitan?.adrenaline || 0);
+  const bbMaxRange = PORTEE_BOING_BOING + bbAdrenalineDispo;
+  const bbReach = selectedTitan
+    ? getBoingBoingReach(selectedTitan.cell, bbMaxRange, {
+        board: state.board, looseBlocks, titans: titanState.players,
+      })
+    : new Map();
+  const bbReachable = new Set(bbReach.keys());
 
   const toggleBbMode = useCallback(() => {
     setBbMode((m) => { const next = !m; if (next) { setTeaMode(false); setGraouMode(false); setJnpMode(false); setJnpSelected([]); } return next; });
@@ -1470,7 +1678,13 @@ export function useBoardGeneratorController() {
   // qui peut forcer un Titan éjecté à dépenser une Adrénaline pour retrouver
   // de la marge (ruling Nikola du 2026-08-16).
   const coutRentreeCeTour = coutRentree && coutRentree.titanId === selectedTitanId ? coutRentree.cout : 0;
-  const moveMaxRange = Math.max(0, 2 + moveAdrenaline - coutRentreeCeTour);
+  // Même correction que sur Boing Boing : `moveAdrenaline` est un compteur
+  // d'interface, il n'était borné au stock réel du Titan qu'au moment de la
+  // résolution. Un compteur resté à 2 d'un tour précédent faisait surligner
+  // un rayon de 4 cases à un Titan sans une seule Adrénaline — le plateau
+  // proposait des cases que `jouerMouvementGratuit` refusait ensuite.
+  const moveAdrenalineDispo = Math.min(moveAdrenaline, selectedTitan?.adrenaline || 0);
+  const moveMaxRange = Math.max(0, 2 + moveAdrenalineDispo - coutRentreeCeTour);
 
   // ── RÉPARTITION DES DÉBRIS D'UN AMAS ÉCROULÉ ──
   // Cases proposées pour le PROCHAIN débris. Elles changent à chaque pose :
@@ -2032,6 +2246,7 @@ export function useBoardGeneratorController() {
     setRainbowWinnerId,
     showScoring,
     setShowScoring,
+    gameOver,
     show3D,
     setShow3D,
     showRules,
@@ -2121,6 +2336,7 @@ export function useBoardGeneratorController() {
     waitingNextTitan,
     setWaitingNextTitan,
     undoStack,
+    undoTick,
     setUndoStack,
     captureSnapshot,
     prevActivePlayerRef,
@@ -2163,6 +2379,7 @@ export function useBoardGeneratorController() {
     jouerGraouhhh,
     bbMaxRange,
     bbReachable,
+    bbReach,
     toggleBbMode,
     bbSelectCell,
     jouerBoingBoing,

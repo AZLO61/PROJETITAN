@@ -69,7 +69,11 @@ export default function BoardPanel({ vm }) {
   React.useEffect(() => {
     if (!vm.animating) vm.setPendingCardConfirm(null);
   }, [vm.animating, vm.activePlayerId]);
-  React.useEffect(() => { setMoveSkipped(false); }, [vm.activePlayerId]);
+  // `undoTick` : un rollback restaure le plateau mais pas l'étape du tour.
+  // Sans ça, un joueur qui avait cliqué « Passer aux cartes » restait sans
+  // panneau de déplacement après annulation, et ses clics sur le plateau
+  // ne produisaient plus rien (bug remonté le 2026-08-17).
+  React.useEffect(() => { setMoveSkipped(false); }, [vm.activePlayerId, vm.undoTick]);
   const {
     nbJoueurs,
     setNbJoueurs,
@@ -282,16 +286,36 @@ export default function BoardPanel({ vm }) {
   // `waitingNextTitan` marque la fin d'un round : c'est le seul moment ou
   // le ramassage a lieu d'etre propose.
   const roundJoue = waitingNextTitan && titanModes[activePlayerId] !== "ia";
+  /* DÉCISION BLOQUANTE EN ATTENTE.
+     Bug remonté par Nikola le 2026-08-17 : « si un RAGE ou un Dilemme est
+     provoqué pour un joueur humain, il ne peut pas finir son tour sans
+     valider cette phase, et même le panneau Ramasser n'apparaît pas tant
+     que ce n'est pas le cas. »
+
+     La carte était résolue, `waitingNextTitan` passait à true, et le
+     panneau de fin de tour proposait « ▶ Titan suivant » PAR-DESSUS un
+     DIL/RAGE encore en attente. On pouvait donc passer la main en laissant
+     une décision non résolue dans la file — elle réapparaissait au tour du
+     joueur suivant, hors contexte. Le ramassage souffrait du même défaut :
+     proposé avant que le sort des blocs de la victime soit tranché, alors
+     que le DIL peut justement en faire tomber un dans le Périmètre. */
+  const decisionEnAttente = Boolean(currentDecision);
+  /* Le panneau Ramasser ne s'affiche que s'il y a réellement quelque chose
+     à ramasser (`recupPool.size > 0`). Il se montrait aussi quand le
+     Périmètre était vide, avec son seul bouton grisé « (rien à portée) » —
+     une étape de plus à lire et à passer pour rien. */
   const stepRecup = phase === "action"
     && selectedTitan
     && roundJoue
+    && !decisionEnAttente
     && canUseRecupPassif(selectedTitan.id)
-    && !passifUsed[selectedTitan.id]?.recup;
+    && !passifUsed[selectedTitan.id]?.recup
+    && recupPool.size > 0;
   // Fin de tour : le round est joue, et le ramassage est fait ou impossible.
   // Les deux panneaux etaient rendus sous des conditions differentes, ce qui
   // les faisait cohabiter quand un ramassage etait possible, et laissait le
   // joueur sans bouton "Titan suivant" dans certains cas.
-  const finDeTour = roundJoue && !stepRecup;
+  const finDeTour = roundJoue && !stepRecup && !decisionEnAttente;
   const stepMove = phase === "action"
     && selectedTitan
     && !roundJoue
@@ -362,6 +386,28 @@ export default function BoardPanel({ vm }) {
               Remplace toutes les etapes : quand la carte est resolue, la
               seule action possible est de passer la main. Le bouton etait
               relegue en bas du panneau des cartes, apres tout le reste. */}
+          {/* Décision bloquante en attente : le panneau ne propose plus rien
+              d'autre, et dit où aller la résoudre. Le bandeau DIL/RAGE vit
+              tout en haut de l'écran, il peut être hors du champ visible
+              quand on vient de jouer sa carte en bas de page. */}
+          {roundJoue && decisionEnAttente && (
+            <div style={{
+              background: "rgba(227,35,71,.14)", border: "2px solid rgba(227,35,71,.55)",
+              borderRadius: 12, padding: "14px 16px", marginBottom: 10, textAlign: "center",
+            }}>
+              <div style={{
+                fontFamily: "'Bowlby One', sans-serif", fontSize: ".95rem",
+                color: "#ff8fa3", marginBottom: 4,
+              }}>
+                {currentDecision.type === "RAGE" ? "RAGE à résoudre" : "Dilemme à résoudre"}
+              </div>
+              <div style={{ fontSize: ".76rem", color: "rgba(255,255,255,.7)" }}>
+                Ton tour ne peut pas se terminer tant que ce n'est pas tranché.
+                Le choix t'attend tout en haut de l'écran ☝️
+              </div>
+            </div>
+          )}
+
           {finDeTour && (
             <div style={{
               background: "rgba(255,217,61,.12)", border: "2px solid rgba(255,217,61,.5)",

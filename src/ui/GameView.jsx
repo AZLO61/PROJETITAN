@@ -27,10 +27,31 @@ export default function GameView(vm) {
           bloquante "Vol Phase Repos" suit maintenant le même traitement
           visuel et la même position qu'une décision DIL/RAGE. */}
       <RepoVolBanner vm={vm} />
-      <RoundPanels vm={vm} />
-      <BoardPanel vm={vm} />
-      <TitanPanel vm={vm} />
-      <DecisionPanels vm={vm} />
+      {/* ── FIN DE PARTIE ──
+          Bug remonté par Nikola le 2026-08-17 : « fais bien la transition de
+          fin de partie, que je puisse placer mon Bloc Vert dans une
+          catégorie ; là c'est bloqué, je ne peux rien faire alors que j'ai
+          bien un Vert. Je suis repassé en Programmation mais en Manche 4,
+          donc il n'y a rien qui se passe. »
+
+          La partie repartait pour une Manche fantôme (corrigé côté
+          contrôleur, cf. `gameOver`) ET l'écran de score restait enterré tout
+          en bas de la page, sous le plateau, les panneaux de tour et le
+          journal. Le placement secret des Verts, qui est le tout dernier
+          geste de la partie, était donc invisible.
+
+          Une fois la partie finie, on ne montre plus QUE le décompte : le
+          plateau, les panneaux de tour et les décisions n'ont plus d'objet. */}
+      {vm.gameOver ? (
+        <DecisionPanels vm={vm} />
+      ) : (
+        <>
+          <RoundPanels vm={vm} />
+          <BoardPanel vm={vm} />
+          <TitanPanel vm={vm} />
+          <DecisionPanels vm={vm} />
+        </>
+      )}
       <ScoringPanel vm={vm} />
 
       {/* Page Règles en superposition. Le reste de l'arbre React n'est pas
