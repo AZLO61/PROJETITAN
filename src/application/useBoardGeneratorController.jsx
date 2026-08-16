@@ -17,6 +17,7 @@ const {
   resolveToutCasserBatiments, resolveToutCasserBlocs,
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
   resolveGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
+  choisirRepliIA, appliquerRepli,
   canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
   getRecuperationPool, resolveRecuperation, retirerPileVide, programCards, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
@@ -617,12 +618,15 @@ export function useBoardGeneratorController() {
   const aiPassifUsedRef = useRef(passifUsed);
   const aiActivePlayerIdRef = useRef(activePlayerId);
   const aiTitanModesRef = useRef(titanModes);
+  // Profils des IA, lus au moment de trancher un repli (cf. enqueueReplis).
+  const aiTitanProfilesRef = useRef(titanProfiles);
   useEffect(() => { aiStateRef.current = state; }, [state]);
   useEffect(() => { aiTitanStateRef.current = titanState; }, [titanState]);
   useEffect(() => { aiLooseBlocksRef.current = looseBlocks; }, [looseBlocks]);
   useEffect(() => { aiPassifUsedRef.current = passifUsed; }, [passifUsed]);
   useEffect(() => { aiActivePlayerIdRef.current = activePlayerId; }, [activePlayerId]);
   useEffect(() => { aiTitanModesRef.current = titanModes; }, [titanModes]);
+  useEffect(() => { aiTitanProfilesRef.current = titanProfiles; }, [titanProfiles]);
   // Les minuteries de l'IA lisent le coût de rentrée bien après le rendu :
   // il leur faut une ref à jour, pas la valeur figée par la fermeture.
   const coutRentreeRef = useRef(coutRentree);
@@ -1713,16 +1717,38 @@ export function useBoardGeneratorController() {
   const ecroulementCells = ecroulement
     ? getEcroulementCells(ecroulement.cellKey, { board: state.board, looseBlocks }, ecroulement.choix).eligibles
     : [];
-  /* Un repli n'est proposé au joueur que s'il a réellement le choix. Les
-     replis d'une IA sont résolus tout seuls sur la case par défaut : elle
-     n'a pas d'interface, et la faire trancher au hasard ajouterait du bruit
-     dans les campagnes sans rien apprendre. */
+  /* Un repli n'est proposé que s'il y a réellement un choix à faire.
+     Ceux d'une IA sont joués ICI, tout de suite, par `choisirRepliIA` :
+     c'est un vrai coup, pas une formalité — poser un débris dans son propre
+     Périmètre le rend ramassable au tour suivant, le poser dans celui d'un
+     adversaire le lui offre. L'IA simule donc chaque case et lit le vrai
+     barème, comme pour un déplacement ou une carte, et sa FORCE joue de la
+     même façon : l'Expert prend la meilleure case, le Novice tire parmi ses
+     trois premières. */
   const enqueueReplis = useCallback((liste) => {
     if (!liste || liste.length === 0) return;
     const modes = aiTitanModesRef.current;
-    const aTrancher = liste.filter(
-      (r) => r.cases.length > 1 && modes[r.initiatorId] !== "ia"
-    );
+    const profils = aiTitanProfilesRef.current;
+    const aTrancher = [];
+
+    for (const r of liste) {
+      if (r.cases.length <= 1) continue;
+      if (modes[r.initiatorId] !== "ia") { aTrancher.push(r); continue; }
+
+      const etat = {
+        board: aiStateRef.current.board,
+        looseBlocks: aiLooseBlocksRef.current,
+        titans: aiTitanStateRef.current.players,
+      };
+      const choix = choisirRepliIA(r, etat, profils[r.initiatorId]);
+      if (choix && choix !== r.defaut) {
+        appliquerRepli(r, choix, etat);
+        setActionLog((prev) => [...prev, `🤖 Titan ${r.initiatorId} (IA) pose l'élément arrêté en ${choix} plutôt qu'en ${r.defaut}.`]);
+      }
+    }
+
+    setLooseBlocks((prev) => ({ ...prev }));
+    setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     if (aTrancher.length > 0) setRepliQueue((prev) => [...prev, ...aTrancher]);
   }, []);
 

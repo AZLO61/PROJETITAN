@@ -232,7 +232,7 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
         const coup = planCardPlay(id, etat, profil, manche);
         const cardId = coup?.cardId ?? titan.programmed[0];
         if (coup) {
-          appliquerCoup(coup, id, etat, manche);
+          appliquerCoup(coup, id, etat, manche, profil);
           controler(`carte:${cardId}`, manche, round, id);
           cartesJouees[cardId] = (cartesJouees[cardId] || 0) + 1;
         } else {

@@ -706,18 +706,31 @@ function releaseSocle(cellKey, board, looseBlocks) {
    pas de bâtiment debout, et pas de Titan déjà là quand c'est un Titan qu'on
    déplace (un débris, lui, peut reposer sur la case d'un Titan).
 ============================================================ */
-function getCasesRepliDebris(depuis, cible, dr, dc, { board, titans = [], movingTitanId = null } = {}) {
+function getCasesRepliDebris(depuis, cible, dr, dc, { board, looseBlocks = {}, titans = [], movingTitanId = null } = {}) {
   const cr = rowIndex(cible[0]);
   const cc = Number(cible.slice(1));
   const titansByCell = indexerTitans(titans);
 
-  const posable = (key) => {
+  /* CE QUI COMPTE COMME « LIBRE » — précision de Nikola du 2026-08-17 :
+     « la coordonnée en plus n'est valable que si c'est libre ; en tout cas
+     elle ne peut pas cohabiter avec un bâtiment ».
+
+     Une case de repli ne s'ouvre donc que si elle est réellement vide : pas
+     de bâtiment debout, pas de débris déjà au sol, pas de Titan. L'élément
+     est ARRÊTÉ, il n'a plus la puissance de rien bousculer — lui laisser
+     former un amas ou se poser sur quelqu'un reviendrait à lui accorder
+     gratuitement l'effet qu'il vient justement de rater.
+
+     SEULE EXCEPTION, sa propre case d'origine. Elle est toujours proposée,
+     même occupée : il en vient, il y était, il peut y rester. C'est le
+     « il peut revenir sur la case où il était » du ruling, et c'est aussi ce
+     qui garantit qu'il reste toujours au moins une issue. */
+  const libre = (key) => {
     const b = board && board[key];
     if (b && b.blocks && b.blocks.length > 0) return false;
-    if (movingTitanId != null) {
-      const occ = titansByCell[key];
-      if (occ && occ !== movingTitanId) return false;
-    }
+    if ((looseBlocks[key] || []).length > 0) return false;
+    const occ = titansByCell[key];
+    if (occ && occ !== movingTitanId) return false;
     return true;
   };
 
@@ -753,7 +766,11 @@ function getCasesRepliDebris(depuis, cible, dr, dc, { board, titans = [], moving
     });
   }
 
-  return [...new Set(candidates)].filter((k) => k !== cible && posable(k));
+  // La case d'origine échappe au filtre : l'élément en vient, il peut y
+  // rester quoi qu'il s'y trouve. Toutes les autres doivent être vides.
+  return [...new Set(candidates)].filter(
+    (k) => k !== cible && (k === depuis || libre(k))
+  );
 }
 
 function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
@@ -827,7 +844,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
   let choixRepli = null;
   const noterRepli = (depuis, cible) => {
     const cases = getCasesRepliDebris(depuis, cible, curDr, curDc, {
-      board, titans, movingTitanId: ctx.movingTitanId ?? null,
+      board, looseBlocks, titans, movingTitanId: ctx.movingTitanId ?? null,
     });
     if (cases.length > 0) choixRepli = { depuis, cible, dr: curDr, dc: curDc, cases };
   };

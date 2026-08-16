@@ -310,8 +310,27 @@ export function appliquerDecisions(decisions, etat) {
  * raisonnement de l'IA passent ainsi par exactement le même code, il ne
  * peut pas y avoir de divergence entre ce que l'IA croit et ce qui arrive.
  */
-export function appliquerCoup(coup, titanId, etat, mancheNumber) {
-  return simulerCarte(coup, titanId, etat, mancheNumber);
+export function appliquerCoup(coup, titanId, etat, mancheNumber, profile = makeProfile()) {
+  /* Application RÉELLE d'un coup (simulateur et campagnes), par opposition
+     aux simulations de recherche menées dans `planCardPlay`.
+
+     La différence tient au collecteur de replis. Pendant la recherche, on
+     évalue des centaines de coups : y imbriquer une optimisation du repli
+     ferait exploser le coût pour un gain marginal, et l'IA note donc le
+     résultat par défaut. Au moment de jouer pour de vrai, en revanche, le
+     repli est un choix à part entière — l'IA le tranche avec la même
+     méthode que tout le reste, en simulant chaque case et en lisant le vrai
+     barème (cf. choisirRepliIA). Sans ça, une IA en campagne laisserait
+     tomber ses débris n'importe où, et le simulateur mesurerait une force
+     qui n'est pas celle qu'un joueur affronte. */
+  const replis = [];
+  const res = simulerCarte(coup, titanId, { ...etat, replis }, mancheNumber);
+  for (const repli of replis) {
+    if (repli.cases.length <= 1) continue;
+    const choix = choisirRepliIA(repli, etat, profile);
+    if (choix) appliquerRepli(repli, choix, etat);
+  }
+  return res;
 }
 
 /**
@@ -543,4 +562,68 @@ export function planProgrammation(titanId, gameState, profile = makeProfile(), m
     .sort((a, b) => b.note - a.note)
     .slice(0, nbCartes)
     .map((c) => c.cardId);
+}
+
+/* ── REPLI D'UN ÉLÉMENT ARRÊTÉ FAUTE DE PUISSANCE ─────────────
+   Ruling Nikola du 2026-08-17 : quand un élément projeté n'a pas la
+   puissance de franchir ce qu'il percute, le TITAN INITIATEUR choisit où il
+   se pose. C'est donc un vrai coup, et l'IA doit le jouer comme tel.
+
+   Aucune heuristique écrite à la main ici — ce serait rompre le principe
+   fondateur du module (cf. l'en-tête de aiEvaluation.js). On simule chaque
+   case possible et on lit le VRAI barème via `evaluatePosition`. Tout en
+   découle sans qu'une seule règle de placement soit écrite :
+
+   · un débris qu'on peut faire tomber dans son propre Périmètre devient
+     ramassable au tour suivant, donc `valeurAPortee` monte, donc l'IA le
+     rapproche d'elle ;
+   · le même débris lâché dans le Périmètre d'un adversaire lui profite à
+     LUI, ce que l'Expert voit puisqu'il évalue en différentiel — il évitera
+     spontanément de servir le leader ;
+   · un Titan adverse qu'on repousse se retrouve noté à travers ce qu'il
+     aura sous la main, donc l'IA le pose là où il n'y a rien.
+
+   La FORCE joue naturellement : `chooseAmongBest` fait choisir le meilleur
+   coup à l'Expert et tirer parmi les trois premiers au Novice, exactement
+   comme pour un déplacement ou une carte. Un Novice se trompera donc parfois
+   de case, de façon plausible.
+
+   `repli` est l'entrée produite par projectInDirection :
+   { titanId, defaut, cases, cible, initiatorId }. */
+export function choisirRepliIA(repli, gameState, profile = makeProfile()) {
+  if (!repli || !repli.cases || repli.cases.length === 0) return null;
+  if (repli.cases.length === 1) return repli.cases[0];
+
+  const initiateur = repli.initiatorId;
+  const candidats = [];
+  for (const cellKey of repli.cases) {
+    const etat = cloneEtat(gameState);
+    const note = noterApres(initiateur, etat, profile, (e) => appliquerRepli(repli, cellKey, e));
+    if (note !== null) candidats.push({ cellKey, note });
+  }
+  const choix = chooseAmongBest(candidats, profile);
+  // Aucun candidat évaluable : on garde la case où l'élément s'est arrêté.
+  return choix ? choix.cellKey : repli.defaut;
+}
+
+/* Applique un repli sur un état de jeu. Sert à l'IA pour simuler, et reste
+   la seule description de « ce que déplacer veut dire » — le contrôleur en
+   fait autant sur l'état réel quand c'est un humain qui tranche.
+
+   Deux natures d'élément, d'où `titanId` : un Titan nommément, ou — à null —
+   le débris qui vient d'être posé sur la case par défaut. */
+export function appliquerRepli(repli, cellKey, etat) {
+  if (!repli || cellKey === repli.defaut) return;
+  if (repli.titanId != null) {
+    const titan = (etat.titans || []).find((t) => t.id === repli.titanId);
+    if (titan) titan.cell = cellKey;
+    return;
+  }
+  const lb = etat.looseBlocks || (etat.looseBlocks = {});
+  const pile = lb[repli.defaut] || [];
+  const bloc = pile.pop();
+  if (bloc === undefined) return;
+  if (pile.length === 0) delete lb[repli.defaut];
+  if (!lb[cellKey]) lb[cellKey] = [];
+  lb[cellKey].push(bloc);
 }

@@ -19,6 +19,8 @@ import {
   projectInDirection,
 } from "../../src/domain/gameRules.js";
 import { setSeed } from "../../src/domain/rng.js";
+import { choisirRepliIA, appliquerRepli } from "../../src/domain/aiPlanner.js";
+import { FORCES, TEMPERAMENTS, makeProfile } from "../../src/domain/aiEvaluation.js";
 
 /* Rulings et corrections du 2026-08-17, remontés par Nikola en test à la
    table. Le README impose un test par règle modifiée : c'est ce fichier qui
@@ -556,14 +558,28 @@ describe("Repli d'un élément sans la puissance de passer", () => {
     expect(getCasesRepliDebris("B9", "C9", 1, 0, { board })).not.toContain("B8");
   });
 
-  it("un Titan ne se replie jamais sur la case d'un autre Titan", () => {
-    // Un débris, lui, a le droit de reposer sur la case d'un Titan.
+  it("une case de repli doit être LIBRE : ni Titan, ni débris déjà au sol", () => {
+    // Précision de Nikola du 2026-08-17 : « la coordonnée en plus n'est
+    // valable que si c'est libre ». L'élément est ARRÊTÉ, il n'a plus la
+    // puissance de rien bousculer — lui laisser former un amas ou se poser
+    // sur quelqu'un lui accorderait gratuitement l'effet qu'il vient de
+    // rater. Vaut pour un Titan projeté comme pour un débris.
     const titans = [{ id: 1, cell: "B9" }, { id: 2, cell: "B8" }];
-    const avecTitan = getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans, movingTitanId: 1 });
-    const debris = getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans });
+    expect(getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans, movingTitanId: 1 })).not.toContain("B8");
+    expect(getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, titans })).not.toContain("B8");
 
-    expect(avecTitan).not.toContain("B8");
-    expect(debris).toContain("B8");
+    const avecDebris = getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, looseBlocks: { C8: ["rose"] } });
+    expect(avecDebris).not.toContain("C8");
+  });
+
+  it("sa propre case reste proposée même si elle est occupée", () => {
+    // Seule exception au filtre : « il peut revenir sur la case où il
+    // était ». Il en vient, il y était. C'est aussi ce qui garantit qu'il
+    // reste toujours au moins une issue, quel que soit l'encombrement.
+    const cases = getCasesRepliDebris("B9", "C9", 1, 0, {
+      board: {}, looseBlocks: { B9: ["rouge"], B8: ["bleu"], C8: ["vert"] },
+    });
+    expect(cases).toEqual(["B9"]);
   });
 
   it("la case visée n'est jamais proposée — c'est justement celle qu'il ne peut pas atteindre", () => {
@@ -656,5 +672,67 @@ describe("Repli — collecte pour l'interface", () => {
     });
 
     expect(replis[0].cases).toContain(replis[0].defaut);
+  });
+});
+
+describe("Repli — l'IA le joue vraiment", () => {
+  /* Demande de Nikola du 2026-08-17 : « je veux qu'elle joue de manière
+     intelligente en tout point ». Le repli est un vrai coup — poser un
+     débris dans son propre Périmètre le rend ramassable au tour suivant, le
+     poser dans celui d'un adversaire le lui offre.
+
+     Aucune heuristique de placement n'est écrite : `choisirRepliIA` simule
+     chaque case et lit le VRAI barème via evaluatePosition, comme pour un
+     déplacement ou une carte. C'est le principe fondateur du module IA, et
+     ces tests vérifient qu'il tient. */
+
+  it("elle rapproche un débris de son propre Titan plutôt que de le laisser loin", () => {
+    setSeed(4242);
+    // L'initiateur est en E5. Deux cases possibles : E4, collée à lui donc
+    // ramassable, et A1, à l'autre bout du plateau.
+    const initiateur = t(1, "E5", { repaire: ["bleu"] });
+    const etat = { board: {}, looseBlocks: { A1: ["rouge"] }, titans: [initiateur] };
+    const repli = { titanId: null, defaut: "A1", cases: ["A1", "E4"], cible: "A2", initiatorId: 1 };
+
+    const choix = choisirRepliIA(repli, etat, makeProfile(FORCES.EXPERT, TEMPERAMENTS.COLLECTIONNEUR));
+    expect(choix).toBe("E4");
+  });
+
+  it("appliquerRepli déplace le débris du sommet de la pile par défaut", () => {
+    const etat = { board: {}, looseBlocks: { A1: ["bleu", "rouge"] }, titans: [] };
+    appliquerRepli({ titanId: null, defaut: "A1", cases: ["A1", "B2"] }, "B2", etat);
+
+    expect(etat.looseBlocks.A1).toEqual(["bleu"]); // seul le sommet part
+    expect(etat.looseBlocks.B2).toEqual(["rouge"]);
+  });
+
+  it("appliquerRepli repose un Titan, pas un bloc", () => {
+    const titan = t(2, "C3");
+    const etat = { board: {}, looseBlocks: {}, titans: [titan] };
+    appliquerRepli({ titanId: 2, defaut: "C3", cases: ["C3", "C4"] }, "C4", etat);
+
+    expect(titan.cell).toBe("C4");
+    expect(etat.looseBlocks).toEqual({});
+  });
+
+  it("choisir la case par défaut ne touche à rien", () => {
+    const etat = { board: {}, looseBlocks: { A1: ["bleu"] }, titans: [] };
+    appliquerRepli({ titanId: null, defaut: "A1", cases: ["A1", "B2"] }, "A1", etat);
+
+    expect(etat.looseBlocks).toEqual({ A1: ["bleu"] });
+  });
+
+  it("une seule case possible : aucun calcul, elle la prend", () => {
+    const etat = { board: {}, looseBlocks: {}, titans: [t(1, "E5")] };
+    expect(choisirRepliIA({ titanId: null, defaut: "B9", cases: ["B9"], initiatorId: 1 }, etat)).toBe("B9");
+  });
+
+  it("la vidange de la pile ne laisse pas de case fantôme", () => {
+    // Une case sans débris ne doit pas rester dans looseBlocks : elle
+    // compterait comme obstacle pour les portées et les trajectoires.
+    const etat = { board: {}, looseBlocks: { A1: ["bleu"] }, titans: [] };
+    appliquerRepli({ titanId: null, defaut: "A1", cases: ["A1", "B2"] }, "B2", etat);
+
+    expect(etat.looseBlocks.A1).toBeUndefined();
   });
 });
