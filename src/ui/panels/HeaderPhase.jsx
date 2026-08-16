@@ -475,30 +475,15 @@ export default function HeaderPhase({ vm }) {
       )}
 
       {/* ── TITANS ÉJECTÉS HORS DU RING ──
-          Un Titan poussé hors de BIG CITY attend SON tour pour revenir
-          (ruling Nikola : « ça évite l'acharnement »). Il faut donc voir
-          d'un coup d'œil qui est dehors et par où il rentrera — sans ça,
-          un joueur disparaît du plateau sans explication. */}
-      {titansEnAttente.length > 0 && (
-        <div style={{
-          background: "rgba(255,146,57,.14)", border: "1.5px solid #ff9239",
-          borderRadius: 12, padding: "8px 14px", marginBottom: 10, fontSize: ".78rem",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <strong style={{ color: "#ffb877", fontSize: ".92rem", fontFamily: "'Bowlby One', sans-serif" }}>
-              🥊 Hors du ring
-            </strong>
-            <span style={{ color: "rgba(255,255,255,.7)" }}>
-              Poussé hors de BIG CITY. Rentre en jeu au début de son tour, pas avant.
-            </span>
-          </div>
-          {titansEnAttente.map((t) => (
-            <div key={t.id} style={{ marginTop: 5, color: "rgba(255,255,255,.8)" }}>
-              <strong style={{ color: "#ffb877" }}>{titanDisplayName(t.id)}</strong> attend de rentrer par <strong>{t.cell}</strong>
-            </div>
-          ))}
-        </div>
-      )}
+          Ce panneau vivait ici. Il est remplacé par une icône 🥊 posée sur
+          l'encart du Titan concerné, dans TitanResourceBand, avec la même
+          information dans son infobulle (qui est dehors, par où il rentre).
+
+          Demande de Nikola du 2026-08-17 : à quatre panneaux empilés sous
+          l'en-tête — éjecté, décision à résoudre, consigne de phase, étape
+          du tour — l'écran ne montrait plus le jeu. L'état « hors du ring »
+          est une propriété d'UN Titan : sa place est sur sa carte, pas dans
+          un bandeau qui pousse le plateau hors de l'écran. */}
 
       {/* ── EVENT ── */}
       {phase === "evenement" && eventsEnabled && (

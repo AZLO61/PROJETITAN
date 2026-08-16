@@ -25,7 +25,24 @@ import { BLOCK_NAME, baremeHint } from "../blockNames.js";
 export default function TitanResourceBand({
   titans, selectedTitanId, onSelect, activePlayerId, phase, titanDisplayName,
   titanModes = {}, titanProfiles = {}, profilsReveles = {}, revelerProfil, profileLabel,
+  waitingNextTitan = false, titansEnAttente = [],
 }) {
+  /* QUAND LA TABLETTE CHANGE DE MAINS, PLUS RIEN N'EST PRIVÉ.
+     Bug remonté par Nikola le 2026-08-17 : « même pendant l'inter-tour je
+     peux consulter mes cartes au survol des carrés jaunes pleins ».
+
+     `activePlayerId` reste sur le joueur qui vient de jouer TANT QUE
+     « ▶ Titan suivant » n'a pas été cliqué — c'est-à-dire exactement
+     pendant qu'on se passe l'appareil. Se fier à lui seul rouvrait donc la
+     fuite d'information que le retrait du survol avait fermée le 15 août :
+     l'adversaire qui reçoit la tablette n'a qu'à survoler pour lire la
+     programmation restante.
+
+     `waitingNextTitan` marque précisément cette fenêtre. Pendant l'inter-tour,
+     plus aucun Titan n'est « le mien » et tout ce qui est secret le redevient. */
+  const enInterTour = Boolean(waitingNextTitan);
+  const estSonTour = (id) => activePlayerId === id && !enInterTour;
+  const enAttenteIds = new Set((titansEnAttente || []).map((x) => x.id));
   const colorCount = (titan) => {
     const c = { bleu: 0, rose: 0, orange: 0, rouge: 0, vert: 0 };
     titan.repaire.forEach((x) => { if (c[x] !== undefined) c[x]++; });
@@ -53,7 +70,7 @@ export default function TitanResourceBand({
     // toute la largeur restante des qu'il passait a la ligne.
     <div style={{
       display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(165px, 1fr))",
+      gridTemplateColumns: "repeat(auto-fit, minmax(min(165px, 100%), 1fr))",
       gap: 8, marginBottom: 14,
     }}>
       {titans.map((t) => {
@@ -64,7 +81,7 @@ export default function TitanResourceBand({
         const soclesTotal = (t.socles || []).reduce((s, v) => s + v, 0);
         // Le detail des cartes n'est lisible que sur son propre Titan : la
         // programmation des adversaires reste secrete.
-        const estMoi = activePlayerId === t.id;
+        const estMoi = estSonTour(t.id);
 
         return (
           <div
@@ -105,7 +122,27 @@ export default function TitanResourceBand({
                 }}>
                   {titanDisplayName ? titanDisplayName(t.id) : `Titan ${t.id}`}{isActive ? " ▶" : ""}
                 </div>
-                <div style={{ fontSize: ".68rem", color: "rgba(255,255,255,.5)" }}>{t.cell}</div>
+                <div style={{ fontSize: ".68rem", color: "rgba(255,255,255,.5)", display: "flex", alignItems: "center", gap: 4 }}>
+                  {/* HORS DU RING — remplace un panneau entier.
+                      Un Titan éjecté avait droit à son propre encart en haut
+                      de page, avec titre, explication et liste. À quatre
+                      panneaux empilés (éjecté, décision à résoudre, consigne
+                      de phase, étape du tour), l'écran ne montrait plus le
+                      jeu. Nikola le 2026-08-17 : « une petite icône sur
+                      l'encart du Titan, c'est suffisant ». L'information
+                      utile — qui est dehors et par où il rentre — tient dans
+                      l'infobulle, juste à côté de la case. */}
+                  {enAttenteIds.has(t.id) && (
+                    <span
+                      title={`Hors de BIG CITY — ${titanDisplayName ? titanDisplayName(t.id) : `Titan ${t.id}`} rentre par ${t.cell} au début de son tour, pas avant`}
+                      style={{ cursor: "help" }}
+                      aria-label="Hors du ring"
+                    >
+                      🥊
+                    </span>
+                  )}
+                  {t.cell}
+                </div>
               </div>
               <div
                 title="Adrénaline disponible"
@@ -204,7 +241,7 @@ export default function TitanResourceBand({
                    Réserve assumée : une carte DÉFAUSSÉE face cachée reste
                    anonyme (elle n'a jamais été révélée à la table), seul son
                    carré passe en vide. */
-                const estMoi = activePlayerId === t.id;
+                const estMoi = estSonTour(t.id);
                 const cases = [
                   ...t.programmed.map((cardId) => ({ restante: true, cardId })),
                   ...t.playedThisManche.map((cardId) => ({ restante: false, cardId })),

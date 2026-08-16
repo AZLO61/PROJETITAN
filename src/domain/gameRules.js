@@ -906,6 +906,29 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         remaining = 0;
         break;
       }
+      /* ── SORTIE DE FAILLE BLOQUÉE : ARRÊT SEC, PAS DE REBOND ──
+         Ruling Nikola du 2026-08-17 : « si un élément qui warp touche un
+         élément mais n'a pas la puissance de l'impacté, alors arrêt sur case
+         adjacente — il ne finit pas son déplacement. »
+
+         Sans ce garde-fou, l'élément fraîchement ressorti de la faille et
+         bloqué par un mur sous le Seuil 4 partait en REBOND. Or au moment du
+         warp, `r/c` n'a pas encore bougé : il pointe toujours sur la case
+         d'AVANT la faille, à l'autre bout du plateau (l'élément n'avance
+         réellement qu'en atteignant « Case libre » plus bas). Le rebond le
+         faisait donc repartir en arrière depuis là-bas, traversant à nouveau
+         tout le plateau — la trajectoire n'avait plus aucun rapport avec le
+         point où il venait de ressortir.
+
+         C'est la même famille de défauts que le bloc de G9 qui « finissait »
+         en I9, corrigé le 2026-08-15 pour le cas de l'ARRÊT ; le cas du
+         REBOND, lui, était resté. On coupe donc net : le déplacement
+         s'arrête, et le bloc `sortieDeFaille` en fin de fonction repose
+         l'élément contre sa case de sortie, du bon côté du plateau. */
+      if (sortieDeFaille) {
+        log.push(`${nextKey} : mur rencontré à la sortie de la faille, énergie insuffisante (${remaining}) → arrêt, le déplacement ne se poursuit pas.`);
+        break;
+      }
       if (!hasBounced) {
         hasBounced = true;
         curDr = -curDr;

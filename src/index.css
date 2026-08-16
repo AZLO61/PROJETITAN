@@ -44,14 +44,49 @@ html, body {
   }
 }
 
-/* Grille 9x9 au doigt : les cases tombaient a 28px de large sur telephone,
-   sous la cible tactile confortable, alors que le jeu se joue en tapant
-   directement dessus. On leur garantit 34px et on laisse la grille defiler
-   horizontalement plutot que de comprimer les cases. */
+/* ── GRILLE 9×9 SUR PETIT ÉCRAN ──
+   Bug remonté par Nikola le 2026-08-17 : « le rendu n'est pas bon en mode
+   développeur navigateur sur mobile et tablette ».
+
+   Cette règle décrivait une grille de DIX colonnes :
+       16px repeat(9, …)                → 1 label + 9 cases
+   alors que le plateau en compte DOUZE depuis l'ajout des gouttières
+   « hors du ring » :
+       24px 18px repeat(9, …) 24px      → gouttière, label, 9 cases, gouttière
+   Les rangées avaient exactement le même décalage. Sous 560px, la grille
+   était donc redéfinie avec deux pistes de moins que d'éléments à placer :
+   les colonnes surnuméraires partaient dans des pistes implicites, et tout
+   le plateau se décalait — numéros de colonnes désalignés des cases,
+   dernière colonne rejetée à la ligne.
+
+   La règle suit désormais la structure réelle. Les gouttières et le label
+   sont resserrés pour rendre la place aux cases, qui restent en `1fr` : sur
+   un écran de 360px elles retombent autour de 33px, soit la cible tactile
+   visée à l'origine, sans imposer de défilement horizontal. */
 @media (max-width: 560px) {
   .titan-grid {
-    grid-template-columns: 16px repeat(9, minmax(34px, 1fr)) !important;
-    grid-template-rows: 16px repeat(9, minmax(34px, 1fr)) !important;
+    grid-template-columns: 14px 14px repeat(9, minmax(26px, 1fr)) 14px !important;
+    grid-template-rows: 14px 14px repeat(9, auto) 14px !important;
+    gap: 1px !important;
+  }
+}
+
+/* Très petit téléphone : on récupère encore quelques pixels sur les
+   gouttières, seule zone réellement compressible — elles ne portent qu'une
+   icône de Titan en attente, et restent vides la plupart du temps. */
+@media (max-width: 380px) {
+  .titan-grid {
+    grid-template-columns: 11px 11px repeat(9, minmax(24px, 1fr)) 11px !important;
+    grid-template-rows: 11px 11px repeat(9, auto) 11px !important;
+  }
+}
+
+/* Tablette : la grille reste confortable, on garde la structure à 12 pistes
+   en resserrant juste les colonnes de service. */
+@media (min-width: 561px) and (max-width: 900px) {
+  .titan-grid {
+    grid-template-columns: 18px 16px repeat(9, minmax(30px, 1fr)) 18px !important;
+    grid-template-rows: 16px 18px repeat(9, auto) 18px !important;
   }
 }
 

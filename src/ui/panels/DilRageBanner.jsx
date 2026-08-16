@@ -174,11 +174,23 @@ export default function DilRageBanner({ vm }) {
                   <BlockIcon color={c} size={30} />
                 </button>
               ))}
+              {/* Le libellé était « 💉 (2) FAQ#5 » : une référence interne au
+                  numéro de FAQ, illisible en pleine partie (remonté par
+                  Nikola le 2026-08-17, « ça ne veut rien dire »). Il dit
+                  maintenant ce que le bouton FAIT. */}
               {showAdrOpt && (
-                <button onClick={resolveRagePickAdrenaline} style={{
-                  background: "rgba(134,255,113,.2)", border: "1.5px solid #86ff71",
-                  borderRadius: 8, color: "#86ff71", padding: "6px 16px", fontSize: ".85rem", fontWeight: 700, cursor: "pointer",
-                }}>💉 ({defender.adrenaline}) FAQ#5</button>
+                <button
+                  onClick={resolveRagePickAdrenaline}
+                  title="La cible n'a pas assez de blocs : son Adrénaline est une ressource comme une autre, tu peux la lui prendre."
+                  style={{
+                    background: "rgba(134,255,113,.2)", border: "1.5px solid #86ff71",
+                    borderRadius: 8, color: "#86ff71", padding: "6px 16px", fontSize: ".85rem", fontWeight: 700, cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 6,
+                  }}
+                >
+                  💉 Prendre 1 Adrénaline
+                  <span style={{ opacity: .7, fontWeight: 400 }}>({defender.adrenaline} dispo)</span>
+                </button>
               )}
             </div>
           </div>

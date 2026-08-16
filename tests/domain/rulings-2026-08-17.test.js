@@ -15,6 +15,7 @@ import {
   SOCLE_OPTION,
   isSocleMarker,
   socleValue,
+  projectInDirection,
 } from "../../src/domain/gameRules.js";
 import { setSeed } from "../../src/domain/rng.js";
 
@@ -438,5 +439,67 @@ describe("DIL sur un Socle — « ou 1 socle tiré au sort si applicable »", ()
 
   it("sans Socle, le tirage ne rend rien plutôt que de casser", () => {
     expect(retirerSocleAuSort(avecSocles(2, "E5", ["bleu"], []))).toBeNull();
+  });
+});
+
+describe("Faille spatio-temporelle — sortie bloquée, arrêt sec", () => {
+  /* Ruling Nikola du 2026-08-17 : « si un élément qui warp touche un élément
+     mais n'a pas la puissance de l'impacté, alors arrêt sur case adjacente,
+     il ne finit pas son déplacement. »
+
+     Au moment du warp, la position courante pointe encore sur la case
+     d'AVANT la faille, à l'autre bout du plateau. Un rebond depuis là-bas
+     renvoyait l'élément traverser tout le plateau en sens inverse. Même
+     famille que le bloc de G9 qui « finissait » en I9 : le cas de l'ARRÊT
+     avait été corrigé le 15 août, celui du REBOND était resté. */
+
+  const murEn = (cle) => ({
+    [cle]: { row: cle[0], col: Number(cle.slice(1)), blocks: ["bleu"], socle: 1, isTeleporter: false },
+  });
+
+  it("un débris bloqué à la sortie de la faille reste près de sa case de sortie", () => {
+    // Départ en G9, poussé vers l'est avec assez d'énergie pour warper.
+    // Il ressort en G1, où un mur l'attend avec une énergie sous le Seuil 4.
+    const board = murEn("G1");
+    const log = [];
+    const res = projectInDirection("G", 9, 0, 1, 4, {
+      board, looseBlocks: {}, titans: [], log, initiatorId: 1,
+    });
+    const arrivee = res.row + res.col;
+
+    // Il doit rester du côté de la sortie (colonnes basses), jamais repartir
+    // à l'autre bout du plateau d'où il venait.
+    expect(Number(arrivee.slice(1))).toBeLessThanOrEqual(2);
+  });
+
+  it("le déplacement ne se poursuit pas après un mur en sortie de faille", () => {
+    const board = murEn("G1");
+    const log = [];
+    projectInDirection("G", 9, 0, 1, 4, {
+      board, looseBlocks: {}, titans: [], log, initiatorId: 1,
+    });
+
+    expect(log.some((l) => l.includes("le déplacement ne se poursuit pas"))).toBe(true);
+  });
+
+  it("le mur de sortie n'est pas cassé quand l'énergie est sous le Seuil 4", () => {
+    // « n'a pas la puissance de l'impacté » : il s'arrête, il ne détruit rien.
+    const board = murEn("G1");
+    projectInDirection("G", 9, 0, 1, 4, {
+      board, looseBlocks: {}, titans: [], log: [], initiatorId: 1,
+    });
+
+    expect(board.G1.blocks).toHaveLength(1);
+  });
+
+  it("une sortie de faille DÉGAGÉE laisse la trajectoire se poursuivre", () => {
+    // Garde-fou : la correction ne doit pas figer les warps réussis, que le
+    // livret décrit bien comme « réapparaît du côté opposé et FINIT son
+    // déplacement ».
+    const res = projectInDirection("G", 9, 0, 1, 5, {
+      board: {}, looseBlocks: {}, titans: [], log: [], initiatorId: 1,
+    });
+
+    expect(res.row + res.col).not.toBe("G9");
   });
 });

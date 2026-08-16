@@ -287,6 +287,8 @@ export default function RoundPanels({ vm }) {
         profilsReveles={profilsReveles}
         revelerProfil={revelerProfil}
         profileLabel={profileLabel}
+        waitingNextTitan={waitingNextTitan}
+        titansEnAttente={titansEnAttente}
       />
 
 
@@ -533,7 +535,11 @@ De haut en bas : ${[...cellData.blocks].reverse().map((c) => BLOCK_NAME[c] || c)
                     // `aspectRatio` : la case prend sa hauteur de sa largeur
                     // réelle, elle reste carrée quelle que soit la taille de
                     // l'écran. `height: 30` la figeait en rectangle plat.
-                    minWidth: 28, aspectRatio: "1 / 1", borderRadius: 4, position: "relative",
+                    // `minWidth: 0` : c'est la piste de la grille qui fixe le
+                    // plancher (minmax), pas la case. Un minimum posé ici
+                    // empêchait la case de suivre une colonne plus étroite sur
+                    // téléphone et débordait la grille.
+                    minWidth: 0, aspectRatio: "1 / 1", borderRadius: 4, position: "relative",
                     zIndex: hoverCell === key ? 55 : undefined,
                     cursor: jnpSelectable || bbSelectable || teaSelectable || moveSelectable || recupSelectable || titansByCell[key] ? "pointer" : "default",
                     background: cellBg,

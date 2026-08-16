@@ -386,27 +386,13 @@ export default function BoardPanel({ vm }) {
               Remplace toutes les etapes : quand la carte est resolue, la
               seule action possible est de passer la main. Le bouton etait
               relegue en bas du panneau des cartes, apres tout le reste. */}
-          {/* Décision bloquante en attente : le panneau ne propose plus rien
-              d'autre, et dit où aller la résoudre. Le bandeau DIL/RAGE vit
-              tout en haut de l'écran, il peut être hors du champ visible
-              quand on vient de jouer sa carte en bas de page. */}
-          {roundJoue && decisionEnAttente && (
-            <div style={{
-              background: "rgba(227,35,71,.14)", border: "2px solid rgba(227,35,71,.55)",
-              borderRadius: 12, padding: "14px 16px", marginBottom: 10, textAlign: "center",
-            }}>
-              <div style={{
-                fontFamily: "'Bowlby One', sans-serif", fontSize: ".95rem",
-                color: "#ff8fa3", marginBottom: 4,
-              }}>
-                {currentDecision.type === "RAGE" ? "RAGE à résoudre" : "Dilemme à résoudre"}
-              </div>
-              <div style={{ fontSize: ".76rem", color: "rgba(255,255,255,.7)" }}>
-                Ton tour ne peut pas se terminer tant que ce n'est pas tranché.
-                Le choix t'attend tout en haut de l'écran ☝️
-              </div>
-            </div>
-          )}
+          {/* Un second panneau annonçait ici « Dilemme à résoudre » et
+              renvoyait vers le bandeau du haut. Retiré le 2026-08-17 : il
+              disait la même chose que le bandeau DIL/RAGE, deux écrans plus
+              bas, et faisait partie des quatre panneaux empilés dont Nikola
+              demande la réduction. Le blocage réel du tour, lui, reste :
+              `decisionEnAttente` retire « ▶ Titan suivant » et le panneau
+              Ramasser tant que la décision n'est pas tranchée. */}
 
           {finDeTour && (
             <div style={{

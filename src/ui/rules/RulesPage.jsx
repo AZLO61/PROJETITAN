@@ -219,7 +219,7 @@ function SectionEssentiel() {
         <strong style={{ color: C.y1 }}>tout casser dans BIG CITY</strong>.
       </Panel>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginTop: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 12, marginTop: 16 }}>
         <Panel>
           <div style={{ fontSize: ".72rem", color: C.m1, fontWeight: 700, marginBottom: 4 }}>🎯 VOTRE MISSION</div>
           Raser la ville et écraser vos adversaires. Le plus haut score l'emporte, le reste s'effondre.
@@ -466,7 +466,7 @@ function SectionLexique() {
         Les icônes ci-dessous sont celles du plateau et des cartes.
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(230px, 100%), 1fr))", gap: 12 }}>
         {LEXIQUE.map((l) => (
           <Panel key={l.nom} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
             <img
@@ -484,7 +484,7 @@ function SectionLexique() {
       </div>
 
       <Sub>Les 2 décisions</Sub>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 100%), 1fr))", gap: 12 }}>
         {BADGES.map((b) => (
           <Panel key={b.code}>
             <div style={{ marginBottom: 6 }}>
@@ -589,7 +589,7 @@ function SectionScoring() {
       </div>
 
       <Sub>🏅 Trophées</Sub>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
         {TROPHEES.map((t) => (
           <Panel key={t.nom}>
             <div style={{ fontFamily: "'Bowlby One', sans-serif", color: C.y1, marginBottom: 4 }}>
