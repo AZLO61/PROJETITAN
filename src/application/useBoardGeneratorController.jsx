@@ -19,7 +19,7 @@ const {
   resolveGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
   canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
-  getRecuperationPool, resolveRecuperation, programCards, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
+  getRecuperationPool, resolveRecuperation, retirerPileVide, programCards, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
   resolveFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, resolveFautPasMeChauffer, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS,
   scoreBareme, PODIUM_POINTS, rankWithTies, countRepaireColors, computeFinalScore, classementFinal,
   pick,
@@ -140,6 +140,7 @@ export function useBoardGeneratorController() {
     setLooseBlocks({});
     setSelectedTitanId(null);
     setDecisionQueue([]);
+    setRepliQueue([]);
     setProgSelection([]);
     setVolDirection(null);
     cardsPlayedCountRef.current = {};
@@ -385,6 +386,19 @@ export function useBoardGeneratorController() {
   // { cellKey, blocs, energie, choix } — un choix de case par débris, posé
   // dans l'ordre. Nul quand aucune répartition n'est en cours.
   const [ecroulement, setEcroulement] = useState(null);
+
+  /* ── FILE DES REPLIS À TRANCHER ──
+     Ruling Nikola du 2026-08-17 : quand un élément projeté s'arrête faute de
+     puissance, c'est le TITAN INITIATEUR qui choisit où le poser, parmi sa
+     case d'origine et celles qui touchent à la fois cette case et la case
+     visée (cf. getCasesRepliDebris).
+
+     Pourquoi une FILE et non un choix unique : une seule activation peut en
+     produire plusieurs. Tout Casser frappe tout le Périmètre, et chaque
+     réaction en chaîne peut à son tour immobiliser un débris. Les résolveurs
+     déposent donc leurs replis dans un tableau partagé (`gameState.replis`),
+     et le joueur les tranche un par un, dans l'ordre où ils sont survenus. */
+  const [repliQueue, setRepliQueue] = useState([]);
   const [decisionQueue, setDecisionQueue] = useState([]);
   const [progSelection, setProgSelection] = useState([]);
   const [progCountdown, setProgCountdown] = useState(null);   // null | 1-3
@@ -502,6 +516,7 @@ export function useBoardGeneratorController() {
        état de jeu restauré. */
     setTeaMode(false);
     setEcroulement(null);
+    setRepliQueue([]);
     setPendingCardConfirm(null);
     setFpmcAttackerId(null); setFpmcPendingIds([]); setFpmcCurrent(null);
     setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0);
@@ -1586,12 +1601,14 @@ export function useBoardGeneratorController() {
     captureSnapshot();
     const attacker = titanState.players.find((t) => t.id === selectedTitanId);
     const actuallyUseAdrenaline = Math.min(teaAdrenaline, attacker.adrenaline || 0);
+    const replis = [];
     const result = resolveTeteEnAvant(selectedTitanId, dir.dr, dir.dc, actuallyUseAdrenaline, {
-      board: state.board, titans: titanState.players, looseBlocks,
+      board: state.board, titans: titanState.players, looseBlocks, replis,
     });
     if (actuallyUseAdrenaline) attacker.adrenaline -= actuallyUseAdrenaline;
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
+    enqueueReplis(replis);
     markCardPlayed(selectedTitanId, "tete_en_avant");
     setTeaMode(false);
     setState((prev) => ({ ...prev }));
@@ -1611,11 +1628,13 @@ export function useBoardGeneratorController() {
   const jouerGraouhhh = useCallback(() => {
     if (!selectedTitanId || !canPlayCard("graouhhh")) return;
     captureSnapshot();
+    const replis = [];
     const result = resolveGraouhhh(selectedTitanId, direction.dr, direction.dc, mancheNumber, {
-      board: state.board, titans: titanState.players, looseBlocks,
+      board: state.board, titans: titanState.players, looseBlocks, replis,
     });
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
+    enqueueReplis(replis);
     markCardPlayed(selectedTitanId, "graouhhh");
     setGraouMode(false);
     setLooseBlocks((prev) => ({ ...prev }));
@@ -1658,12 +1677,14 @@ export function useBoardGeneratorController() {
     captureSnapshot();
     const attacker = titanState.players.find((t) => t.id === selectedTitanId);
     const actuallyUseAdrenaline = Math.min(bbAdrenaline, attacker.adrenaline || 0);
+    const replis = [];
     const result = resolveBoingBoing(selectedTitanId, bbDest, actuallyUseAdrenaline, mancheNumber, {
-      board: state.board, titans: titanState.players, looseBlocks,
+      board: state.board, titans: titanState.players, looseBlocks, replis,
     });
     if (result.applied && actuallyUseAdrenaline) attacker.adrenaline -= actuallyUseAdrenaline;
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
+    enqueueReplis(replis);
     // Atterrissage sur un Amas : la carte est jouée, mais la répartition des
     // débris revient au joueur, case par case (ruling Nikola du 2026-08-16).
     if (result.ecroulement) setEcroulement({ ...result.ecroulement, choix: [] });
@@ -1692,6 +1713,58 @@ export function useBoardGeneratorController() {
   const ecroulementCells = ecroulement
     ? getEcroulementCells(ecroulement.cellKey, { board: state.board, looseBlocks }, ecroulement.choix).eligibles
     : [];
+  /* Un repli n'est proposé au joueur que s'il a réellement le choix. Les
+     replis d'une IA sont résolus tout seuls sur la case par défaut : elle
+     n'a pas d'interface, et la faire trancher au hasard ajouterait du bruit
+     dans les campagnes sans rien apprendre. */
+  const enqueueReplis = useCallback((liste) => {
+    if (!liste || liste.length === 0) return;
+    const modes = aiTitanModesRef.current;
+    const aTrancher = liste.filter(
+      (r) => r.cases.length > 1 && modes[r.initiatorId] !== "ia"
+    );
+    if (aTrancher.length > 0) setRepliQueue((prev) => [...prev, ...aTrancher]);
+  }, []);
+
+  const currentRepli = repliQueue[0] || null;
+
+  /* Applique le choix du joueur puis dépile.
+
+     Deux natures d'élément, d'où `titanId` :
+     · un TITAN nommément — on le repose sur la case choisie ;
+     · un DÉBRIS — il vient d'être empilé sur la case par défaut par le
+       résolveur, on le déplace donc du sommet de cette pile vers la case
+       choisie. Le repli se tranche juste après la résolution de la carte,
+       avant que quoi que ce soit d'autre ne s'empile : le sommet est bien
+       l'élément concerné. */
+  const choisirRepli = useCallback((cellKey) => {
+    const cur = repliQueue[0];
+    if (!cur || !cur.cases.includes(cellKey)) return;
+    if (cellKey !== cur.defaut) {
+      if (cur.titanId != null) {
+        const titan = aiTitanStateRef.current.players.find((t) => t.id === cur.titanId);
+        if (titan) {
+          titan.cell = cellKey;
+          setActionLog((prev) => [...prev, `Titan ${cur.titanId} arrêté faute de puissance → posé en ${cellKey} (choix de l'initiateur).`]);
+        }
+        setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+      } else {
+        const lb = aiLooseBlocksRef.current;
+        const pile = lb[cur.defaut] || [];
+        const bloc = pile.pop();
+        if (bloc !== undefined) {
+          retirerPileVide(lb, cur.defaut);
+          if (!lb[cellKey]) lb[cellKey] = [];
+          lb[cellKey].push(bloc);
+          setActionLog((prev) => [...prev, `Élément arrêté faute de puissance → posé en ${cellKey} au lieu de ${cur.defaut} (choix de l'initiateur).`]);
+        }
+        setLooseBlocks((prev) => ({ ...prev }));
+      }
+      setState((prev) => ({ ...prev }));
+    }
+    setRepliQueue((prev) => prev.slice(1));
+  }, [repliQueue]);
+
   const ecroulementPoserDebris = useCallback((cellKey) => {
     setEcroulement((prev) => {
       if (!prev || prev.choix.length >= prev.blocs.length) return prev;
@@ -1703,18 +1776,20 @@ export function useBoardGeneratorController() {
   }, []);
   const ecroulementValider = useCallback(() => {
     if (!ecroulement || ecroulement.choix.length !== ecroulement.blocs.length) return;
+    const replis = [];
     const result = resolveEcroulementAmas(
       activePlayerId,
       { cellKey: ecroulement.cellKey, blocs: ecroulement.blocs, energie: ecroulement.energie },
       ecroulement.choix,
-      { board: state.board, titans: titanState.players, looseBlocks }
+      { board: state.board, titans: titanState.players, looseBlocks, replis }
     );
     setActionLog((prev) => [...prev, ...result.log]);
+    enqueueReplis(replis);
     setEcroulement(null);
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [ecroulement, activePlayerId, state.board, titanState.players, looseBlocks]);
+  }, [ecroulement, activePlayerId, state.board, titanState.players, looseBlocks, enqueueReplis]);
   const { reachable: moveReachable, classic: moveClassic, teleport: moveTeleport } = selectedTitan
     ? getMovementReachable(selectedTitan.cell, moveMaxRange, state.board, titansByCell, looseBlocks)
     : { reachable: new Set(), classic: new Set(), teleport: new Set() };
@@ -1869,14 +1944,16 @@ export function useBoardGeneratorController() {
     // immunité de l'initiateur, auto-collision du Titan projeté, et
     // « bagarre non remportée = aucun point ». Le contrôleur ne fait plus
     // que ce qui lui revient : débiter les mises et rafraîchir l'affichage.
+    const replis = [];
     const result = resolveFautPasMeChauffer(fpmcAttackerId, cur.defenderId, fpmcNTargets, {
-      board: state.board, titans: titanState.players, looseBlocks,
+      board: state.board, titans: titanState.players, looseBlocks, replis,
     }, { attackerBid: cur.attackerBid, defenderBid: cur.defenderBid });
 
     attacker.adrenaline = Math.max(0, (attacker.adrenaline || 0) - cur.attackerBid);
     defender.adrenaline = Math.max(0, (defender.adrenaline || 0) - cur.defenderBid);
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
+    enqueueReplis(replis);
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
@@ -1892,9 +1969,11 @@ export function useBoardGeneratorController() {
     // deux Adrénalines sur Tout Casser rendait donc la seconde gratuite.
     const bonus = Math.min(Number(tcAdrenaline) || 0, attacker.adrenaline || 0);
     if (bonus > 0) attacker.adrenaline -= bonus;
-    const result = resolveToutCasser(selectedTitanId, { board: state.board, titans: titanState.players, looseBlocks }, bonus);
+    const replis = [];
+    const result = resolveToutCasser(selectedTitanId, { board: state.board, titans: titanState.players, looseBlocks, replis }, bonus);
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
+    enqueueReplis(replis);
     markCardPlayed(selectedTitanId, "tout_casser");
     setTcAdrenaline(0); // état numérique : `false` y était écrit par erreur
     setState((prev) => ({ ...prev }));
@@ -2295,6 +2374,9 @@ export function useBoardGeneratorController() {
     setBbDest,
     ecroulement,
     ecroulementCells,
+    repliQueue,
+    currentRepli,
+    choisirRepli,
     ecroulementPoserDebris,
     ecroulementAnnulerDernier,
     ecroulementValider,

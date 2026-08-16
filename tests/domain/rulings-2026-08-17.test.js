@@ -589,3 +589,72 @@ describe("Repli d'un élément sans la puissance de passer", () => {
     expect(res.repliOptions.defaut).toBe(res.row + res.col);
   });
 });
+
+describe("Repli — collecte pour l'interface", () => {
+  /* Le choix doit remonter jusqu'au joueur. Les résolveurs déposent leurs
+     replis dans `gameState.replis`, un tableau partagé transmis tel quel aux
+     réactions en chaîne — même mécanisme que `log` et `bagarreSet`. Sans
+     cette collecte, la règle vivrait dans le moteur sans jamais atteindre
+     l'interface, et l'élément se poserait toujours sur la case par défaut. */
+
+  const mur = (cle) => ({
+    [cle]: { row: cle[0], col: Number(cle.slice(1)), blocks: ["bleu"], socle: 1, isTeleporter: false },
+  });
+
+  it("un arrêt faute de puissance est déposé dans le collecteur", () => {
+    const replis = [];
+    const board = { ...mur("E5"), ...mur("E3") };
+    projectInDirection("E", 4, 0, 1, 2, {
+      board, looseBlocks: {}, titans: [], log: [], initiatorId: 1, replis,
+    });
+
+    expect(replis).toHaveLength(1);
+    expect(replis[0].cases.length).toBeGreaterThan(1);
+    expect(replis[0].defaut).toBe("E4");
+    expect(replis[0].cible).toBe("E3");
+    expect(replis[0].initiatorId).toBe(1);
+  });
+
+  it("un débris arrêté porte titanId à null, un Titan porte son identifiant", () => {
+    // C'est ce qui dit à l'interface QUOI déplacer quand le joueur tranche :
+    // un Titan nommément, ou le débris posé sur la case par défaut.
+    const board = { ...mur("E5"), ...mur("E3") };
+
+    const replisDebris = [];
+    projectInDirection("E", 4, 0, 1, 2, {
+      board, looseBlocks: {}, titans: [], log: [], initiatorId: 1, replis: replisDebris,
+    });
+    expect(replisDebris[0].titanId).toBeNull();
+
+    const replisTitan = [];
+    const titans = [t(1, "A1"), t(2, "E4")];
+    projectInDirection("E", 4, 0, 1, 2, {
+      board, looseBlocks: {}, titans, log: [], initiatorId: 1, movingTitanId: 2, replis: replisTitan,
+    });
+    expect(replisTitan[0].titanId).toBe(2);
+  });
+
+  it("aucun repli collecté quand l'élément s'arrête simplement à court d'énergie", () => {
+    // Il n'y a de choix que lorsque l'élément est BLOQUÉ. Une trajectoire qui
+    // se termine normalement ne doit rien proposer, sans quoi le joueur
+    // arbitrerait un placement à chaque projection.
+    const replis = [];
+    projectInDirection("E", 4, 0, 1, 2, {
+      board: {}, looseBlocks: {}, titans: [], log: [], initiatorId: 1, replis,
+    });
+
+    expect(replis).toHaveLength(0);
+  });
+
+  it("la case par défaut fait toujours partie des cases proposées", () => {
+    // L'interface propose le défaut comme les autres : ne pas choisir revient
+    // à laisser l'élément où il s'est arrêté, sans état incohérent possible.
+    const replis = [];
+    const board = { ...mur("E5"), ...mur("E3") };
+    projectInDirection("E", 4, 0, 1, 2, {
+      board, looseBlocks: {}, titans: [], log: [], initiatorId: 1, replis,
+    });
+
+    expect(replis[0].cases).toContain(replis[0].defaut);
+  });
+});

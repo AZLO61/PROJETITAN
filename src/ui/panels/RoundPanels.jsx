@@ -39,6 +39,8 @@ export default function RoundPanels({ vm }) {
     titansEnAttente,
     ecroulement,
     ecroulementCells,
+    currentRepli,
+    choisirRepli,
     ecroulementPoserDebris,
     ecroulementAnnulerDernier,
     ecroulementValider,
@@ -432,6 +434,11 @@ export default function RoundPanels({ vm }) {
               // proposées pour le prochain débris.
               const ecroulSelectable = Boolean(ecroulement) && ecroulementCells.includes(key);
               const ecroulDejaServie = Boolean(ecroulement) && ecroulement.choix.includes(key);
+              // Repli d'un élément arrêté faute de puissance : les cases où
+              // le Titan initiateur peut le poser (ruling du 2026-08-17).
+              const repliSelectable = Boolean(currentRepli) && currentRepli.cases.includes(key);
+              const repliDefaut = Boolean(currentRepli) && currentRepli.defaut === key;
+              const repliCible = Boolean(currentRepli) && currentRepli.cible === key;
 
               // Périmètre 2D : couleur du Titan sélectionné
               const perimAccent = tcSel ? tcSel.accent : "#FFD93D";
@@ -439,7 +446,13 @@ export default function RoundPanels({ vm }) {
               // bâtiment → teinte du Titan en overlay sur la couleur du bloc du dessus
               // case vide → teinte légère
               let cellBg;
-              if (ecroulDejaServie) {
+              if (repliCible) {
+                cellBg = "rgba(239,68,68,.22)"; // la case qu'il n'a pas pu atteindre
+              } else if (repliDefaut) {
+                cellBg = "rgba(251,146,60,.34)"; // là où il se poserait sans choix
+              } else if (repliSelectable) {
+                cellBg = "rgba(251,146,60,.18)";
+              } else if (ecroulDejaServie) {
                 cellBg = "rgba(251,146,60,.32)"; // débris déjà posé là
               } else if (ecroulSelectable) {
                 cellBg = "rgba(251,146,60,.16)"; // case proposée pour le prochain
@@ -484,6 +497,10 @@ export default function RoundPanels({ vm }) {
                     // La répartition d'un Amas écroulé passe avant tout le
                     // reste : tant qu'elle est en cours, le plateau ne sert
                     // qu'à désigner où tombe chaque débris.
+                    // Un repli en attente bloque tout le reste : tant que le
+                    // joueur n'a pas dit où l'élément se pose, le plateau ne
+                    // sert qu'à ça.
+                    if (currentRepli) { if (repliSelectable) choisirRepli(key); return; }
                     if (ecroulement) { if (ecroulSelectable) ecroulementPoserDebris(key); return; }
                     if (jnpMode) { if (jnpSelectable) jnpToggleCell(key); return; }
                     if (bbMode) { if (bbSelectable) bbSelectCell(key); return; }
@@ -541,9 +558,11 @@ De haut en bas : ${[...cellData.blocks].reverse().map((c) => BLOCK_NAME[c] || c)
                     // téléphone et débordait la grille.
                     minWidth: 0, aspectRatio: "1 / 1", borderRadius: 4, position: "relative",
                     zIndex: hoverCell === key ? 55 : undefined,
-                    cursor: jnpSelectable || bbSelectable || teaSelectable || moveSelectable || recupSelectable || titansByCell[key] ? "pointer" : "default",
+                    cursor: repliSelectable || jnpSelectable || bbSelectable || teaSelectable || moveSelectable || recupSelectable || titansByCell[key] ? "pointer" : "default",
                     background: cellBg,
-                    border: jnpIsSelected || bbIsSelected
+                    border: repliSelectable
+                      ? `2px ${repliDefaut ? "solid" : "dashed"} #fb923c`
+                      : jnpIsSelected || bbIsSelected
                       ? "2px solid #16E08C"
                       : teaSelectable
                       ? "2px solid #FB923C"           // orange TEA
@@ -560,7 +579,9 @@ De haut en bas : ${[...cellData.blocks].reverse().map((c) => BLOCK_NAME[c] || c)
                       : isBldg
                       ? "1px solid rgba(255,255,255,.12)"
                       : "1px solid rgba(255,255,255,.14)",
-                    boxShadow: teaSelectable
+                    boxShadow: repliSelectable
+                      ? "0 0 10px rgba(251,146,60,.85)"
+                      : teaSelectable
                       ? "0 0 10px rgba(251,146,60,.8)"
                       : moveIsClassic
                       ? "0 0 10px rgba(113,219,255,.7)"

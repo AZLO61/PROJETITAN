@@ -8,6 +8,7 @@ import BoardPanel from "./panels/BoardPanel.jsx";
 import TitanPanel from "./panels/TitanPanel.jsx";
 import DilRageBanner from "./panels/DilRageBanner.jsx";
 import RepoVolBanner from "./panels/RepoVolBanner.jsx";
+import RepliBanner from "./panels/RepliBanner.jsx";
 import DecisionPanels from "./panels/DecisionPanels.jsx";
 import ScoringPanel from "./panels/ScoringPanel.jsx";
 
@@ -27,6 +28,10 @@ export default function GameView(vm) {
           bloquante "Vol Phase Repos" suit maintenant le même traitement
           visuel et la même position qu'une décision DIL/RAGE. */}
       <RepoVolBanner vm={vm} />
+      {/* Troisième décision bloquante du jeu : où se pose un élément arrêté
+          faute de puissance. Même traitement et même position que les deux
+          autres, le choix lui-même se faisant sur le plateau. */}
+      <RepliBanner vm={vm} />
       {/* ── FIN DE PARTIE ──
           Bug remonté par Nikola le 2026-08-17 : « fais bien la transition de
           fin de partie, que je puisse placer mon Bloc Vert dans une

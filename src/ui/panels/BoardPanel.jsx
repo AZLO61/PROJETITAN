@@ -299,7 +299,10 @@ export default function BoardPanel({ vm }) {
      joueur suivant, hors contexte. Le ramassage souffrait du même défaut :
      proposé avant que le sort des blocs de la victime soit tranché, alors
      que le DIL peut justement en faire tomber un dans le Périmètre. */
-  const decisionEnAttente = Boolean(currentDecision);
+  // Un repli non tranché bloque le tour au même titre qu'un DIL/RAGE :
+  // l'élément n'est pas encore posé là où l'initiateur le veut, passer la
+  // main laisserait le plateau dans un état que personne n'a validé.
+  const decisionEnAttente = Boolean(currentDecision) || Boolean(vm.currentRepli);
   /* Le panneau Ramasser ne s'affiche que s'il y a réellement quelque chose
      à ramasser (`recupPool.size > 0`). Il se montrait aussi quand le
      Périmètre était vide, avec son seul bouton grisé « (rien à portée) » —
