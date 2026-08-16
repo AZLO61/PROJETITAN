@@ -50,16 +50,19 @@
 import {
   PORTEE_BOING_BOING,
   chebyshevDistance,
+  estSurLePlateau,
+  indexerTitans,
+  getEcroulementCells,
+  resolveEcroulementAmas,
   getFPMCTargets,
   getJeNePartagePasPool,
   getMovementReachable,
-  getProgrammedSum,
   getRecuperationPool,
   isLanterneRouge,
   isSocleMarker,
-  makeDecisionRequest,
   scoreBareme,
   resolveBoingBoing,
+  resolveFautPasMeChauffer,
   resolveFreeMovement,
   resolveGraouhhh,
   resolveJeNePartagePas,
@@ -166,13 +169,15 @@ function combinaisons(liste, taille) {
  * huit Bleu allait chercher un neuvième Bleu à 0 point plutôt qu'un
  * Rouge à 3.
  */
-export function planMovement(titanId, gameState, profile = makeProfile()) {
+export function planMovement(titanId, gameState, profile = makeProfile(), portee = 2) {
   const titan = gameState.titans.find((t) => t.id === titanId);
-  if (!titan) return null;
+  if (!titan || !estSurLePlateau(titan) || portee <= 0) return null;
 
-  const titansByCell = Object.fromEntries(gameState.titans.map((t) => [t.cell, t.id]));
+  // Un Titan hors plateau n'occupe aucune case : il ne doit pas bloquer le
+  // déplacement des autres (cf. indexerTitans).
+  const titansByCell = indexerTitans(gameState.titans);
   const { reachable } = getMovementReachable(
-    titan.cell, 2, gameState.board, titansByCell, gameState.looseBlocks
+    titan.cell, portee, gameState.board, titansByCell, gameState.looseBlocks
   );
   if (!reachable || reachable.size === 0) return null;
 
@@ -309,6 +314,25 @@ export function appliquerCoup(coup, titanId, etat, mancheNumber) {
   return simulerCarte(coup, titanId, etat, mancheNumber);
 }
 
+/**
+ * Répartition des débris d'un Amas écroulé, pour un joueur sans interface
+ * (IA et simulateur). Suit les mêmes contraintes que le joueur humain :
+ * cases vierges d'abord, empilement seulement quand il n'en reste plus.
+ *
+ * Aucune ruse ici : viser un Titan pour le pousser serait souvent le bon
+ * coup, mais ce choix se fait après la simulation du saut, donc en dehors
+ * de la boucle de notation. Le rendre malin demanderait de simuler chaque
+ * répartition possible, pour un gain marginal au regard du coût.
+ */
+export function choisirRepartitionEcroulement(ecroulement, etat) {
+  const choix = [];
+  for (let i = 0; i < ecroulement.blocs.length; i++) {
+    const { eligibles } = getEcroulementCells(ecroulement.cellKey, etat, choix);
+    choix.push(eligibles[0] ?? ecroulement.cellKey);
+  }
+  return choix;
+}
+
 function simulerCarte(coup, titanId, etat, mancheNumber) {
   const { cardId, dir, bbDest, jnpCells, mise = 0 } = coup;
   const moi = etat.titans.find((t) => t.id === titanId);
@@ -326,24 +350,35 @@ function simulerCarte(coup, titanId, etat, mancheNumber) {
       break;
     case "boing_boing":
       res = resolveBoingBoing(titanId, bbDest, mise, mancheNumber, etat);
+      // Atterrissage sur un Amas : le résolveur rend la main pour que le
+      // joueur réparte les débris. L'IA n'a pas d'interface, elle applique
+      // la répartition par défaut — cases vierges d'abord, dans l'ordre.
+      if (res?.ecroulement) {
+        const choix = choisirRepartitionEcroulement(res.ecroulement, etat);
+        const suite = resolveEcroulementAmas(titanId, res.ecroulement, choix, etat);
+        res = { ...res, log: [...(res.log || []), ...suite.log] };
+      }
       break;
     case "je_ne_partage_pas":
       res = resolveJeNePartagePas(titanId, jnpCells, etat);
       break;
     case "faut_pas_me_chauffer": {
-      // Aucun effet direct : la carte compare les forces programmées et
-      // engendre RAGE (attaquant devant), DIL (égalité) ou rien. On
-      // reproduit ici la même comparaison que le contrôleur, sans quoi la
-      // carte de sabotage par excellence serait notée comme un coup nul.
+      // Cette branche ne produisait QUE des décisions DIL/RAGE : aucune
+      // projection de la cible, aucun point de Bagarre. Une carte Force 3
+      // sur six était donc évaluée par l'IA — et jouée en campagne — comme
+      // si elle n'avait aucun effet physique, alors que le contrôleur, lui,
+      // projetait bien la cible de n+1 cases. Quatrième divergence avec le
+      // jeu réel, non documentée en en-tête de simulation.js, et raison
+      // pour laquelle 200 parties de diagnostic n'ont jamais emprunté ce
+      // chemin de code ni vu les bugs qui s'y trouvaient.
+      // Le vrai résolveur du domaine est appelé ici, comme pour les cinq
+      // autres cartes. L'IA ne mise pas d'Adrénaline en secret, faute de
+      // règle de décision : les deux mises restent à 0.
+      const cibles = getFPMCTargets(titanId, etat);
       const decisions = [];
-      for (const defId of getFPMCTargets(titanId, etat)) {
-        const atk = etat.titans.find((t) => t.id === titanId);
-        const def = etat.titans.find((t) => t.id === defId);
-        if (!atk || !def) continue;
-        const somme = getProgrammedSum(atk);
-        const sommeDef = getProgrammedSum(def);
-        if (somme > sommeDef) decisions.push(makeDecisionRequest("RAGE", titanId, defId, "Faut Pas Me Chauffer"));
-        else if (somme === sommeDef) decisions.push(makeDecisionRequest("DIL", titanId, defId, "Faut Pas Me Chauffer"));
+      for (const defId of cibles) {
+        const r = resolveFautPasMeChauffer(titanId, defId, cibles.length, etat);
+        decisions.push(...(r.decisions || []));
       }
       res = { decisions };
       break;
@@ -378,7 +413,14 @@ export function candidatsPourCarte(cardId, titanId, gameState) {
   if (cardId === "boing_boing") {
     const r0 = rowIndex(titan.cell[0]);
     const c0 = Number(titan.cell.slice(1));
-    const occupees = new Set(gameState.titans.map((t) => t.cell));
+    // Bug trouvé au scan : toutes les cases portant un Titan étaient exclues
+    // des destinations. Or c'est précisément le cas le plus intéressant de
+    // la carte — ruling confirmé : l'occupant subit Fatigue et DIL, et
+    // l'initiateur prend sa place (resolveBoingBoing le gère sur 45 lignes).
+    // L'interface humaine, elle, proposait bien ces cases. L'IA se privait
+    // donc d'un pan entier de la carte, et les campagnes sous-estimaient
+    // mécaniquement sa force. Seule la case du Titan qui joue reste exclue :
+    // un saut de distance 0 est refusé par le résolveur de toute façon.
     const out = [];
     for (const mise of mises) {
       const portee = PORTEE_BOING_BOING + mise;
@@ -387,7 +429,7 @@ export function candidatsPourCarte(cardId, titanId, gameState) {
           const d = chebyshevDistance(r0, c0, r, c);
           if (d < 1 || d > portee) continue;
           const key = rowFromIndex(r) + c;
-          if (occupees.has(key)) continue;
+          if (key === titan.cell) continue;
           out.push({ cardId, bbDest: key, mise });
         }
       }

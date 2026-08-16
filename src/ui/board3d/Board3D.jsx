@@ -233,6 +233,41 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
         ctx.strokeRect(size * 0.05, size * 0.05, size * 0.9, size * 0.9);
       }
     }
+    /* ============================================================
+       LIBÉRATION DES RESSOURCES GPU
+       ============================================================
+       Les quatre fonctions de reconstruction commençaient par
+       `group.clear()`. Dans Three.js, `clear()` détache les enfants mais ne
+       libère RIEN : géométries, matériaux et textures restent alloués sur
+       la carte graphique jusqu'à un `dispose()` qui n'arrivait jamais.
+
+       Chaque reconstruction alloue une BoxGeometry par bloc, plus une par
+       stud et son ombre, plus socle et matériau — et une reconstruction a
+       lieu à chaque action jouée, chaque changement de Titan sélectionné et
+       chaque bascule du mode déplacement. La mémoire GPU grimpait donc tout
+       au long d'une partie sans jamais redescendre.
+
+       `viderGroupe` remplace `clear()` partout. Elle épargne les ressources
+       marquées `userData.partage` — celles des caches (textures de façade,
+       matériaux de bloc, sprites de Titan, étiquettes de Socle, contour
+       noir), réutilisées d'une reconstruction à l'autre et dont la
+       libération casserait le rendu suivant.
+    ============================================================ */
+    function libererRessource(res) {
+      if (!res || res.userData?.partage) return;
+      if (res.map && !res.map.userData?.partage) res.map.dispose();
+      res.dispose();
+    }
+    function viderGroupe(group) {
+      group.traverse((obj) => {
+        if (obj === group) return;
+        if (obj.geometry) libererRessource(obj.geometry);
+        if (Array.isArray(obj.material)) obj.material.forEach(libererRessource);
+        else if (obj.material) libererRessource(obj.material);
+      });
+      group.clear();
+    }
+
     const facadeTextureCache = new Map();
     function getFacadeTexture(colorKey) {
       if (facadeTextureCache.has(colorKey)) return facadeTextureCache.get(colorKey);
@@ -244,6 +279,7 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
       const texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace; // couleur (pas une donnée) → décodage sRGB requis
       texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.userData.partage = true; // en cache : jamais libérée par viderGroupe
       facadeTextureCache.set(colorKey, texture);
       return texture;
     }
@@ -263,6 +299,9 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
       // Dessus/dessous en couleur unie (cf. icônes : jamais de fenêtres sur
       // le dessus) — le stud sommital (rebuildBuildings) apporte le relief.
       const materials = [sideMatDark, sideMatLight, flatMat, flatMat, sideMatDark, sideMatLight];
+      // En cache : partagés par tous les blocs de cette couleur, d'une
+      // reconstruction à l'autre. viderGroupe doit les épargner.
+      [sideMatDark, sideMatLight, flatMat].forEach((m) => { m.userData.partage = true; });
       blockMaterialCache.set(colorKey, materials);
       return materials;
     }
@@ -276,6 +315,7 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     // 50% par rapport à la version précédente (scale 1.045→1.0225,
     // 1.08→1.04) — demande Nikola, session.
     const outlineMaterial = new THREE.MeshBasicMaterial({ color: 0x050b1a, side: THREE.BackSide });
+    outlineMaterial.userData.partage = true; // instance unique réutilisée par tous les contours
     function addToonOutline(mesh, geometry, scale = 1.0225) {
       const outlineMesh = new THREE.Mesh(geometry, outlineMaterial);
       outlineMesh.scale.multiplyScalar(scale);
@@ -289,6 +329,7 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     function getSpriteTexture(key) {
       if (spriteTextureCache.has(key)) return spriteTextureCache.get(key);
       const texture = new THREE.TextureLoader().load(SPRITE_DATA[key]);
+      texture.userData.partage = true; // en cache : jamais libérée par viderGroupe
       texture.colorSpace = THREE.SRGBColorSpace; // PNG couleur (sprite Titan) → décodage sRGB requis, sinon halo blanchâtre au blending alpha
       spriteTextureCache.set(key, texture);
       return texture;
@@ -297,7 +338,7 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     const socleMeshes = [];
 
     function rebuildBuildings(boardData) {
-      buildingGroup.clear();
+      viderGroupe(buildingGroup);
       socleMeshes.length = 0;
       Object.entries(boardData).forEach(([key, b]) => {
         const r = rowIndex(key[0]);
@@ -357,7 +398,7 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     }
 
     function rebuildLoose(looseData, boardData) {
-      looseGroup.clear();
+      viderGroupe(looseGroup);
       Object.entries(looseData).forEach(([key, stack]) => {
         if (!stack || stack.length === 0) return;
         const r = rowIndex(key[0]);
@@ -392,7 +433,7 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     }
 
     function rebuildTitans(titansData, boardData) {
-      titanGroup.clear();
+      viderGroupe(titanGroup);
       titansData.forEach((t) => {
         const key = TITAN_SPRITE_KEY[t.id] || "escargot";
         const texture = getSpriteTexture(key);
@@ -405,6 +446,25 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
         sprite.userData.titanId = t.id;
         const r = rowIndex(t.cell[0]);
         const c = Number(t.cell.slice(1));
+
+        // Titan éjecté du ring : il attend HORS du plateau, aligné avec la
+        // case par laquelle il rentrera. On le pose une case au-delà du
+        // bord concerné, translucide, pour qu'on lise à la fois « il n'est
+        // pas en jeu » et « c'est par là qu'il revient ».
+        if (t.horsPlateau) {
+          let dr = 0, dc = 0;
+          if (c === 1) dc = -1;
+          else if (c === 9) dc = 1;
+          else if (r === 0) dr = -1;
+          else if (r === 8) dr = 1;
+          else dc = -1; // sécurité : cas qui ne devrait pas se produire
+          const { x: xo, z: zo } = cellWorld(r + dr, c + dc);
+          material.opacity = 0.45;
+          sprite.position.set(xo, 0, zo);
+          titanGroup.add(sprite);
+          return;
+        }
+
         const bldg = boardData[t.cell];
         const n = bldg ? bldg.blocks.length : 0;
         const socleH = bldg && bldg.blocks.length > 0 ? SOCLE_H : 0;
@@ -415,9 +475,11 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     }
 
     function rebuildHighlight(titansData, selId, boardData, classicCells, teleportCells, isMoveMode) {
-      highlightGroup.clear();
+      viderGroupe(highlightGroup);
       const titan = titansData.find((t) => t.id === selId);
-      if (!titan) return;
+      // Un Titan hors du ring n'occupe aucune case : surligner son périmètre
+      // dessinerait une zone d'action là où il n'est pas.
+      if (!titan || titan.horsPlateau) return;
       const slabColor = TITAN_RING_COLOR[titan.id] ?? 0xffd93d;
       const r0 = rowIndex(titan.cell[0]);
       const c0 = Number(titan.cell.slice(1));

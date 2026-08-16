@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PROJET TITAN — Livret de Règles V36.2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Titan+One&family=Bowlby+One&family=Outfit:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="titan-style.css">
+  <style>
+    /* Correctif V35 : alignement de l'icône Adrénaline (seringue) sur l'icône Fatigue dans le glossaire.
+       Le fichier titan-style.css n'est pas présent dans le projet — ce correctif est local à ce fichier,
+       à reporter dans titan-style.css si le rendu convient. */
+    .gloss-tag.adr-icon{display:flex;align-items:center;justify-content:center}
+    .gloss-tag.adr-icon .icon-img{transform:scale(1.15);transform-origin:center}
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="toc-bar">
+  <div class="toc-inner">
+    <button class="burger-btn" onclick="toggleBurger()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+  <div class="burger-overlay" id="burgerOverlay" onclick="closeBurger()"></div>
+  <div class="burger-menu" id="burgerMenu">
+    <button class="burger-close" onclick="closeBurger()">✕</button>
+    <a href="#rapide" onclick="closeBurger()">⚡ Prise en main rapide</a>
+    <a href="#synopsis" onclick="closeBurger()">🧬 Synopsis</a>
+    <a href="#materiel" onclick="closeBurger()">📦 Matériel</a>
+    <a href="#setup" onclick="closeBurger()">🏙️ Mise en place</a>
+    <a href="#checklist" onclick="closeBurger()">✅ Checklist</a>
+    <a href="#passifs" onclick="closeBurger()">🧡 Règles permanentes</a>
+    <a href="#ame" onclick="closeBurger()">⚡ Règles transversales</a>
+    <a href="#glossaire" onclick="closeBurger()">📖 Glossaire</a>
+    <a href="#partie" onclick="closeBurger()">🔄 Structure</a>
+    <a href="#adrénaline" onclick="closeBurger()">💪 Adrénaline</a>
+    <a href="#adn" onclick="closeBurger()">🧬 Piste ADN</a>
+    <a href="#departage" onclick="closeBurger()">⚖️ Départage</a>
+    <a href="#tour" onclick="closeBurger()">🏗️ Amas de béton</a>
+    <a href="#actions" onclick="closeBurger()">🎴 6 Cartes Actions</a>
+    <a href="#events" onclick="closeBurger()">🎲 Événements</a>
+    <a href="#tuto" onclick="closeBurger()">🎓 Premier tour</a>
+    <a href="#scoring" onclick="closeBurger()">🏆 Scoring final</a>
+    <a href="#finpartie" onclick="closeBurger()">🛑 Fin de partie</a>
+    <a href="#exemple" onclick="closeBurger()">🎬 Exemple</a>
+    <a href="#cas" onclick="closeBurger()">⚖️ Cas particuliers &amp; FAQ</a>
+  </div>
+</nav>
+
+<!-- LEXIQUE — bouton discret + popup -->
+<button class="lex-btn" id="lexBtn" onclick="toggleLexicon()" aria-label="Ouvrir le lexique des icônes" aria-expanded="false">
+  <span class="lex-btn-ico">📖</span>
+</button>
+<div class="lex-overlay" id="lexOverlay" onclick="closeLexicon()"></div>
+<div class="lex-popup" id="lexPopup" role="dialog" aria-label="Lexique des icônes">
+  <div class="lex-popup-head">
+    <span class="lex-popup-title">Lexique</span>
+    <button class="lex-popup-close" onclick="closeLexicon()" aria-label="Fermer">✕</button>
+  </div>
+  <div class="lex-grid">
+    <div class="lex-item" data-def="Détermine le seuil actif de l'action jouée au moment de l'action."><img src="Energie_256.png" alt="Énergie"><span>Énergie</span></div>
+    <div class="lex-item" data-def="Palier atteint à 4 ou plus : active l'effet le plus fort de la carte jouée."><img src="Seuil_4_256.png" alt="Seuil 4"><span>Seuil 4</span></div>
+    <div class="lex-item" data-def="Permet de modifier la valeur d'énergie d'une action."><img src="Adrénaline_256.png" alt="Adrénaline"><span>Adrénaline</span></div>
+    <div class="lex-item" data-def="La cible perd 1 carte de sa MAIN, piochée au hasard et placée en Repos. Jamais une des 3 cartes de la Manche en cours."><img src="Fatigue_256.png" alt="Fatigue"><span>Fatigue</span></div>
+    <div class="lex-item" data-def="Les 8 cases autour de ton Titan, plus la sienne, utilisées pour le calcul d'énergie et la récupération. Ton propre Titan compte pour 1."><img src="Périmètre_128.png" alt="Périmètre"><span>Périmètre</span></div>
+    <div class="lex-item" data-def="Réserve personnelle de chaque Titan où sont stockés blocs et socles collectés."><img src="Repaire_256.png" alt="Repaire"><span>Repaire</span></div>
+    <div class="lex-item" data-def="Empilement de blocs colorés (jusqu'à 4 étages) sur une case bâtiment du plateau."><img src="Bâtiment_128.png" alt="Bâtiment"><span>Bâtiment</span></div>
+    <div class="lex-item" data-def="Ressource de base récupérable, peut s'empiler pour former un Amas."><img src="Bloc_de_béton_256.png" alt="Bloc de béton"><span>Bloc de béton</span></div>
+    <div class="lex-item" data-def="Plusieurs Blocs de béton empilés sur une même case."><img src="Amas_de_béton_256.png" alt="Amas de béton"><span>Amas de béton</span></div>
+    <div class="lex-item" data-def="Le personnage que tu incarnes : un colosse qui détruit BIG CITY."><img src="Titan_256.png" alt="Titan"><span>Titan</span></div>
+    <div class="lex-item" data-def="Placé sous chaque bâtiment à sa construction. Sa valeur est fixe, même si le bâtiment perd des blocs ensuite."><img src="Socle_256.png" alt="Socle"><span>Socle</span></div>
+    <div class="lex-item" data-def="Un élément percutant un bâtiment ou un bord de plateau repart en sens inverse, gratuitement."><img src="Rebond_256.png" alt="Rebond"><span>Rebond</span></div>
+    <div class="lex-item" data-def="Un élément arrivant sur une case occupée pousse ce qui s'y trouve du nombre de cases égal à l'énergie restante."><img src="Projection_256.png" alt="Projection"><span>Projection</span></div>
+    <div class="lex-item" data-def="Désigne le Titan qui commence la manche. Passe au joueur suivant à chaque manche."><img src="Jeton_détonateur_256.png" alt="Jeton Détonateur"><span>Détonateur</span></div>
+    <div class="lex-item lex-item--badge" data-def="L'attaquant désigne 2 options ; la cible doit en perdre 1 et choisit laquelle."><span class="badge b-dil">DIL</span><span>Dilemme</span></div>
+    <div class="lex-item lex-item--badge" data-def="L'attaquant choisit librement n'importe quel élément de l'adversaire, sans restriction."><span class="badge b-rage">RAGE</span><span>Rage</span></div>
+  </div>
+</div>
+
+<!-- COVER -->
+<section class="cover">
+  <div class="cover-left">
+    <p class="tagline">Des Titans lâchés dans une ville. Le plus haut score gagne. <em>Le reste s'ecroule.</em></p>
+    <p class="subtag">"Les assurances ne couvrent sûrement pas ça."</p>
+    <div class="meta-grid" style="margin-top:32px">
+      <div class="meta-card"><div class="ico"><img src="Titan_256.png" alt="Titan"></div><div class="num">3–4</div><div class="lbl">Titans</div></div>
+      <div class="meta-card"><div class="ico">🕒</div><div class="num">15–20</div><div class="lbl">Min/joueur</div></div>
+      <div class="meta-card"><div class="ico">🎯</div><div class="num">10+</div><div class="lbl">Âge</div></div>
+      <div class="meta-card"><div class="ico">💥</div><div class="num">V36.2</div><div class="lbl">Édition</div></div>
+    </div>
+
+    <div class="smash-cta-wrap" id="smashWrap">
+      <button class="smash-cta" id="smashBtn" onclick="smashCity()" aria-label="Détruire la ville et continuer">
+        <span class="smash-cta-label">DÉTRUIRE LA VILLE</span>
+      </button>
+      <div class="smash-frag-field" id="smashFragField" aria-hidden="true"></div>
+    </div>
+  </div>
+</section>
+
+<!-- SYNOPSIS -->
+<section class="block" id="synopsis">
+  <span class="eyebrow">🧬 L'histoire</span>
+  <h2 class="title">L'ORIGINE DES <em>TITANS</em></h2>
+  <p class="lede">Vous êtes le résultat d'une expérience scientifique qui a très mal tourné — et c'est tant mieux.</p>
+
+  <div class="panel glow" style="font-size:1.05rem;line-height:1.7">
+    <p>Issus d'expériences scientifiques poussées toujours plus loin — plus grands, plus forts, plus intelligents — vous étiez censés rester sous contrôle. La dernière expérience en date a mal tourné. Vous vous êtes échappés. Et maintenant, vous comptez bien <strong style="color:var(--y1)">tout casser dans BIG CITY</strong>.</p>
+  </div>
+
+  <div class="grid-2" style="margin-top:24px">
+    <div class="panel">
+      <h4 class="kicker">🎯 Votre mission</h4>
+      <p>Raser la ville et écraser vos adversaires. Le plus haut score l'emporte, le reste… s'effondre. <em style="color:var(--muted)">(Les assurances ne couvrent sûrement pas ça.)</em></p>
+    </div>
+    <div class="panel">
+      <h4 class="kicker">⏱️ Format</h4>
+      <p><strong style="color:var(--y1)">3 à 4 joueurs</strong> pour <strong style="color:var(--y1)">1h30 à 2h</strong> de destruction, de stratégie, de fourberie et de chaos.</p>
+    </div>
+  </div>
+
+  <div class="panel glow" style="margin-top:18px;font-size:1.02rem;line-height:1.65">
+    <p>À l'aide de vos <strong style="color:var(--y1)">6 cartes Actions</strong> et de vos neurones (ce qu'il en reste), programmez vos coups pour démolir la ville en 3D et écraser la concurrence. Certaines surprises viendront pimenter la partie — et on ne parle pas du Carolina Reaper.</p>
+  </div>
+
+  <h3 class="sub">🦣 Choisissez votre Titan</h3>
+  <p class="lede" style="margin-bottom:18px">Envie de jouer un escargot, un ornithorynque, un panda ou un lama géant ? C'est ici que ça se passe.</p>
+  <div class="grid-4">
+    <div class="panel" style="text-align:center;border-left:4px solid var(--rose)"><div style="font-size:2.2rem">🐌</div><div style="font-family:'Bowlby One';color:var(--rose);margin-top:8px">Escargot</div></div>
+    <div class="panel" style="text-align:center;border-left:4px solid var(--orange)"><div style="font-size:2.2rem">🦫</div><div style="font-family:'Bowlby One';color:var(--orange);margin-top:8px">Ornithorynque</div></div>
+    <div class="panel" style="text-align:center;border-left:4px solid var(--vert)"><div style="font-size:2.2rem">🐼</div><div style="font-family:'Bowlby One';color:var(--vert);margin-top:8px">Panda</div></div>
+    <div class="panel" style="text-align:center;border-left:4px solid var(--bleu)"><div style="font-size:2.2rem">🦙</div><div style="font-family:'Bowlby One';color:var(--bleu);margin-top:8px">Lama</div></div>
+  </div>
+</section>
+
+<!-- MATÉRIEL -->
+<section class="block" id="materiel">
+  <span class="eyebrow">📦 Bienvenue dans BIG CITY</span>
+  <h2 class="title">MATÉRIEL</h2>
+  <p class="lede">Tout ce que tu vas démolir, je ne partage pas, voler, ou cacher derrière un paravent.</p>
+  <div class="material-grid">
+    <div class="mat"><div class="qty">1</div><div class="nm">Plateau BIG CITY</div><div class="det">Grille 9×9</div></div>
+    <div class="mat"><div class="qty">4</div><div class="nm">Plateaux Titan</div><div class="det">Scoring Bleu · Rose · Orange · Rouge · Vert</div></div>
+    <div class="mat"><div class="qty">6</div><div class="nm">Cartes Actions / titan</div><span style="position:absolute;top:14px;right:14px;font-size:1.6rem">🃏</span><div class="det">Identiques pour tous</div></div>
+  </div>
+
+  <div class="panel" style="margin-top:20px;border-left:4px solid var(--y1)">
+    <h4 class="kicker"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Qu'est-ce qu'un bâtiment ?</h4>
+    <p style="font-size:.92rem">Un <strong>bâtiment</strong> n'est pas une pièce à part : c'est un <strong style="color:var(--y1)">empilement de blocs colorés</strong> (jusqu'à 4 étages) sur une case bâtiment du plateau. Les 5 couleurs ci-dessous sont les blocs qui le composent.</p>
+  </div>
+
+  <div class="material-grid" style="margin-top:14px">
+    <div class="mat" data-c="bleu"><img src="Bloc_bleu_256.png" alt="Bloc Bleu" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty">19</div><div class="nm">Bleu — Habitation</div><div class="det">Barème progressif</div></div>
+    <div class="mat" data-c="rose"><img src="Bloc_rose_256.png" alt="Bloc Rose" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty">12</div><div class="nm">Rose — Boutique</div><div class="det">Barème + bonus +10 pts</div></div>
+    <div class="mat" data-c="orange"><img src="Bloc_Jaune_256.png" alt="Bloc Orange" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty">11</div><div class="nm">Orange — Loisir</div><div class="det">Score par paires exactes</div></div>
+    <div class="mat" data-c="rouge"><img src="Bloc_rouge_256.png" alt="Bloc Rouge" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty">7</div><div class="nm">Rouge — Supermarché</div><div class="det">Barème progressif</div></div>
+    <div class="mat" data-c="vert"><img src="Bloc_Vert_256.png" alt="Bloc Vert" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty">5</div><div class="nm">Vert — Téleporteur</div><div class="det">Placement secret en fin</div></div>
+    <div class="mat"><div class="qty">20</div><div class="nm">Adrénaline</div><img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="det">Distribués à certaines manches</div></div>
+    <div class="mat"><div class="qty">1</div><div class="nm">Jeton Détonateur</div><img src="Jeton_détonateur_256.png" alt="Jeton Détonateur" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="det">Désigne le starter · tourne</div></div>
+    <div class="mat"><div class="qty">1</div><div class="nm">Piste ADN commune</div><span style="position:absolute;top:14px;right:14px;font-size:1.6rem">🧬</span><div class="det">2 couloirs · Bagarre / Destruction</div></div>
+    <div class="mat"><div class="qty">8</div><div class="nm">Cartes Événements</div><span style="position:absolute;top:14px;right:14px;font-size:1.6rem">🎴</span><div class="det">1 / manche · remises ensuite</div></div>
+    <div class="mat"><div class="qty">4</div><div class="nm">Paravents</div><div class="det">Placement secret des Verts</div></div>
+  </div>
+</section>
+
+<!-- PRISE EN MAIN RAPIDE -->
+<section class="block" id="rapide">
+  <span class="eyebrow">⚡ En 1 minute</span>
+  <h2 class="title">C'EST QUOI LE PRINCIPE</h2>
+  <p class="lede">Tu es un <strong>Titan</strong> qui <strong style="color:var(--cream)">détruit BIG CITY</strong> pour collecter des ressources colorées. Chaque manche : <strong>prépare → agis → ramasse</strong></p>
+  <div class="grid-2">
+    <div class="panel glow">
+      <div style="font-family:'Titan One';font-size:2.2rem;margin-bottom:12px">🦶 CHAQUE TOUR</div>
+      <ol style="margin-left:20px;font-size:.95rem;line-height:1.7">
+        <li><strong>Mouvement gratuit :</strong> 2 cases ou + par <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">dépensée </li>
+        <li><strong>Révèle 1 de tes cartes secrètes :</strong> exécute l'action si tu le souhaite</li>
+        <li><strong>Ramasse 1 <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"></strong>sur ta case ou adjacents</li>
+      </ol>
+      <div class="callout warn" style="margin-top:12px;font-size:.9rem"><strong style="color:var(--o1)">L'énergie </strong>= Permet de rendre l'action de tes cartes plus puissantes</div>
+    </div>
+    <div class="panel glow">
+      <div style="font-family:'Titan One';font-size:2.2rem;margin-bottom:12px">🎯 OBJECTIF</div>
+      <ul style="margin-left:20px;font-size:.95rem;line-height:1.7">
+        <li style="margin-bottom:10px">📦 <strong>Blocs colorés</strong> = Marque des points à la fin en fonction de leurs quantités accumulées</li>
+        <li style="margin-bottom:10px">🧬 <strong>Piste ADN</strong> = avance sur la piste concernée en fonction de tes actions jouées</li>
+      </ul>
+      <div class="callout warn" style="margin-top:12px;font-size:.9rem"><strong style="color:var(--o1)">Placement des verts fin de partie</strong> = révélé au dernier moment</div>
+    </div>
+  </div>
+</section>
+
+<!-- MISE EN PLACE -->
+<section class="block" id="setup">
+  <span class="eyebrow">🏙️ La ville</span>
+  <h2 class="title">MISE EN PLACE</h2>
+  <p class="lede">BIG CITY est une grille de 9×9. Les bâtiments occupent les <strong style="color:var(--blanc-e)">cases impaires</strong> <strong style="color:var(--y1)">max (4 étages)</strong>. Le reste : couloirs.</p>
+  <div class="grid-2">
+    <div class="panel">
+      <h3 class="sub" style="margin-top:0">🟪 La grille</h3>
+      <ul style="list-style:none;padding-left:0">
+        <li style="padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.07)">▸ <strong>Cases bâtiment</strong> : lignes A·C·E·G·I × colonnes 1·3·5·7·9 → 25 max</li>
+        <li style="padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.07)">▸ <strong>Couloirs</strong> : tout le reste</li>
+        <li style="padding:6px 0;border-bottom:1px dashed rgba(255,255,255,.07)">▸ <strong>Construction</strong> : max 4 étages</li>
+        <li style="padding:6px 0">▸ <strong>Bâtiment détruit</strong> = la case devient un couloir</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3 class="sub" style="margin-top:0">🎨 Construction aléatoire</h3>
+      <p style="margin-bottom:10px">Placement aléatoire sur les 25 cases bâtiment. Pas obligé de tout remplir.</p>
+      <div class="callout warn"><strong>Vert :</strong> obligatoirement à la <strong>BASE</strong> d'un bâtiment de minimum 3 étages lui inclus. Pas dans le même bâtiment qu'un autre vert.</div>
+    </div>
+  </div>
+
+  <h3 class="sub">📐 Plateau BIG CITY 9×9 — schéma</h3>
+  <div class="bigcity-board" id="board9"></div>
+  <div class="legend-row">
+    <div class="lg"><div class="sw" style="background:rgba(165,146,181,.4)"></div>Case bâtiment</div>
+    <div class="lg"><div class="sw" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.15)"></div>Case couloir</div>
+    <div class="lg"><div class="sw" style="background:linear-gradient(135deg,#6366f1,#3b82f6,#06b6d4)"></div>T1</div>
+    <div class="lg"><div class="sw" style="background:linear-gradient(135deg,#f43f5e,#fb923c,#fbbf24)"></div>T2</div>
+    <div class="lg"><div class="sw" style="background:linear-gradient(135deg,#22c55e,#06d46d,#63f1b1)"></div>T3</div>
+    <div class="lg"><div class="sw" style="background:linear-gradient(135deg,#f50be9,#ef44b9,#a855f7)"></div>T4</div>
+  </div>
+
+  <h3 class="sub"><img src="Socle_256.png" alt="Socle" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Socles</h3>
+  <div class="panel">
+    <p>Placés sous chaque bâtiment. Valeur = nombre de blocs à la construction. <strong style="color:var(--y1)">FIXE</strong> — elle ne change pas si le bâtiment perd des blocs ensuite.</p>
+    <div class="callout"><strong style="color:var(--g1)">Récupération :</strong> c'est le joueur qui détruit directement <strong>le dernier bloc</strong> qui récupère le socle.</div>
+  </div>
+
+  <h3 class="sub">🎮 Placement initial</h3>
+  <div class="grid-2">
+    <div class="panel">
+      <h4 class="kicker">TITANS</h4>
+      <p>Placés adjacents aux 4 coins · en <strong>ordre inverse</strong> du sens de jeu · 2 Titans peuvent partager un coin si chacun est sur une case adjacente différente à celui-ci.</p>
+      <p style="margin-top:8px;color:var(--y1)"><strong>Des coins peuvent rester vides.</strong></p>
+    </div>
+    <div class="panel">
+      <h4 class="kicker">JETONS &amp; CARTES</h4>
+      <p>Chaque joueur reçoit <strong style="color:var(--y1)">6 cartes Actions.</strong> Le Détonateur est donné au joueur qui a cassé quelque chose récemment.</p>
+    </div>
+    <div class="panel" id="adn">
+      <h4 class="kicker">🧬 Piste ADN</h4>
+      <p style="font-size:.85rem;color:rgb(212,194,230);margin:6px 0 16px">1 piste commune · 2 couloirs. Les pions avancent toute la partie. Le classement final donne des points.</p>
+      <div style="display:grid;gap:16px">
+        <div style="padding:20px;border-radius:24px;border-left:4px solid var(--m1);background:linear-gradient(160deg,rgba(255,46,99,.12),rgba(255,46,99,.04))">
+          <p style="font-size:1.15rem;font-weight:600;color:var(--m1);margin:0;display:flex;align-items:center;gap:10px"><span>💪</span>Bagarre</p>
+          <p style="font-size:.9rem;color:rgb(212,194,230);margin:8px 0 0;line-height:1.4">+1 case quand un <strong><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> adverse est déplacé</strong> par une de tes actions.</p>
+        </div>
+        <div style="padding:20px;border-radius:24px;border-left:4px solid var(--o1);background:linear-gradient(160deg,rgba(255,146,57,.12),rgba(255,146,57,.04))">
+          <p style="font-size:1.15rem;font-weight:600;color:var(--o1);margin:0;display:flex;align-items:center;gap:10px"><span>💥</span>Destruction</p>
+          <p style="font-size:.9rem;color:rgb(212,194,230);margin:8px 0 0;line-height:1.4">+1 case quand un <strong><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"> est abimé</strong> par une de tes actions.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CHECKLIST -->
+<section class="block" id="checklist">
+  <span class="eyebrow">✅ Avant de jouer</span>
+  <h2 class="title">CHECKLIST DE MISE EN PLACE</h2>
+  <div class="check-list">
+    <div class="chk">BIG CITY construite · socles posés · max 4 étages</div>
+    <div class="chk">Titans placés adjacents aux 4 coins · ordre inverse</div>
+    <div class="chk">6 cartes Actions + 1</div>
+    <div class="chk">Piste ADN commune · 2 pions par joueur</div>
+    <div class="chk">Jeton Détonateur assigné</div>
+    <div class="chk">Paravents prêts pour le scoring final</div>
+  </div>
+</section>
+
+<!-- PASSIFS -->
+<section class="block" id="passifs">
+  <span class="eyebrow">🧡 Le cœur du jeu</span>
+  <h2 class="title">TES 2 RÈGLES PERMANENTES</h2>
+  <p class="lede">Ces deux règles s'appliquent à <strong style="color:var(--y1)">chaque tour</strong>, quoi qu'il arrive. <strong style="color:var(--y1)">Elles ne sont pas obligatoires.</strong></p>
+  <div class="grid-2">
+    <div class="panel glow">
+      <h3 class="sub" style="margin-top:0">🦶 Mouvement gratuit</h3>
+      <p style="font-size:.95rem;margin-bottom:10px"><strong style="color:var(--y1)">Avant ton action, uniquement.</strong> Tu peux te déplacer de <strong style="color:var(--y1)">2 cases max</strong> Tu ne peux pas traverser un titan ou un batiment. <strong style="color:var(--m1)">Aucun déplacement via ce passif n'est possible après avoir joué ta carte Action du tour.</strong></p>
+      <div class="callout">+1 case de déplacement par <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">adrénaline dépensé.</div>
+    </div>
+    <div class="panel glow">
+      <h3 class="sub" style="margin-top:0">🤲 Récupération</h3>
+      <p style="font-size:.95rem;margin-bottom:10px"><strong style="color:var(--y1)">Après ton action.</strong> récupères<strong style="color:var(--cream)"> 1 <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">au choix</strong> dans ton <img src="Périmètre_128.png" alt="Périmètre" class="icon-img--sm" style="vertical-align:middle">Si plusieurs <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">sont accessibles , tu choisis librement lequel récupérer.</p>
+      <div class="callout warn">Si la case se libère, tu te <strong>déplaces obligatoirement</strong> dessus.</div>
+    </div>
+  </div>
+  <div class="callout warn" style="margin-top:24px"><strong>Règle universelle — Passif :</strong> le passif est <strong>optionnel</strong>, quelle que soit la situation — carte jouée normalement, carte inapplicable. Le joueur choisit librement d'activer ou non son passif à chaque tour.</div>
+  <div class="callout warn" style="margin-top:16px"><strong style="color:var(--m1)">Hors-tour :</strong> un Titan ne peut initier aucune action (carte, déplacement, passif) tant que ce n'est pas son tour. Seule exception : une réaction directe à une interaction dont il est la cible (ex. défense DIL, dépense d'Adrénaline pour annuler un vol/DIL/Fatigue, mise cachée d'Adrénaline sur Faut Pas Me Chauffer).</div>
+</section>
+
+<!-- RÈGLES TRANSVERSALES -->
+<section class="block" id="ame">
+  <span class="eyebrow">Les codes de BIG CITY</span>
+  <h2 class="title" style="margin-top:6px">RÈGLES <em>TRANSVERSALES</em> BIG CITY</h2>
+  <h3 class="sub">L'ÉNERGIE </h3>
+  <p>L'effet de l'énergie dépend de la carte jouée et de sa valeur.</p>
+  <p><strong style="color:var(--y1)">Comment on la compte :</strong> l'énergie d'une action vaut le nombre de cases <strong>occupées</strong> dans ton Périmètre — un bâtiment debout, un Titan adverse, ta propre case. <strong style="color:var(--o1)">Ton Titan compte pour 1</strong> : ta case est incluse dans le décompte. L'énergie ne descend donc jamais en dessous de 1, et il te suffit de <strong>3 cases occupées autour de toi</strong> pour atteindre le Seuil 4.</p>
+  <div class="threshold-cards">
+    <div class="thresh"><div class="num">Énergie 4 ou plus <img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></div></div>
+  </div>
+  <div class="callout warn" style="margin-top:16px"><strong style="color:var(--o1)">Dégression d'énergie :</strong> tout élément en mouvement (<img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">/<img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle">) perd <strong style="color:var(--y1)">1 énergie par case parcourue</strong>. L'énergie restante au moment de l'impact déclenche les seuils applicables : <span class="badge b-dil">DIL</span> <span class="badge b-rage">RAGE</span> <img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"><strong>Le passif n'est pas concerné.</strong></div>
+
+  <h3 class="sub">↩️ Rebond &amp; projection</h3>
+  <div class="grid-2">
+    <div class="panel">
+      <h4 class="kicker"><img src="Rebond_256.png" alt="Rebond" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rebond</h4>
+      <p>Tout élément percutant un <strong>bâtiment avec <img src="Energie_256.png" alt="Énergie" class="icon-img--sm" style="vertical-align:middle"></strong> ou le <strong>bord du plateau</strong> rebondit en sens inverse. <strong style="color:var(--y1)">Le rebond est gratuit</strong>. Revenir sur la case de départ coûte <strong style="color:var(--y1)">1 énergie</strong>.</p>
+      <ul style="margin-top:10px;list-style:none;padding-left:0">
+        <li style="padding:4px 0"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"> → l'élément <strong style="color:var(--y1)">sort du plateau</strong> et réapparaît de l'autre côté (bord opposé, ou point exactement opposé si la sortie est diagonale — voir encadré ci-dessous).</li>
+        <li style="padding:4px 0"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm"> → l'élément se pose sur la case <strong style="color:var(--y1)">adjacente</strong>, entre la case où il était et celle où il aurait dû aller.</li>
+      </ul>
+      <div class="callout">Si la case de retour ou de réapparition est occupée → l'élément se pose sur une case <strong style="color:var(--y1)">adjacente</strong> entre la case d'impact et la case de destination, comme d'habitude.</div>
+    </div>
+    <div class="panel">
+      <h4 class="kicker"><img src="Projection_256.png" alt="Projection" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Projection — règle absolue</h4>
+      <p>Dès qu'un élément arrive sur une case <strong style="color:var(--y1)">occupée</strong> → il projette les éléments présents <strong style="color:var(--y1)">du nombre de cases égal à l'énergie restante</strong> · transmission possible.</p>
+      <div class="callout warn">Si l'énergie restante = <strong>1</strong> → pas de projection · les éléments s'accumulent, sauf un titan avec un autre titan. </div>
+    </div>
+    <div class="panel">
+      <h4 class="kicker"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Bâtiment comme mur</h4>
+      <p><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle">impacté avec une <img src="Energie_256.png" alt="Énergie" class="icon-img--sm"> est considéré comme un mur sauf mention contraire.</p>
+    </div>
+    <div class="panel" style="border-color:rgba(255,46,99,.4)">
+      <h4 class="kicker">Immunité initiateur</h4>
+      <p>La règle absolue de projection ne s'applique <strong style="color:var(--y1)">pas au titan initiateur</strong> Si <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">arrive sur sa case après un rebond :</p>
+        <div style="display:flex;gap:18px;margin-top:8px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">+<img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">→<img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></span>
+          <span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">+<img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle">→<img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></span>
+        </div>
+        <p style="margin-top:10px"><strong style="color:var(--m1)">S'arrête immédiatement</strong> sur la case du Titan initiateur, quelle que soit l'énergie restante — l'initiateur ne peut pas être impacté par sa propre attaque. <span style="color:var(--muted)">(Correctif V36 : remplace l'ancien comportement « traverse si il reste de l'énergie ».)</span></p>
+    </div>
+    <div class="panel" style="border-color:rgba(255,217,61,.4)">
+      <h4 class="kicker">🌐 Rebord du plateau — Sortie &amp; retour</h4>
+      <p>Si <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> en rebord de plateau est bousculé <strong style="color:var(--y1)">en dehors de BIG CITY</strong>, il sort du plateau et réapparaît <strong style="color:var(--y1)">de l'autre côté</strong> (bord opposé), <strong>sans entrer</strong> sur le plateau.</p>
+      <p style="margin-top:8px">Il reste en attente à l'extérieur. <strong style="color:var(--y1)">Rentrer sur le plateau coûte 1 de déplacement</strong> lors de son prochain tour.</p>
+      <div class="callout warn">Il peut dépenser 1 ressource <strong>qui tombe au sol</strong> pour passer immédiatement d'un bord du plateau à l'autre.</div>
+    </div>
+    <div class="panel" style="border-color:rgba(45,141,245,.4)">
+      <h4 class="kicker">🧭 Sortie diagonale du plateau — Symétrie centrale</h4>
+      <p>Sur BIG CITY, les bâtiments occupent les intersections impaires (A·C·E·G·I × 1·3·5·7·9) alors que les Titans circulent aussi sur les couloirs pairs : une attaque de Titan sur un bâtiment adjacent est donc <strong style="color:var(--y1)">très généralement diagonale</strong>, ce n'est pas un cas rare.</p>
+      <p style="margin-top:8px">Quand une trajectoire diagonale sort du plateau par les <strong>deux bords à la fois</strong> (ligne ET colonne dépassées ensemble, typiquement par un coin) : l'élément réapparaît au <strong style="color:var(--y1)">point exactement opposé</strong> (symétrie centrale du plateau) et <strong style="color:var(--y1)">poursuit son déplacement dans la même direction diagonale</strong> avec l'énergie restante. Même principe de bouclage que la Faille spatio-temporelle : la trajectoire peut traverser le plateau plusieurs fois tant que l'énergie restante (dégressive de 1 par case) le permet.</p>
+    </div>
+  </div>
+
+  <h3 class="sub">🔀 Superposition cases</h3>
+  <div class="table-wrap">
+    <table class="matrix">
+      <thead><tr><th>Contenu d'une case</th><th>Autorisé ?</th></tr></thead>
+      <tbody>
+        <tr><td><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> <strong>+</strong> <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"></td><td><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ OUI</span></td></tr>
+        <tr><td><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> <strong>+</strong> <img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></td><td><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ OUI</span></td></tr>
+        <tr><td><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"> <strong>+</strong>  <img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></td><td><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ OUI</span></td></tr>
+        <tr><td><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> <strong>+</strong> <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td><span class="badge" style="background:rgba(255,46,99,.2);color:var(--m1)">✗ NON</span></td></tr>
+        <tr><td><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> <strong>+</strong> <img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"></td><td><span class="badge" style="background:rgba(255,46,99,.2);color:var(--m1)">✗ NON</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout warn"><strong>Transparence du corps :</strong> <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> ne protège pas ce qui est sur sa case. Le passif adverse peut atteindre un <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">bloc de béton sous ses pieds.</div>
+
+  <h3 class="sub">🌀 Téléporteurs</h3>
+     <div class="panel">
+      <h4 class="kicker">📍 Apparition</h4>
+      <p>Placés aléatoirement sur big city, mais obligatoirement au pied <img src="Bâtiment_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> d'une hauteur <strong style="color:var(--y1)">minimale de 3 étages</strong> lors de la mise en place.</p>
+      <div class="callout warn"><strong>Téléporteur central :</strong> Au moins un téléporteur est impérativement positionné sur la case centrale du plateau.</div>
+    </div>
+    <div class="panel">
+      <h4 class="kicker"><img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Collecte</h4>
+      <p>Quand un <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle">détruit et récupère un téléporteur, il le met dans son <img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">. Le téléporteur est alors retiré définitivement du plateau.</p>
+      <div class="callout warn"><strong style="color:var(--y1)">Fonction Joker :</strong> un téléporteur dans le <img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">fonctionne comme un joker en fin de partie, pour une catégorie de couleur au choix ou pour une des pistes ADN — <em>voir Scoring final → Vert</em>. Cette fonction est propre au téléporteur.</div>
+    </div>
+  <div class="grid-4">
+    <div class="panel"><h4 class="kicker">Entrer</h4><p>Coûte <strong style="color:var(--y1)">1 déplacement</strong></p></div>
+    <div class="panel"><h4 class="kicker">Sortir</h4><p style="color:var(--g1)"><strong>Gratuit</strong></p></div>
+    <div class="panel"><h4 class="kicker">Limite</h4><p>1 seule téléportation par carte jouée · <strong style="color:var(--y1)">impossible d'enchaîner 2 téléportations</strong></p></div>
+    <div class="panel"><h4 class="kicker">Téléporteur collecté</h4><p><strong>hors service définitivement</strong></p></div>
+  </div>
+</section>
+
+<!-- AMAS DE BÉTON -->
+<section class="block" id="tour">
+  <h2 class="title"><img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img" style="vertical-align:middle;margin-right:12px">AMAS DE <em>BÉTON</em></h2>
+  <div class="grid-3">
+    <div class="panel"><h4 class="kicker">📐 Formation</h4><p>Plusieurs <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">sur la même case forment un <img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle">. Chaque <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">suivant s'empile au sommet (+1 hauteur). <strong style="color:var(--y1)">Pas de limite.</strong> Seuls des <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">peuvent s'empiler.</p></div>
+    <div class="panel"><h4 class="kicker">⚡ Patatras</h4><p><img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"> touchée par une action dont l'énergie est <strong style="color:var(--vert)"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></strong> au moment de l'impact.</p></div>
+    <div class="panel"><h4 class="kicker">⭐ Résolution</h4><p><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">éjectés <strong style="color:var(--y1)">du haut vers le bas</strong>, dans la <strong style="color:var(--y1)">direction opposée</strong> à la percussion, d'un nombre de cases <strong style="color:var(--y1)">égal à leur hauteur</strong>.</p></div>
+  </div>
+  <div class="callout warn"><strong style="color:var(--o1)">Exemple :</strong> <img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle">Sommet (hauteur = 3) projeté de 3 cases · 2e (hauteur = 2) de 2 cases · 3e (hauteur = 1) de 1 case.<br>Chaque <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">suit les règles normales de projection et peut déclencher une réaction en chaîne si <img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm">.</div>
+
+  <h3 class="sub">Élément hors du plateau</h3>
+  <div class="panel" style="border-color:rgba(255,217,61,.4)">
+    <p style="margin-bottom:10px">À l'arrivée d'un <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"> <strong>/</strong> <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> sur une case impossible, <strong style="color:var(--y1)">l'énergie restante décide du résultat</strong> :</p>
+    <div class="grid-2">
+      <div class="panel">
+        <h4 class="kicker">🌀 Faille spatio-temporelle</h4>
+        <p>Si l'élément <strong style="color:var(--y1)">sort du plateau</strong> (bord dépassé, énergie suffisante) → il réapparaît <strong style="color:var(--y1)">du côté opposé</strong> (point exactement opposé si la sortie est diagonale, cf. encadré « Sortie diagonale du plateau ») et <strong>finit son déplacement</strong>. Le bouclage est possible plusieurs fois si l'énergie restante le permet. Les règles normales s'appliquent au reste de sa trajectoire.</p>
+      </div>
+      <div class="panel">
+        <h4 class="kicker">🚧 Case impossible</h4>
+        <p>Si la case visée est <strong>déjà occupée</strong> de façon incompatible (ex. un bâtiment) → l'élément se pose sur la case <strong style="color:var(--y1)">adjacente</strong>, entre la case où il était et celle où il aurait dû aller. <strong>Quel que soit le seuil d'énergie.</strong></p>
+      </div>
+    </div>
+    <div class="callout warn" style="margin-top:14px"><strong style="color:var(--o1)">Un élément ne se pose JAMAIS sur un bâtiment debout.</strong> Un bâtiment occupe toute sa case, il n'y a pas de place au sol à côté de lui. Si la trajectoire s'arrête là, l'élément glisse sur la case voisine.</div>
+    <div class="callout warn" style="margin-top:10px"><strong style="color:var(--y1)">Au Seuil 4, l'élément prend la place.</strong> Quand un élément percute un bâtiment avec une énergie de 4 ou plus, il lui casse un bloc. Si ce coup fait tomber le bâtiment entièrement, la case devient un couloir et <strong>l'élément s'y installe</strong>. Sinon il s'arrête juste avant. Même règle pour un Titan comme pour un débris, en trajectoire normale comme en sortie de faille.</div>
+  </div>
+
+  <h3 class="sub">🥊 Titan poussé hors du plateau</h3>
+  <div class="panel" style="border-color:rgba(255,146,57,.5)">
+    <p style="margin-bottom:10px">Un <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> poussé au-delà du bord ne rebondit pas et ne passe pas par la faille. <strong style="color:var(--o1)">C'est du catch : on le sort du ring.</strong> Aucune condition d'énergie, aucun seuil.</p>
+    <div class="grid-2">
+      <div class="panel">
+        <h4 class="kicker">⏳ Il attend son tour</h4>
+        <p>Il quitte BIG CITY et <strong style="color:var(--y1)">ne revient qu'au début de son propre tour</strong>. Tant qu'il est dehors, il n'occupe aucune case : il ne compte pas dans l'énergie, ne bloque personne, et <strong>ne peut pas être ciblé</strong>. C'est voulu — sans ce délai, on pourrait s'acharner sur lui plusieurs fois dans le même round.</p>
+      </div>
+      <div class="panel">
+        <h4 class="kicker">↩️ Il rentre par l'autre côté</h4>
+        <p>Il réapparaît au <strong>point opposé</strong> à sa sortie : sorti en C9, il rentre par C1. Si cette case est prise, il rentre par la <strong style="color:var(--y1)">case libre la plus proche du bord</strong> — B1 ou D1 dans cet exemple. Il rentre <strong>toujours</strong>, quoi qu'il arrive.</p>
+      </div>
+    </div>
+    <div class="callout warn" style="margin-top:12px"><strong style="color:var(--o1)">La rentrée se paie sur le Mouvement gratuit.</strong> Revenir sur le plateau coûte <strong>1 déplacement</strong>, et chaque case de contournement en coûte une de plus. Le passif est donc forcé, avec une valeur réduite — et il peut falloir dépenser une <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle"> Adrénaline pour retrouver de la marge.</div>
+  </div>
+
+  <h3 class="sub">Cas spécial — Boing Boing sur <img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></h3>
+  <div class="panel" style="border-color:rgba(255,217,61,.4)">
+    <p>L'atterrissage provoque un <strong style="color:var(--y1)">ecroulement immédiat</strong>.</p>
+    <p style="margin-top:8px">Les <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">sont distribués <strong>du haut vers le bas</strong> sur les cases <strong>adjacentes à la case d'impact</strong>, au choix du joueur actif.</p>
+    <div class="callout warn">Seules les cases <em>adjacentes à la case d'impact</em> sont éligibles (pas les cases éloignées).</div>
+  </div>
+</section>
+
+<!-- GLOSSAIRE -->
+<section class="block" id="glossaire">
+  <span class="eyebrow">📖 Vocabulaire</span>
+  <h2 class="title">GLOSSAIRE</h2>
+  <p class="lede">Ces termes traversent tout le livret. Leur définition est <strong>fixe</strong> et non négociable.</p>
+  <div class="glossary-grid">
+    <div class="gloss"><div class="gloss-tag dil">DIL</div><div><h5>Dilemme</h5><p>L'attaquant désigne <strong>2 couleurs différentes</strong> de l'<img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">repaire du défenseur — <strong>ou</strong> 1 socle tiré au sort si applicable. La <strong style="color:var(--y1)">cible doit en perdre 1</strong> parmi les 2 options désignées par l'attaquant — c'est la cible, pas l'attaquant, qui choisit laquelle. <strong style="color:var(--y1)">Évitable : le défenseur peut donner 1 <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">adrénaline à l'attaquant pour annuler le DIL.</strong> <strong style="color:var(--m1)">Impossible si la cible ne possède qu'un seul type de ressource (une seule couleur) dans son repaire — effet de repli à trancher avec le porteur du projet.</strong></p></div></div>
+    <div class="gloss"><div class="gloss-tag ko">RAGE</div><div><h5>RAGE</h5><p>L'attaquant choisit librement n'importe quel élément de l'adversaire, sans aucune restriction. <strong style="color:var(--m1)">Impossible si la cible possède moins de 2 ressources (blocs + socles).</strong> Ne peut pas être évité avec une <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">adrénaline.</p></div></div>
+    <div class="gloss"><div class="gloss-tag fat-icon"><img src="Fatigue_256.png" alt="Fatigue" class="icon-img"></div><div><h5>Fatigue</h5><p>Effet de Boing Boing et Graouhhh. L'attaquant pioche au hasard 1 carte <strong style="color:var(--y1)">de la MAIN</strong> de la cible et la place face cachée dans sa zone Repos. <strong>Jamais une des 3 cartes de la Manche en cours</strong> — celles-ci sont engagées, même celles qui ne sont pas encore résolues. La carte volée est indisponible pendant toute la Manche suivante. La cible peut la consulter — pas les autres. <strong style="color:var(--y1)">S'ajoute au vol normal de Phase 3</strong>. Défense : 1 <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">adrénaline.</p></div></div>
+    <div class="gloss"><div class="gloss-tag e"><img src="Energie_256.png" alt="Énergie" class="icon-img"></div><div><h5>Énergie</h5><p>Détermine le seuil actif de l'action jouée au moment de l'action.</p></div></div>
+    <div class="gloss"><div class="gloss-tag p adr-icon"><img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img"></div><div><h5>L'adrénaline</h5><p>Permet de modifier la valeur d'énergie.</p></div></div>
+    <div class="gloss"><div class="gloss-tag seuil4-icon"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img"></div><div><h5>Seuil 4</h5><p>Palier déclenché quand l'énergie restante au moment de l'impact atteint <strong style="color:var(--y1)">4 ou plus</strong>. Active l'effet le plus fort de la carte jouée (RAGE, Patatras, Écroulement selon le contexte). En dessous de 4, c'est l'effet de base qui s'applique.</p></div></div>
+  </div>
+</section>
+
+<!-- ADRÉNALINE -->
+<section class="block" id="adrénaline">
+  <span class="eyebrow">💪 Devenir plus puissant</span>
+  <h2 class="title"><img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img" style="vertical-align:middle;margin-right:12px"><em class="accent"><strong style="color:var(--adrenaline)">Adrénaline</strong></em></h2>
+  <p class="lede"><strong style="color:var(--adrenaline)">1 Adrénaline</strong> distribué à chaque début de manche.</p>
+  <div class="table-wrap">
+    <table class="matrix">
+      <thead><tr><th>Contexte</th><th>Moment</th><th>Effet</th></tr></thead>
+      <tbody>
+        <tr><td>Toute action <em>sauf Je Ne Partage Pas et Graouhhh</em></td><td>À tout moment</td><td>+1 à la valeur de l'énergie</td></tr>
+        <tr><td>Déplacement passif</td><td>Sur le moment</td><td>+1 case de déplacement</td></tr>
+        <tr><td>Graouhhh — bonus</td><td>Après l'action</td><td>+1 <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">reçue si plusieurs <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle">sont impactés</td></tr>
+        <tr><td><img src="Fatigue_256.png" alt="Fatigue" class="icon-img--sm" style="vertical-align:middle"></td><td>Immédiatement</td><td>Annule le vol de carte</td></tr>
+        <tr><td>Défense Vol Phase 3</td><td>Immédiatement</td><td>Annule le vol de carte normal</td></tr>
+        <tr><td>Faut Pas Me Chauffer — mise cachée</td><td>Avant comparaison des sommes</td><td>Attaquant <strong>et</strong> cible peuvent chacun ajouter autant d'Adrénaline qu'ils souhaitent, en mise cachée</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout warn"><strong>INTERDITS :</strong> impossible d'utiliser <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle"> sur Je Ne Partage Pas ou Graouhhh.</div>
+  <div class="callout"><strong style="color:var(--g1)">📦 Accumulation :</strong> se conserve d'une manche à l'autre. Un joueur peut donc en accumuler plusieurs et les dépenser en rafale. <strong style="color:var(--y1)">3 points par <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">restante en fin de partie.</strong></div>
+</section>
+
+<!-- STRUCTURE -->
+<section class="block" id="partie">
+  <span class="eyebrow">🔄 Le rythme</span>
+  <h2 class="title">STRUCTURE D'UNE <em>PARTIE</em></h2>
+  <div class="panel" style="display:flex;align-items:center;justify-content:center;gap:48px;flex-wrap:wrap;padding:28px 32px;max-width:500px;margin:0 auto">
+    <div style="text-align:center;flex:1;min-width:150px"><div class="titan" style="font-size:3rem;color:var(--cream)">3J</div><p style="font-size:1.1rem;font-weight:600;margin-top:6px">→ <strong style="color:var(--y1)">6 manches</strong></p></div>
+    <div style="width:2px;height:60px;background:rgba(255,255,255,.12);flex:0 0 auto"></div>
+    <div style="text-align:center;flex:1;min-width:150px"><div class="titan" style="font-size:3rem;color:var(--cream)">4J</div><p style="font-size:1.1rem;font-weight:600;margin-top:6px">→ <strong style="color:var(--y1)">4 manches</strong></p></div>
+  </div>
+
+  <h3 class="sub">📊 Séquence d'une manche</h3>
+  <div class="round-sequence-header">
+    <div class="round-flow">
+      <div class="flow-step"><div class="stp">1</div><div class="nm">Événement</div><div class="det">1 carte tirée au hasard, appliquée, remise</div></div>
+      <div class="flow-step"><div class="stp">2</div><div class="nm">Déclenchement</div><div class="det">Le Détonateur choisit le starter · ordre horaire</div></div>
+      <div class="flow-step"><div class="stp">3</div><div class="nm">Programmation</div><div class="det">3 cartes face cachée par joueur</div></div>
+      <div class="flow-step"><div class="stp">4</div><div class="nm">Action</div><div class="det">Applique dans l'ordre du jeton 1 action par joueur jusqu'à épuisement</div></div>
+      <div class="flow-step"><div class="stp">5</div><div class="nm">Repos</div><div class="det">Restitution · vol de carte programmée · au suivant</div></div>
+    </div>
+    <div class="flow-step"><div class="stp"></div><div class="nm" style="color:var(--adrenaline)"><img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">Adrénaline</div><div class="det">1 à chaque début manche </div></div>
+  </div>
+  <div class="callout">Entre chaque manche : le <strong>Jeton Détonateur</strong> passe au joueur suivant dans le sens horaire.</div>
+  <div class="callout warn"><strong>⚠️ Carte inapplicable :</strong> si une carte programmée ne peut pas être exécutée ou que vous ne voulez finalement pas l'utiliser, elle reste <strong>face cachée</strong> — aucune information donnée aux adversaires. <em>(Le passif reste optionnel, voir plus haut.)</em></div>
+
+  <h3 class="sub">🎴 Repos détaillé</h3>
+  <div class="grid-2">
+    <div class="panel"><h4 class="kicker">Vol de carte</h4><p>Dans le sens du joueur qui détient le détonateur, chaque titan choisit <strong style="color:var(--y1)">1 carte parmi les 3 jouées</strong> du titan suivant et la pose <strong>face visible</strong> dans sa zone Repos.</p><p style="margin-top:8px"><strong>Défense :</strong> <strong style="color:var(--adrenaline)">1<img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle"></strong> <strong style="color:var(--y1)">annule ce vol.</strong></p></div>
+    <div class="panel"><h4 class="kicker">Restitution</h4><p>Les cartes en zone repos de la manche précédente sont restituées en main à chaque joueur.</p></div>
+  </div>
+</section>
+
+<!-- ACTIONS -->
+<section class="block" id="actions">
+  <span class="eyebrow">🎴 Le deck</span>
+  <h2 class="title">LES <em>6 CARTES</em> ACTIONS</h2>
+  <p class="lede">Valeurs de Force : <strong>Tout Casser 1</strong> · Tête en avant 2 · Graouhhh 2 · Boing Boing 2 · Faut Pas Me Chauffer 3 · Je Ne Partage Pas 3.</p>
+  <div style="background:linear-gradient(135deg,rgba(255,107,26,.1),rgba(255,46,99,.1));border:1.5px solid rgba(255,107,26,.25);border-radius:14px;padding:14px 16px;margin-bottom:24px;display:flex;gap:24px;flex-wrap:wrap">
+    <p style="font-size:.85rem;margin:0"><strong style="color:var(--o1)">+1 DESTRUCTION</strong> = avance ta piste Destruction</p>
+    <p style="font-size:.85rem;margin:0"><strong style="color:var(--m1)">+1 BAGARRE</strong> = avance ta piste Bagarre</p>
+    <p style="font-size:.85rem;margin:0"><img src="Fatigue_256.png" alt="Fatigue" class="icon-img--sm" style="vertical-align:middle"> = la cible perd 1 carte de sa main</p>
+  </div>
+
+  <div class="card-matrix-wrap">
+    <table class="card-matrix">
+
+      <!-- 01 TOUT CASSER -->
+      <tbody>
+        <tr class="cm-head" style="--card-c1:#FF6B1A;--card-c2:#FF2E63"><td colspan="3"><span>01 · TOUT CASSER</span><span class="cm-force">⚡ Force 1</span></td></tr>
+        <tr class="cm-note"><td colspan="3"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm" style="vertical-align:middle"> <strong>Énergie</strong> = cases occupées dans ton <img src="Périmètre_128.png" alt="Périmètre" class="icon-img--sm" style="vertical-align:middle">périmètre (max 8).</td></tr>
+        <tr class="cm-cols"><th class="cm-elem">Élément</th><th class="cm-cond">Cond.</th><th>Effet</th></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></td><td>Casse 1 bloc du haut · projeté · <strong style="color:#e07e16">+1 Destruction</strong></td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><span class="badge b-auto">rebond</span></td><td>Direction sens inverse · bord gratuit</td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"></td><td>Projeté de (x) · énergie transmise</td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></td><td>Patatras · éjection haut→bas</td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm"></td><td><span class="badge b-dil">DIL</span> · déplacé de (x) · énergie transmise · <strong style="color:var(--m1)">+1 Bagarre</strong></td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></td><td><span class="badge b-rage">RAGE</span> · déplacé de (x) · énergie transmise · <strong style="color:var(--m1)">+1 Bagarre</strong></td></tr>
+        <tr class="cm-foot"><td colspan="3">🛡 <strong>Immunité :</strong> tu ne peux pas être projeté par ton propre Tout Casser. Si un élément de ton Tout Casser revient sur ta case, il s'arrête immédiatement dessus.</td></tr>
+      </tbody>
+
+      <!-- 02 TÊTE EN AVANT -->
+      <tbody>
+        <tr class="cm-head" style="--card-c1:#9333EA;--card-c2:#5421A0"><td colspan="3"><span>02 · TÊTE EN AVANT</span><span class="cm-force">⚡ Force 2</span></td></tr>
+        <tr class="cm-note"><td colspan="3">Fonce en ligne droite sur <strong>3 cases</strong> (<strong style="color:var(--y1)">+1 par <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">adrénaline</strong>).</td></tr>
+        <tr class="cm-cols"><th class="cm-elem">Élément</th><th class="cm-cond">Cond.</th><th>Effet</th></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm"></td><td>1 bloc <img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">arrêt · <strong style="color:#e07e16">+1 Destruction</strong></td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></td><td>1 bloc <img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">· celui du dessous projeté direction opposée · <strong style="color:#e07e16">+1 Destruction</strong></td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"></td><td><img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">Récupéré · prend sa place · arrêt</td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></td><td>Plus haut <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"><img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">· celui du dessous projeté direction opposée</td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm"></td><td><span class="badge b-dil">DIL</span> <img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">repaire · <strong style="color:var(--m1)">+1 Bagarre</strong></td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></td><td><span class="badge b-rage">RAGE</span> <img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">repaire · projeté · <strong style="color:var(--m1)">+1 Bagarre</strong></td></tr>
+        <tr class="cm-foot"><td colspan="3"><img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle"> Adrénaline : +1 valeur · peut faire basculer le seuil.</td></tr>
+      </tbody>
+
+      <!-- 03 GRAOUHHH -->
+      <tbody>
+        <tr class="cm-head" style="--card-c1:#2DD4BF;--card-c2:#0E7C7B"><td colspan="3"><span>03 · GRAOUHHH</span><span class="cm-force">⚡ Force 2</span></td></tr>
+        <tr class="cm-note"><td colspan="3"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle">sur l'axe = <strong style="color:var(--y1)">mur</strong> · les <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle">derrière sont protégés.</td></tr>
+        <tr class="cm-cols"><th class="cm-elem">Élément</th><th class="cm-cond">Cond.</th><th>Effet</th></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond">1 axe</td><td><img src="Fatigue_256.png" alt="Fatigue" class="icon-img--sm" style="vertical-align:middle"> <span class="badge b-dil">DIL</span> · recule · <strong style="color:var(--m1)">+1 Bagarre</strong> par Titan touché</td></tr>
+        <tr class="cm-foot"><td colspan="3">🎁 Bonus : 2 <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle">touchés → <strong style="color:var(--y1)">+1 <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">Adrénaline</strong>. 🚫 Aucune <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">dépensable sur cette action.</td></tr>
+      </tbody>
+
+      <!-- 04 BOING BOING -->
+      <tbody>
+        <tr class="cm-head" style="--card-c1:#FFD93D;--card-c2:#FF6B1A"><td colspan="3"><span>04 · BOING BOING</span><span class="cm-force">⚡ Force 2</span></td></tr>
+        <tr class="cm-note"><td colspan="3">Destination au choix · <strong>3 cases max</strong> · tous azimuts · obstacles ignorés. <span class="badge b-auto">Contigus</span> Éléments collés = 1 seule case.</td></tr>
+        <tr class="cm-cols"><th class="cm-elem">Élément</th><th class="cm-cond">Cond.</th><th>Effet</th></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"></td><td><img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">Ramassé</td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"></td><td>Écroulement · <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">distribués sur cases adjacentes</td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"></td><td><span class="badge b-dil">DIL</span> · projeté de la valeur restante · <strong style="color:var(--m1)">+1 Bagarre</strong> <img src="Fatigue_256.png" alt="Fatigue" class="icon-img--sm" style="vertical-align:middle"></td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></td><td>Tombe sur la case · projeté · <strong style="color:var(--m1)">+1 Bagarre</strong> <img src="Fatigue_256.png" alt="Fatigue" class="icon-img--sm" style="vertical-align:middle"></td></tr>
+        <tr class="cm-foot"><td colspan="3">🦘 Projection du Titan atterri = distance restante du Boing Boing.</td></tr>
+      </tbody>
+
+      <!-- 05 FAUT PAS ME CHAUFFER -->
+      <tbody>
+        <tr class="cm-head" style="--card-c1:#F44336;--card-c2:#C2185B"><td colspan="3"><span>05 · FAUT PAS ME CHAUFFER</span><span class="cm-force">⚡ Force 3</span></td></tr>
+        <tr class="cm-note"><td colspan="3">Cible les <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle">dans ton <img src="Périmètre_128.png" alt="Périmètre" class="icon-img--sm" style="vertical-align:middle">· somme de tes <strong style="color:var(--y1)">3 cartes programmées</strong> vs somme de la cible. <strong style="color:var(--y1)">Attaquant et cible</strong> peuvent chacun ajouter en <strong style="color:var(--adrenaline)">mise cachée</strong> autant d'<img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">qu'ils souhaitent.</td></tr>
+        <tr class="cm-cols"><th class="cm-elem">Élément</th><th class="cm-cond">Cond.</th><th>Effet</th></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><span style="color:var(--g1)">Victoire</span></td><td><span class="badge b-rage">RAGE</span> · <strong style="color:var(--m1)">+1 Bagarre</strong> · perdants projetés (n+1 cases)</td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><span style="color:var(--y1)">Égalité</span></td><td><strong>Attaquant gagnant</strong> — <span class="badge b-dil">DIL</span> · <strong style="color:var(--m1)">+1 Bagarre</strong> · projection idem</td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><span style="color:var(--m1)">Défaite</span></td><td>Rien</td></tr>
+        <tr class="cm-foot"><td colspan="3">🎯 Les <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">mises en jeu (par l'attaquant <strong>comme</strong> par la cible) sont révélées puis dépensées quel que soit le résultat.</td></tr>
+      </tbody>
+
+      <!-- 06 JE NE PARTAGE PAS -->
+      <tbody>
+        <tr class="cm-head" style="--card-c1:#2D8DF5;--card-c2:#1E3A8A"><td colspan="3"><span>06 · JE NE PARTAGE PAS</span><span class="cm-force">⚡ Force 3</span></td></tr>
+        <tr class="cm-note"><td colspan="3">Ramasse <strong style="color:var(--y1)"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">au choix</strong> dans ton <img src="Périmètre_128.png" alt="Périmètre" class="icon-img--sm" style="vertical-align:middle">périmètre. Aucune condition sur la hauteur ou la couleur.</td></tr>
+        <tr class="cm-cols"><th class="cm-elem">Condition</th><th class="cm-cond"></th><th>Effet</th></tr>
+        <tr class="cm-row"><td class="cm-elem"><span style="color:var(--y1)">🏆 Lanterne Rouge</span></td><td class="cm-cond"></td><td>Si tu as autant ou moins de blocs que le moins doté → <strong>3 blocs</strong> au lieu de 2</td></tr>
+        <tr class="cm-foot"><td colspan="3">🚫 <strong>Aucune <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">adrénaline</strong> dépensable sur cette action (restriction totale).</td></tr>
+      </tbody>
+
+    </table>
+  </div>
+</section>
+
+<!-- TUTORIAL -->
+<section class="block" id="tuto">
+  <span class="eyebrow">🎓 Tutoriel guidé</span>
+  <h2 class="title">TON <em>PREMIER TOUR</em></h2>
+  <p class="lede">Ton Titan est en A2. Trois bâtiments en place : <span class="mono">A1 · C1</span> (1 étage) <span class="mono">· C3</span>.</p>
+  <div class="steps">
+    <div class="step"><div class="stp-n">1</div><div><h5>Mouvement gratuit</h5><p>Tu avances vers B2. Recompte ton <img src="Périmètre_128.png" alt="Périmètre" class="icon-img--sm" style="vertical-align:middle">périmètre après le déplacement.</p></div></div>
+    <div class="step"><div class="stp-n">2</div><div><h5>Tu révèles TOUT CASSER</h5><p>Cases occupées depuis B2 : A1 · C1 · C3 = <strong><img src="Energie_256.png" alt="Énergie" class="icon-img--sm" style="vertical-align:middle"> énergie 3 → seuil</strong> <img src="Energie_256.png" alt="Énergie" class="icon-img--sm" style="vertical-align:middle"></p><p>Tu dépenses <strong style="color:var(--adrenaline)">1 adrénaline</strong> → <strong><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm" style="vertical-align:middle"> énergie 4 → seuil</strong> <img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm" style="vertical-align:middle">+3</p></div></div>
+    <div class="step"><div class="stp-n">3</div><div><h5>Résolution</h5><p>Chaque bâtiment dans ton <img src="Périmètre_128.png" alt="Périmètre" class="icon-img--sm" style="vertical-align:middle">périmètre est impacté · 1 bloc cassé du haut · <strong style="color:var(--o1)">+3 Destruction</strong> · projeté de 4 cases en sens opposé.</p>
+      <div class="callout warn" style="margin-top:10px"><strong>A1 :</strong> rebondit dans l'angle · A1 encore occupé → se pose en A2 ou B1<br><strong>C1 :</strong> bâtiment détruit · socle de 1 récupéré · rebond (−1) · reste 3 · C1→B2 · <strong style="color:var(--m1)">B2 = case du Titan initiateur → arrêt immédiat</strong> (correctif V36 : le bloc ne continue plus jusqu'en A3, il s'arrête sur toi)<br><strong>C3 :</strong> C3→D4 · percute bâtiment E5 · <img src="Energie_256.png" alt="Énergie" class="icon-img--sm" style="vertical-align:middle"> rebond → D4 · 1 énergie restante · tente C3 · impossible → s'arrête en D4</div>
+    </div></div>
+    <div class="step"><div class="stp-n">4</div><div><h5>Récupération</h5><p>Le bloc issu de A1 est adjacent à toi en B2 · tu le récupères · la case se libère · tu te déplaces obligatoirement dessus.</p></div></div>
+  </div>
+  <div class="callout" style="margin-top:30px"><strong style="color:var(--g1)">À retenir :</strong> ton périmètre (donc ton énergie) change après chaque mouvement gratuit, 1 Adrénaline peut faire basculer un seuil au moment décisif, et chaque bloc projeté suit sa propre trajectoire indépendante — sauf s'il revient sur ta propre case, où il s'arrête immédiatement.</div>
+</section>
+
+<!-- ÉVÉNEMENTS -->
+<section class="block" id="events">
+  <span class="eyebrow">🎲 La carte du chaos</span>
+  <h2 class="title">ÉVÉNEMENTS — <em>8 CARTES</em></h2>
+  <p class="lede">1 événement tiré au hasard <strong>par manche</strong>. Après usage : remis dans le deck et mélangé.</p>
+  <div class="events-grid">
+    <div class="evt"><span class="ico">🃏</span><div class="nm">Toujours plus</div><div class="ef">Jouer <strong>4 cartes</strong> ce tour au lieu de 3.</div></div>
+    <div class="evt"><span class="ico">🍴</span><div class="nm">Gourmandise</div><div class="ef">Le joueur actif joue <strong>2 cartes d'affilée</strong> avant le suivant.</div></div>
+    <div class="evt"><span class="ico">👁️</span><div class="nm">Vision X</div><div class="ef">Retourne 1 de tes cartes programmées <strong>face visible</strong>.</div></div>
+    <div class="evt"><span class="ico">🤏</span><div class="nm">Pick pocket</div><div class="ef">Vole <strong>1 carte depuis la main</strong> d'un Titan adverse.</div></div>
+    <div class="evt"><span class="ico">🎲</span><div class="nm">No choice</div><div class="ef">Pioche au hasard 1 carte programmée d'un adverse · peut choisir de ne pas la jouer.</div></div>
+    <div class="evt"><span class="ico">🎯</span><div class="nm">Cible</div><div class="ef">Sélectionne 1 carte programmée d'un adverse · il est <strong>obligé</strong> de la jouer.</div></div>
+    <div class="evt"><span class="ico">🛡️</span><div class="nm">Choix par défaut</div><div class="ef">Joue 1 carte <img src="Fatigue_256.png" alt="Fatigue" class="icon-img--sm" style="vertical-align:middle">Fatigue visible d'un autre Titan · rendue après · peut faire sauter le bouclier.</div></div>
+    <div class="evt"><span class="ico">💎</span><div class="nm">Jamais 1 sans 2</div><div class="ef"><strong>2 cartes</strong> supplémentaires volées en Phase 3 · <strong>+1 <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">adrénaline</strong> en compensation.</div></div>
+  </div>
+</section>
+
+<!-- SCORING -->
+<section class="block" id="scoring">
+  <span class="eyebrow">🏆 La fin</span>
+  <h2 class="title">SCORING <em>FINAL</em></h2>
+  <div class="panel glow" style="text-align:center;font-size:1.4rem;font-family:'Bowlby One'">
+    SCORE = <span style="color:var(--bleu)">Blocs</span> + <span style="color:var(--y1)">Socles</span> + <span style="color:var(--m1)">Trophées</span> + <span style="color:var(--g1)">Pistes ADN</span> + <span style="color:var(--adrenaline)"><img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">adrénaline</span>
+  </div>
+
+  <h3 class="sub">🎨 Barème par couleur</h3>
+  <div class="score-elements">
+    <div class="scel bleu"><div class="nm"><img src="Bloc_bleu_256.png" alt="Bloc Bleu" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Bleu — Habitation</div><div class="scale">1·3·5·7·10·15·20·25·30</div><div class="det">19 blocs · barème progressif</div></div>
+    <div class="scel rose"><div class="nm"><img src="Bloc_rose_256.png" alt="Bloc Rose" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rose — Boutique</div><div class="scale">2·4·6·8·11·14·17·20</div><div class="det">12 blocs · +10 pts au plus grand · égalité = divisé</div></div>
+    <div class="scel orange"><div class="nm"><img src="Bloc_Jaune_256.png" alt="Bloc Orange" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Orange — Loisir</div><div class="scale">1p=5 · 2p=11 · 3p=18 · 4p=26</div><div class="det">11 blocs · paires exactes · impair = 0</div></div>
+    <div class="scel rouge"><div class="nm"><img src="Bloc_rouge_256.png" alt="Bloc Rouge" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rouge — Supermarché</div><div class="scale">3·7·11·16·22</div><div class="det">7 blocs · barème progressif</div></div>
+    <div class="scel vert"><div class="nm"><img src="Bloc_Vert_256.png" alt="Bloc Vert" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Vert — Téleporteur</div><div class="scale">+1 case (barème <em>ou</em> ADN)</div><div class="det">5 blocs · placement secret · choix par bloc · ne dépasse pas le max</div></div>
+  </div>
+
+  <h3 class="sub">📑 Séquence de scoring</h3>
+  <div class="grid-2">
+    <div class="panel">
+      <ol style="padding-left:20px">
+        <li style="padding:4px 0">Placement secret des Verts derrière le paravent</li>
+        <li style="padding:4px 0">Révélation simultanée</li>
+        <li style="padding:4px 0">Calcul des blocs par couleur</li>
+        <li style="padding:4px 0">Bonus Rose +10 pts</li>
+        <li style="padding:4px 0">Socles · valeurs collectées</li>
+        <li style="padding:4px 0">Trophées Arc-en-ciel et Collectionneur</li>
+        <li style="padding:4px 0">Classement Piste Bagarre</li>
+        <li style="padding:4px 0">Classement Piste Destruction</li>
+      </ol>
+    </div>
+  </div>
+
+  <h3 class="sub"><img src="Bloc_Vert_256.png" alt="Bloc Vert" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Vert — choix à la révélation</h3>
+  <div class="panel" style="border-color:rgba(255,217,61,.4)">
+    <p>Chaque bloc Vert (collecté normalement ou issu d'un <strong style="color:var(--vert)">Téléporteur</strong>) est assigné en secret, <strong style="color:var(--y1)">individuellement</strong>, à l'une des deux fonctions suivantes au moment du placement derrière le paravent :</p>
+    <ul style="margin-top:10px">
+      <li style="padding:4px 0">🎨 <strong>Barème couleur :</strong> +1 case sur le barème d'une couleur standard au choix (ne dépasse pas le max du barème).</li>
+      <li style="padding:4px 0">🧬 <strong>Piste ADN :</strong> +1 case sur la piste Destruction ou Bagarre au choix.</li>
+    </ul>
+    <div class="callout warn">Le choix se fait bloc par bloc, sans restriction de répartition : un joueur avec plusieurs Verts peut tous les mettre sur la même destination (ex. 3 sur Destruction), les répartir entre plusieurs barèmes/pistes, ou mélanger librement les deux. Le choix est définitif une fois révélé.</div>
+  </div>
+
+  <h3 class="sub">🏅 Trophées</h3>
+  <div class="trophy-row">
+    <div class="trophy1"><div class="pts">+5</div><div><h5>🌈 Arc-en-ciel</h5><p>1er à posséder 1 bloc de chaque couleur standard. Attribué <em>en cours de partie</em>.</p></div></div>
+    <div class="trophy"><div class="pts">+5</div><div><h5>🗿 Collectionneur</h5><p>Plus grand <strong>nombre</strong> de socles (pas la valeur). Égalité = valeur la plus haute · égalité parfaite = divisé. Fin de partie.</p></div></div>
+  </div>
+
+  <h3 class="sub">🧬 Pistes ADN — classement final</h3>
+  <div class="podium">
+    <div class="pod pod-or"><div class="rk">🥇 1ER</div><div class="pts">+7</div></div>
+    <div class="pod pod-argent"><div class="rk">🥈 2E</div><div class="pts">+3</div></div>
+    <div class="pod pod-bronze"><div class="rk">🥉 3E</div><div class="pts">+1</div></div>
+    <div class="pod"><div class="rk">4E</div><div class="pts">0</div></div>
+  </div>
+  <div class="callout warn"><strong>⚖️ Classements séparés :</strong> Les pistes Bagarre et Destruction sont classées indépendamment l'une de l'autre. <strong>Égalité :</strong> si deux titans ou plus terminent au même niveau sur une piste, ils obtiennent tous les points du rang inférieur partagé. Ex : deux 1ers ex aequo → ils reçoivent chacun <strong>+3</strong> (points du 2e rang), pas +7.</div>
+  <div class="callout warn" style="margin-top:12px"><strong style="color:var(--o1)">🚫 Une piste à zéro rapporte zéro :</strong> un Titan qui n'a jamais avancé sur une piste ne marque <strong>aucun point</strong> dessus, quel que soit son rang. Sans cette règle, une partie à 3 Titans où personne ne fait la moindre Bagarre laissait les trois ex aequo au dernier rang — c'est-à-dire le 3e, qui vaut +1 — et chacun repartait avec un point pour n'avoir rien accompli.</div>
+</section>
+
+<!-- DÉPARTAGE DES ÉGALITÉS -->
+<section class="block" id="departage">
+  <span class="eyebrow">⚖️ Quand deux Titans finissent à égalité</span>
+  <h2 class="title">DÉPARTAGE DU <em>VAINQUEUR</em></h2>
+  <p class="lede">Deux Titans peuvent terminer avec exactement le même score. On applique alors les critères suivants, <strong style="color:var(--y1)">dans cet ordre</strong>, en s'arrêtant au premier qui sépare.</p>
+  <div class="steps">
+    <div class="step"><div class="stp-n">1</div><div>
+      <h5><img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Le plus de jetons Adrénaline restants</h5>
+      <p>Celui qui a su en garder sous le pied l'emporte. Une Adrénaline vaut déjà 3 points au décompte : celui qui en conserve après égalité a mieux géré sa réserve.</p>
+    </div></div>
+    <div class="step"><div class="stp-n">2</div><div>
+      <h5><img src="Socle_256.png" alt="Socle" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Le Socle de la plus haute valeur</h5>
+      <p>On compare la <strong>plus belle pièce</strong> de chaque Repaire, pas le total des socles — celui-ci est déjà compté dans le score. Un Socle de 4 bat trois Socles de 1.</p>
+    </div></div>
+    <div class="step"><div class="stp-n">3</div><div>
+      <h5>La Force totale des cartes non jouées</h5>
+      <p>On additionne la Force imprimée des cartes encore <strong>en main</strong> — la même notion de « carte non jouée » que la <img src="Fatigue_256.png" alt="Fatigue" class="icon-img--sm" style="vertical-align:middle"> Fatigue. Le plus haut total l'emporte.</p>
+    </div></div>
+  </div>
+  <div class="callout warn" style="margin-top:20px"><strong>Et si les trois critères se valent ?</strong> L'égalité est réelle et le jeu ne la tranche pas : les deux Titans sont <strong style="color:var(--y1)">ex aequo</strong>, et se partagent la place.</div>
+</section>
+
+<!-- DÉCLENCHEURS FIN DE PARTIE -->
+<section class="block" id="finpartie">
+  <span class="eyebrow">🛑 Quand ça s'arrête</span>
+  <h2 class="title">FIN DE <em>PARTIE</em></h2>
+  <p class="lede">La partie s'arrête à la fin de la Manche en cours si le nombre maximal de Manches est atteint (<strong style="color:var(--y1)">4 Manches à 4 joueurs · 6 Manches à 3 joueurs</strong>), ou <strong style="color:var(--m1)">à la fin de manche </strong> si l'une des conditions suivantes est remplie sur le plateau.</p>
+  <div class="grid-3">
+    <div class="panel">
+      <h4 class="kicker">🏙️ Apocalypse Urbaine</h4>
+      <p>Il ne reste qu'un nombre déterminé <strong style="color:var(--y1)">X</strong> de bâtiments debout sur le plateau.</p>
+    </div>
+    <div class="panel">
+      <h4 class="kicker">📦 Pénurie</h4>
+      <p>Une couleur de bloc a <strong style="color:var(--y1)">entièrement disparu</strong> du plateau (plus aucun exemplaire disponible à collecter).</p>
+    </div>
+    <div class="panel">
+      <h4 class="kicker">🌀 Vide Spatial</h4>
+      <p>Il ne reste plus qu'<strong style="color:var(--y1)">un seul Téléporteur</strong> actif sur le plateau.</p>
+    </div>
+  </div>
+  <div class="callout warn">Quel que soit le déclencheur, la Manche en cours se termine normalement avant le décompte final — aucune interruption en plein tour.</div>
+</section>
+
+<!-- EXEMPLE -->
+<section class="block" id="exemple">
+  <span class="eyebrow">🎬 Cas pratique</span>
+  <h2 class="title">EXEMPLE DE <em>SCORING</em></h2>
+  <p class="lede">4 titans · fin de partie · situation serrée · révélation simultanée des Verts.</p>
+
+  <div class="example-box">
+    <h4><img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle;margin-right:8px">Repaire final</h4>
+    <table class="score-table">
+      <thead><tr><th></th><th>TITAN A</th><th>TITAN B</th><th>TITAN C</th><th>TITAN D</th><th>Total</th></tr></thead>
+      <tbody>
+        <tr><td><img src="Bloc_bleu_256.png" alt="Bloc Bleu" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Bleu</td><td>6</td><td>6</td><td>4</td><td>3</td><td>19 ✓</td></tr>
+        <tr><td><img src="Bloc_rose_256.png" alt="Bloc Rose" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rose</td><td>3</td><td>2</td><td>4</td><td>3</td><td>12 ✓</td></tr>
+        <tr><td><img src="Bloc_Jaune_256.png" alt="Bloc Orange" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Orange</td><td>3</td><td>4</td><td>2</td><td>1</td><td>10 ✓</td></tr>
+        <tr><td><img src="Bloc_rouge_256.png" alt="Bloc Rouge" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rouge</td><td>2</td><td>1</td><td>2</td><td>1</td><td>6 ✓</td></tr>
+        <tr><td><img src="Bloc_Vert_256.png" alt="Bloc Vert" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Vert</td><td>1</td><td>2</td><td>2</td><td>0</td><td>5 ✓</td></tr>
+        <tr><td><img src="Socle_256.png" alt="Socle" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Socles</td><td>11</td><td>9</td><td>9</td><td>8</td><td>37</td></tr>
+        <tr><td>💪 Bagarre</td><td>2e</td><td>1er</td><td>3e</td><td>4e</td><td></td></tr>
+        <tr><td>💥 Destruction</td><td>1er</td><td>3e</td><td>4e</td><td>2e</td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="example-box" style="border-color:rgba(0,230,118,.3);background:linear-gradient(180deg,rgba(0,230,118,.06),rgba(58,26,107,.4))">
+    <h4 style="color:var(--g1)">🔓 Placement secret des Verts</h4>
+    <table class="score-table">
+      <thead><tr><th>Joueur</th><th>Verts placés sur</th><th>Résultat</th></tr></thead>
+      <tbody>
+        <tr><td>TITAN A</td><td>1 sur Rouge</td><td>2 → 3 Rouge</td></tr>
+        <tr><td>TITAN B</td><td>2 sur Rose</td><td>2 → 4 Rose</td></tr>
+        <tr><td>TITAN C</td><td>2 sur Bleu</td><td>4 → 6 Bleu</td></tr>
+        <tr><td>TITAN D</td><td>0</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <div class="callout" style="margin-top:14px"><strong>Après placement :</strong> Rose → B et C ex aequo à 4 · bonus +10 divisé → +5 chacun.</div>
+  </div>
+
+  <div class="example-box" style="border-color:rgba(255,217,61,.3);background:linear-gradient(180deg,rgba(255,217,61,.06),rgba(58,26,107,.4))">
+    <h4 style="color:var(--y1)">📊 Scoring détaillé</h4>
+    <table class="score-table">
+      <thead><tr><th>Composante</th><th>A</th><th>B</th><th>C</th><th>D</th></tr></thead>
+      <tbody>
+        <tr><td><img src="Bloc_bleu_256.png" alt="Bloc Bleu" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Bleu</td><td>15</td><td>15</td><td>15</td><td>5</td></tr>
+        <tr><td><img src="Bloc_rose_256.png" alt="Bloc Rose" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rose</td><td>6</td><td>8</td><td>8</td><td>6</td></tr>
+        <tr><td>Bonus Rose +10</td><td>—</td><td>+5</td><td>+5</td><td>—</td></tr>
+        <tr><td><img src="Bloc_Jaune_256.png" alt="Bloc Orange" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Orange</td><td>5</td><td>11</td><td>5</td><td>0</td></tr>
+        <tr><td><img src="Bloc_rouge_256.png" alt="Bloc Rouge" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rouge</td><td>7</td><td>3</td><td>7</td><td>3</td></tr>
+        <tr><td><img src="Socle_256.png" alt="Socle" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Socles</td><td>11</td><td>9</td><td>9</td><td>8</td></tr>
+        <tr><td>🌈 Arc-en-ciel</td><td>+5</td><td>—</td><td>—</td><td>—</td></tr>
+        <tr><td>🗿 Collectionneur</td><td>—</td><td>—</td><td>+5</td><td>—</td></tr>
+        <tr><td>💪 Bagarre</td><td>+3</td><td>+7</td><td>+1</td><td>0</td></tr>
+        <tr><td>💥 Destruction</td><td>+7</td><td>+1</td><td>0</td><td>+3</td></tr>
+        <tr class="total"><td>TOTAL</td><td>59</td><td>59</td><td>60</td><td>25</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="podium" style="margin-top:30px">
+    <div class="pod" style="background:linear-gradient(135deg,#FFD93D,#FF6B1A);border-color:#fff"><div class="rk" style="color:var(--p1)">🥇 1er</div><div class="pts" style="color:var(--p1)">60</div><div style="color:var(--p1);font-weight:700;margin-top:6px">TITAN C</div></div>
+    <div class="pod"><div class="rk">🥈 2e ex aequo</div><div class="pts">59</div><div style="color:var(--cream);font-weight:600;margin-top:6px">TITAN A</div></div>
+    <div class="pod"><div class="rk">🥈 2e ex aequo</div><div class="pts">59</div><div style="color:var(--cream);font-weight:600;margin-top:6px">TITAN B</div></div>
+    <div class="pod"><div class="rk">4e</div><div class="pts">25</div><div style="color:var(--cream);font-weight:600;margin-top:6px">TITAN D</div></div>
+  </div>
+  <div class="callout" style="margin-top:24px"><strong>Analyse :</strong> Titan C — discret toute la partie · ses 2 Verts placés sur Bleu lui ont offert le palier 6 au dernier moment. La victoire se construit dans le secret.</div>
+</section>
+
+<!-- CAS PARTICULIERS -->
+<section class="block" id="cas">
+  <span class="eyebrow">⚖️ Arbitrage &amp; FAQ</span>
+  <h2 class="title">CAS <em>PARTICULIERS</em></h2>
+  <p class="lede">Les situations qui reviennent en jeu et leur résolution officielle. <strong style="color:var(--g1)">Tous les points sont désormais tranchés</strong> — les cinq zones grises qui restaient ont été arbitrées et sont appliquées par le moteur numérique.</p>
+
+  <div class="check-list" style="margin-bottom:24px">
+    <div class="lg" style="gap:10px"><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> Réponse officielle, applicable telle quelle.</div>
+  </div>
+
+  <div class="steps">
+    <div class="step"><div class="stp-n">1</div><div><h5>Carte inapplicable à la résolution</h5><p>La carte reste <strong style="color:var(--y1)">face cachée</strong> — aucune information donnée aux adversaires.</p></div></div>
+    <div class="step"><div class="stp-n">2</div><div><h5>Faut Pas Me Chauffer — égalité parfaite</h5><p>L'<strong style="color:var(--y1)">attaquant gagne</strong> mais uniquement en <span class="badge b-dil">DIL</span> (pas MAX). La somme comparée est celle des <strong>3 cartes programmées pour la manche entière</strong>.</p></div></div>
+    <div class="step"><div class="stp-n">3</div><div><h5>Vol Phase Repos — carte jouée face cachée</h5><p>Une carte restée face cachée <strong style="color:var(--m1)">ne peut pas être volée</strong> en Phase Repos. Seules les 3 cartes face visible sont éligibles.</p></div></div>
+
+    <div class="step"><div class="stp-n">4</div><div>
+      <h5>Le bloc Vert collecté normalement est-il un joker ?</h5>
+      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> Non — la fonction joker est réservée au Vert issu d'un Téléporteur en Repaire <em>(voir Téléporteurs &amp; Scoring final → Vert)</em>.</p>
+    </div></div>
+
+    <div class="step"><div class="stp-n">5</div><div>
+      <h5>RAGE est-il impossible si la cible a moins de 2 ressources ?</h5>
+      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> La question ne se pose plus : <strong style="color:var(--y1)">RAGE est possible dès 1 seule ressource</strong>. L'attaquant n'en prend qu'une, il n'a donc besoin que d'une cible. L'ancien seuil de 2 était un alignement erroné sur la contrainte de DIL, qui exige, lui, 2 couleurs <em>différentes</em>. L'Adrénaline de la cible compte dans ses ressources et devient elle-même ciblable.</p>
+    </div></div>
+
+    <div class="step"><div class="stp-n">6</div><div>
+      <h5>Un Titan peut-il être projeté par son propre Tout Casser après un rebond ?</h5>
+      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> Non. L'immunité initiateur s'applique même après un ou plusieurs rebonds. <strong>Précision V36 :</strong> l'élément s'arrête immédiatement sur la case du Titan initiateur, quelle que soit l'énergie restante (remplace l'ancien comportement « traverse si il reste de l'énergie »).</p>
+    </div></div>
+
+    <div class="step"><div class="stp-n">7</div><div>
+      <h5>L'Adrénaline misée sur Faut Pas Me Chauffer est-elle perdue même en cas d'égalité parfaite ?</h5>
+      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> Oui, quel que soit le résultat. Vrai pour l'attaquant comme pour la cible.</p>
+    </div></div>
+
+    <div class="step"><div class="stp-n">8</div><div>
+      <h5>Un Patatras peut-il en déclencher un autre en chaîne ?</h5>
+      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> Oui — chaque Bloc éjecté suit les règles normales de projection, réaction en chaîne explicitement prévue.</p>
+    </div></div>
+
+    <div class="step"><div class="stp-n">9</div><div>
+      <h5>Qui récupère le Socle si le dernier Bloc est cassé par ricochet, pas par frappe directe ?</h5>
+      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> <strong style="color:var(--y1)">Personne.</strong> Le Socle reste au sol de BIG CITY, sans attribution automatique — ni au Titan qui a frappé, ni à celui qui a provoqué le ricochet. Il redevient un élément libre que n'importe qui pourra ramasser plus tard par les voies normales (Récupération, Tête en Avant, Boing Boing, Je Ne Partage Pas).</p>
+      <p style="margin-top:8px">À ne pas confondre avec la <strong>Destruction</strong> : le point de piste, lui, revient bien à l'initiateur de la carte, ricochet compris. C'est son action qui a causé la casse.</p>
+    </div></div>
+
+    <div class="step"><div class="stp-n">10</div><div>
+      <h5>2 Titans partagent un coin de départ — qui a priorité au mouvement gratuit ?</h5>
+      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> Il n'y a <strong style="color:var(--y1)">pas de conflit à arbitrer</strong>. Chaque coin offre 2 positions distinctes : deux Titans qui le partagent occupent malgré tout deux cases différentes et ne se gênent pas au départ. Aucune règle de priorité n'est nécessaire.</p>
+    </div></div>
+
+    <div class="step"><div class="stp-n">11</div><div>
+      <h5>Le bonus Graouhhh (+1 Adrénaline si 2 Titans touchés) est-il cumulatif avec 3-4 Titans ?</h5>
+      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> <strong style="color:var(--y1)">Cumulatif linéaire : +1 Adrénaline par Titan touché au-delà du premier.</strong> 2 touchés → +1 · 3 touchés → +2. Aucun plafond à écrire : l'initiateur ne peut toucher que 3 autres Titans au maximum, le bonus culmine donc à +2. Motif : Graouhhh est sous-jouée en test, et aligner 3 Titans avec une carte programmée une manche à l'avance est un coup spectaculaire qui méritait d'être récompensé à hauteur de sa rareté.</p>
+    </div></div>
+
+    <div class="step"><div class="stp-n">12</div><div>
+      <h5>DIL est-il possible si la cible ne possède qu'un seul type de ressource ?</h5>
+      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> Non — un DIL exige de désigner 2 couleurs différentes ; impossible si la cible n'a qu'une seule couleur en repaire. <strong style="color:var(--y1)">Il n'existe aucun effet de repli</strong> : l'action est simplement notée au journal et ne produit aucun effet. Le point est clos.</p>
+    </div></div>
+
+    <div class="step"><div class="stp-n">13</div><div>
+      <h5>Une trajectoire de projection peut-elle être diagonale ?</h5>
+      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> Oui — c'est même le cas courant pour une attaque de bâtiment depuis la position d'un Titan (bâtiments sur intersections impaires, Titans aussi sur couloirs pairs). En cas de sortie du plateau par les deux bords à la fois (coin), l'élément réapparaît au point exactement opposé (symétrie centrale) et poursuit son déplacement — voir « Sortie diagonale du plateau » dans les Règles transversales.</p>
+    </div></div>
+  </div>
+
+  <div class="callout warn" style="margin-top:30px"><strong>📌 Où vit la règle :</strong> chaque cas ci-dessus est appliqué à l'identique par le moteur numérique (<span class="mono">src/domain/gameRules.js</span>), qui en conserve le raisonnement en commentaire et le protège par un test. Une règle qui change doit changer aux deux endroits en même temps.</div>
+</section>
+
+<div class="block" style="padding:80px 8vw;text-align:center;border-bottom:none">
+  <h3 style="font-size:1.8rem;margin-bottom:24px;color:var(--y1)">✨ D'autres surprises t'attendent... ✨</h3>
+  <p style="font-size:1rem;color:#fff;max-width:600px;margin:0 auto 32px">Chaque partie sera unique, chaotique et destructive.</p>
+</div>
+
+<script>
+(function(){
+  var b=document.getElementById('board9'), rows='ABCDEFGHI';
+  if(!b) return;
+  var frag=document.createDocumentFragment();
+  frag.appendChild(Object.assign(document.createElement('div'),{className:'lbl'}));
+  for(var c=1;c<=9;c++) frag.appendChild(Object.assign(document.createElement('div'),{className:'lbl',textContent:c}));
+  for(var r=0;r<9;r++){
+    frag.appendChild(Object.assign(document.createElement('div'),{className:'lbl',textContent:rows[r]}));
+    for(var c=1;c<=9;c++){
+      var cell=document.createElement('div'), pos=rows[r]+c;
+      cell.className='cell';
+      if(r%2===0&&c%2===1) cell.classList.add('bat');
+      if(['A2','B1'].includes(pos)) cell.classList.add('titan','titan-tl');
+      else if(['A8','B9'].includes(pos)) cell.classList.add('titan','titan-tr');
+      else if(['H1','I2'].includes(pos)) cell.classList.add('titan','titan-bl');
+      else if(['H9','I8'].includes(pos)) cell.classList.add('titan','titan-br');
+      frag.appendChild(cell);
+    }
+  }
+  b.appendChild(frag);
+})();
+
+// Cible de scroll après l'animation du bouton CTA.
+var SMASH_SCROLL_TARGET = '#synopsis';
+
+var smashHasPlayed = false;
+
+function smashCity(){
+  if (smashHasPlayed) return;
+  smashHasPlayed = true;
+
+  var btn = document.getElementById('smashBtn');
+  var field = document.getElementById('smashFragField');
+  var wrap = document.getElementById('smashWrap');
+  if (!btn || !field || !wrap) return;
+
+  btn.classList.add('is-smashed');
+
+  // Couleurs des blocs du jeu (cohérence thématique)
+  var colors = ['var(--bleu)', 'var(--rose)', 'var(--orange)', 'var(--rouge)', 'var(--vert)'];
+  var frag = document.createDocumentFragment();
+  var FRAG_COUNT = 15;
+
+  for (var i = 0; i < FRAG_COUNT; i++) {
+    var d = document.createElement('div');
+    d.className = 'smash-frag';
+    var size = 10 + Math.random() * 14;
+    var angle = (Math.random() * Math.PI * 2);
+    var spread = 60 + Math.random() * 90;
+    var fx = Math.cos(angle) * spread;
+    var fy = Math.abs(Math.sin(angle)) * (140 + Math.random() * 120) + 80; // toujours vers le bas
+    var rot = (Math.random() > .5 ? 1 : -1) * (180 + Math.random() * 360);
+    var dur = 700 + Math.random() * 500;
+    var delay = Math.random() * 120;
+
+    d.style.setProperty('--fw', size + 'px');
+    d.style.setProperty('--fh', size + 'px');
+    d.style.setProperty('--fc', colors[i % colors.length]);
+    d.style.setProperty('--fx', fx + 'px');
+    d.style.setProperty('--fy', fy + 'px');
+    d.style.setProperty('--frot', rot + 'deg');
+    d.style.setProperty('--fdur', dur + 'ms');
+    d.style.setProperty('--fdelay', delay + 'ms');
+
+    frag.appendChild(d);
+  }
+  field.appendChild(frag);
+
+  // Déclenche l'animation au frame suivant
+  requestAnimationFrame(function(){
+    var frags = field.querySelectorAll('.smash-frag');
+    frags.forEach(function(f){ f.classList.add('is-falling'); });
+  });
+
+  // Fin d'animation → scroll, puis le bouton disparaît (son rôle est joué)
+  setTimeout(function(){
+    var target = document.querySelector(SMASH_SCROLL_TARGET);
+    if (target) target.scrollIntoView({ behavior: 'smooth' });
+    wrap.classList.add('is-gone');
+  }, 1000);
+}
+
+function toggleLexicon(){
+  var popup = document.getElementById('lexPopup');
+  var overlay = document.getElementById('lexOverlay');
+  var btn = document.getElementById('lexBtn');
+  var isOpen = popup.classList.toggle('open');
+  overlay.classList.toggle('open', isOpen);
+  btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+}
+function closeLexicon(){
+  document.getElementById('lexPopup').classList.remove('open');
+  document.getElementById('lexOverlay').classList.remove('open');
+  document.getElementById('lexBtn').setAttribute('aria-expanded', 'false');
+}
+
+function toggleBurger(){
+  document.getElementById('burgerMenu').classList.toggle('open');
+  document.getElementById('burgerOverlay').classList.toggle('open');
+}
+function closeBurger(){
+  document.getElementById('burgerMenu').classList.remove('open');
+  document.getElementById('burgerOverlay').classList.remove('open');
+}
+</script>
+</body>
+</html>

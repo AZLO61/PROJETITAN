@@ -35,6 +35,13 @@ export default function RoundPanels({ vm }) {
   };
   const {
     nbJoueurs,
+    manchesMaxPartie,
+    titansEnAttente,
+    ecroulement,
+    ecroulementCells,
+    ecroulementPoserDebris,
+    ecroulementAnnulerDernier,
+    ecroulementValider,
     setNbJoueurs,
     setupDone,
     setSetupDone,
@@ -287,31 +294,93 @@ export default function RoundPanels({ vm }) {
         board={state.board}
         looseBlocks={looseBlocks}
         mancheNumber={mancheNumber}
-        totalManches={nbJoueurs === 4 ? 4 : 6}
+        totalManches={manchesMaxPartie}
         detonateurName={titanDisplayName(titanState.detonateur)}
         occupiedCount={occupiedCount}
         apocalypseThreshold={apocalypseThreshold}
       />
 
 
+      {/* ── RÉPARTITION D'UN AMAS ÉCROULÉ ──
+          Boing Boing sur un tas : le joueur place les débris un par un, et
+          chacun fait son effet avant le suivant. */}
+      {ecroulement && (
+        <div style={{
+          background: "rgba(251,146,60,.14)", border: "1.5px solid #fb923c",
+          borderRadius: 12, padding: "10px 14px", marginBottom: 10, fontSize: ".8rem",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <strong style={{ color: "#ffb877", fontFamily: "'Bowlby One', sans-serif" }}>
+              🧱 Écroulement de l'Amas
+            </strong>
+            <span style={{ color: "rgba(255,255,255,.75)" }}>
+              Débris {Math.min(ecroulement.choix.length + 1, ecroulement.blocs.length)} sur {ecroulement.blocs.length} :
+              clique la case où il tombe.
+            </span>
+          </div>
+          <div style={{ marginTop: 6, color: "rgba(255,255,255,.6)", fontSize: ".74rem" }}>
+            Un débris qui tombe sur un Titan le pousse de {ecroulement.energie} case(s) et te rapporte la Bagarre.
+            {ecroulementCells.length > 0 && ecroulement.choix.length < ecroulement.blocs.length
+              && " Les cases déjà servies ne sont proposées que s'il n'en reste plus de vierge."}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            {ecroulement.choix.length > 0 && (
+              <button onClick={ecroulementAnnulerDernier} style={btnStyle()}>↩️ Annuler le dernier</button>
+            )}
+            {ecroulement.choix.length === ecroulement.blocs.length && (
+              <button onClick={ecroulementValider} style={btnStyle("#16E08C", "#00C97A", true)}>
+                ✅ Valider l'écroulement
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── GRILLE 9×9 ──
           La 2D et la 3D ne coexistent plus : afficher les deux allongeait la
           page d'un ecran entier et obligeait a faire defiler entre la vue et
           les controles. Le bouton Vue 3D bascule de l'une a l'autre. */}
-      {!show3D && (
+      {!show3D && (() => {
+        /* GOUTTIÈRES HORS PLATEAU
+           Un Titan éjecté attend DEHORS, aligné avec la case par laquelle il
+           rentrera (demande de Nikola). La grille gagne donc une piste de
+           chaque côté, en dehors du 9×9, où l'on pose son icône en
+           translucide. Elles restent vides tant que personne n'est sorti. */
+        const attenteParCase = {};
+        (titansEnAttente || []).forEach((t) => { attenteParCase[t.cell] = t; });
+        const Gouttiere = ({ cle }) => {
+          const t = attenteParCase[cle];
+          if (!t) return <div />;
+          return (
+            <div
+              title={`${titanDisplayName(t.id)} attend hors de BIG CITY — rentre par ${cle} au début de son tour`}
+              style={{ display: "grid", placeItems: "center", opacity: 0.5 }}
+            >
+              <TitanIcon titanId={t.id} size={20} />
+            </div>
+          );
+        };
+        return (
       <div className="titan-grid" style={{
         display: "grid",
-        gridTemplateColumns: "18px repeat(9, minmax(30px, 1fr))",
-        gridTemplateRows: "18px repeat(9, minmax(30px, 1fr))",
+        gridTemplateColumns: "24px 18px repeat(9, minmax(30px, 1fr)) 24px",
+        gridTemplateRows: "18px 24px repeat(9, minmax(30px, 1fr)) 24px",
         gap: 2, marginBottom: 14,
         overflowX: "auto",
       }}>
-        <div />
+        {/* Ligne des numéros de colonne */}
+        <div /><div />
         {[1,2,3,4,5,6,7,8,9].map((c) => (
           <div key={c} style={{ display: "grid", placeItems: "center", fontSize: ".68rem", color: "rgba(255,255,255,.4)" }}>{c}</div>
         ))}
+        <div />
+        {/* Gouttière haute : attente au-dessus de la ligne A */}
+        <div /><div />
+        {[1,2,3,4,5,6,7,8,9].map((c) => <Gouttiere key={`haut${c}`} cle={`A${c}`} />)}
+        <div />
         {ROWS.map((r) => (
           <React.Fragment key={r}>
+            <Gouttiere cle={`${r}1`} />
             <div style={{ display: "grid", placeItems: "center", fontSize: ".68rem", color: "rgba(255,255,255,.4)" }}>{r}</div>
             {[1,2,3,4,5,6,7,8,9].map((c) => {
               const key = r + c;
@@ -334,6 +403,10 @@ export default function RoundPanels({ vm }) {
               const moveIsTeleport = moveMode && !moveClassic.has(key) && moveTeleport.has(key); // téléporteur uniquement
               const recupSelectable = recupMode && recupPool.has(key);
               const teaSelectable = teaMode && teaTargets.has(key);
+              // Répartition des débris d'un Amas écroulé : les cases encore
+              // proposées pour le prochain débris.
+              const ecroulSelectable = Boolean(ecroulement) && ecroulementCells.includes(key);
+              const ecroulDejaServie = Boolean(ecroulement) && ecroulement.choix.includes(key);
 
               // Périmètre 2D : couleur du Titan sélectionné
               const perimAccent = tcSel ? tcSel.accent : "#FFD93D";
@@ -341,7 +414,11 @@ export default function RoundPanels({ vm }) {
               // bâtiment → teinte du Titan en overlay sur la couleur du bloc du dessus
               // case vide → teinte légère
               let cellBg;
-              if (jnpIsSelected || bbIsSelected) {
+              if (ecroulDejaServie) {
+                cellBg = "rgba(251,146,60,.32)"; // débris déjà posé là
+              } else if (ecroulSelectable) {
+                cellBg = "rgba(251,146,60,.16)"; // case proposée pour le prochain
+              } else if (jnpIsSelected || bbIsSelected) {
                 cellBg = "rgba(22,224,140,.25)";
               } else if (teaSelectable) {
                 cellBg = "rgba(251,146,60,.25)"; // orange TEA
@@ -379,6 +456,10 @@ export default function RoundPanels({ vm }) {
                   key={key}
 
                   onClick={(e) => {
+                    // La répartition d'un Amas écroulé passe avant tout le
+                    // reste : tant qu'elle est en cours, le plateau ne sert
+                    // qu'à désigner où tombe chaque débris.
+                    if (ecroulement) { if (ecroulSelectable) ecroulementPoserDebris(key); return; }
                     if (jnpMode) { if (jnpSelectable) jnpToggleCell(key); return; }
                     if (bbMode) { if (bbSelectable) bbSelectCell(key); return; }
                     if (teaMode) { if (teaSelectable) jouerTeteEnAvant(key); return; }
@@ -539,10 +620,16 @@ De haut en bas : ${[...cellData.blocks].reverse().map((c) => BLOCK_NAME[c] || c)
                 </div>
               );
             })}
+            <Gouttiere cle={`${r}9`} />
           </React.Fragment>
         ))}
+        {/* Gouttière basse : attente sous la ligne I */}
+        <div /><div />
+        {[1,2,3,4,5,6,7,8,9].map((c) => <Gouttiere key={`bas${c}`} cle={`I${c}`} />)}
+        <div />
       </div>
-      )}
+        );
+      })()}
 
       {/* Composition du bâtiment cliqué, en position fixe pour ne pas être
           tronquée par le défilement horizontal de la grille. Les blocs sont

@@ -198,6 +198,7 @@ export default function HeaderPhase({ vm }) {
     updateVertAssignment,
     finalScoreResult,
     endGameReasons,
+    titansEnAttente,
     boardSignature3D,
     perimeterCells,
     perimeterKeys,
@@ -468,6 +469,32 @@ export default function HeaderPhase({ vm }) {
           </div>
           {endGameReasons.map((r, i) => (
             <div key={i} style={{ marginTop: 5, color: "rgba(255,255,255,.7)" }}>{r}</div>
+          ))}
+        </div>
+      )}
+
+      {/* ── TITANS ÉJECTÉS HORS DU RING ──
+          Un Titan poussé hors de BIG CITY attend SON tour pour revenir
+          (ruling Nikola : « ça évite l'acharnement »). Il faut donc voir
+          d'un coup d'œil qui est dehors et par où il rentrera — sans ça,
+          un joueur disparaît du plateau sans explication. */}
+      {titansEnAttente.length > 0 && (
+        <div style={{
+          background: "rgba(255,146,57,.14)", border: "1.5px solid #ff9239",
+          borderRadius: 12, padding: "8px 14px", marginBottom: 10, fontSize: ".78rem",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <strong style={{ color: "#ffb877", fontSize: ".92rem", fontFamily: "'Bowlby One', sans-serif" }}>
+              🥊 Hors du ring
+            </strong>
+            <span style={{ color: "rgba(255,255,255,.7)" }}>
+              Poussé hors de BIG CITY. Rentre en jeu au début de son tour, pas avant.
+            </span>
+          </div>
+          {titansEnAttente.map((t) => (
+            <div key={t.id} style={{ marginTop: 5, color: "rgba(255,255,255,.8)" }}>
+              <strong style={{ color: "#ffb877" }}>{titanDisplayName(t.id)}</strong> attend de rentrer par <strong>{t.cell}</strong>
+            </div>
           ))}
         </div>
       )}

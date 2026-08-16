@@ -203,6 +203,7 @@ export default function DecisionPanels({ vm }) {
     getVertCount,
     updateVertAssignment,
     finalScoreResult,
+    classementFinalPartie,
     endGameReasons,
     boardSignature3D,
     perimeterCells,
@@ -336,6 +337,44 @@ export default function DecisionPanels({ vm }) {
                   </tr>
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* ── CLASSEMENT ET VAINQUEUR ──
+              Le tableau ci-dessus donne les totaux, colonne par colonne,
+              sans jamais dire qui gagne. Le classement applique le
+              départage du livret : Adrénaline restante, puis Socle de plus
+              haute valeur, puis Force des cartes non jouées. Une égalité
+              qui résiste aux trois est annoncée comme telle. */}
+          {classementFinalPartie && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ color: "#FFD93D", fontSize: ".74rem", fontWeight: 700, marginBottom: 6 }}>
+                🏆 Classement final
+              </div>
+              {classementFinalPartie.map((ligne) => (
+                <div key={ligne.id} style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "5px 8px", fontSize: ".76rem",
+                  background: ligne.rang === 1 ? "rgba(255,217,61,.14)" : "transparent",
+                  borderBottom: "1px solid rgba(255,255,255,.06)",
+                }}>
+                  <span style={{ width: 26, color: "#FFD93D", fontWeight: 700 }}>
+                    {ligne.rang === 1 ? "🥇" : `${ligne.rang}e`}
+                  </span>
+                  <span style={{ flex: 1, color: "#fffaee" }}>
+                    {titanDisplayName(ligne.id)}
+                    {ligne.exAequo && (
+                      <span style={{ color: "rgba(255,255,255,.5)", fontSize: ".68rem", marginLeft: 6 }}>
+                        ex aequo — départage impossible
+                      </span>
+                    )}
+                  </span>
+                  <span style={{ color: "#FFD93D", fontWeight: 700 }}>{ligne.total}</span>
+                </div>
+              ))}
+              <div style={{ color: "rgba(255,255,255,.45)", fontSize: ".66rem", marginTop: 6 }}>
+                Égalité départagée par : Adrénaline restante, puis Socle de plus haute valeur, puis Force des cartes non jouées.
+              </div>
             </div>
           )}
 

@@ -39,11 +39,17 @@ export function verifierInvariants(etat, contexte = "") {
 
   const { board = {}, looseBlocks = {}, titans = [] } = etat;
 
+  // Un Titan éjecté de BIG CITY attend son tour hors du plateau (ruling
+  // Nikola du 2026-08-16, « ça évite l'acharnement »). Il n'occupe alors
+  // aucune case : sa `cell` ne désigne plus sa position mais la case par
+  // laquelle il rentrera. Les contrôles de position ne le concernent pas.
+  const surPlateau = titans.filter((t) => !t.horsPlateau);
+
   // ── 1. Deux Titans ne partagent jamais une case ──
   // Ruling explicite de Nikola, déjà corrigé une fois dans le moteur
   // (l'attaquant recule si sa case d'arrivée est occupée).
   const parCase = {};
-  for (const t of titans) {
+  for (const t of surPlateau) {
     if (parCase[t.cell]) {
       signaler("titans-superposes", `${t.cell} occupée par les Titans ${parCase[t.cell]} et ${t.id}`);
     }
@@ -53,10 +59,24 @@ export function verifierInvariants(etat, contexte = "") {
   // ── 2. Un Titan ne se tient jamais sur un bâtiment debout ──
   // Confirmé Nikola. Le moteur s'en protège à plusieurs endroits, mais
   // un chemin d'exécution oublié rendrait la position injouable.
-  for (const t of titans) {
+  for (const t of surPlateau) {
     const bat = board[t.cell];
     if (bat?.blocks?.length > 0) {
       signaler("titan-sur-batiment", `Titan ${t.id} en ${t.cell}, bâtiment de ${bat.blocks.length} bloc(s)`);
+    }
+  }
+
+  // ── 2 bis. Aucun débris ne repose sur un bâtiment debout ──
+  // Règle rappelée par Nikola au premier test à la table (2026-08-15) :
+  // « un débris sur un bâtiment c'est impossible, il ne peut jamais y en
+  // avoir ». Un bâtiment occupe toute sa case, il n'y a pas de place au sol
+  // à côté de lui. Le symptôme se voyait à l'écran : un bloc affiché
+  // par-dessus une tour encore debout.
+  for (const [cle, pile] of Object.entries(looseBlocks)) {
+    if (!Array.isArray(pile) || pile.length === 0) continue;
+    const bat = board[cle];
+    if (bat?.blocks?.length > 0) {
+      signaler("debris-sur-batiment", `${cle} porte ${pile.length} débris alors que son bâtiment tient encore (${bat.blocks.length} bloc(s))`);
     }
   }
 

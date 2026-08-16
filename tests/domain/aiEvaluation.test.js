@@ -176,7 +176,17 @@ describe("blocs Vert — l'IA sait où elle les poserait", () => {
   it("le Vert renforce une couleur déjà possédée quand c'est le plus payant", () => {
     // 5 Bleu en Repaire : le 6e vaut 5 points (15 - 10), largement plus
     // que ce qu'un point de Piste ADN rapporterait ici.
-    const titans = [titan(1, { repaire: [...Array(5).fill("bleu"), "vert"] }), titan(2, { bagarre: 9 })];
+    //
+    // L'adversaire est distancé sur les DEUX Pistes (ruling du 2026-08-15 :
+    // une Piste à 0 vaut 0). Avec un seul adversaire en tête, envoyer le
+    // Vert sur la piste vide ferait passer le Titan de 0 à 3 points, soit
+    // plus que les 5 points du Bleu ne le laissent croire une fois la
+    // comparaison faite — le test mesurerait alors le classement, pas la
+    // valeur marginale de la couleur, qui est son vrai sujet.
+    const titans = [
+      titan(1, { repaire: [...Array(5).fill("bleu"), "vert"] }),
+      titan(2, { bagarre: 9, destruction: 9 }),
+    ];
     const placement = bestVertAssignment(1, titans);
     expect(placement).toEqual([{ type: "color", target: "bleu" }]);
   });
@@ -206,12 +216,22 @@ describe("blocs Vert — l'IA sait où elle les poserait", () => {
     // gain nul et lui préfère le Bleu qui rapporte +2 tout de suite. Il
     // s'enferme et termine à +4, là où les deux Verts en Orange
     // valaient +6. Le mode exact, qui énumère les répartitions, le voit.
-    // L'adversaire est hors d'atteinte sur les deux Pistes ADN : sans ça,
-    // grimper d'un cran au classement rapporterait plus que tout le reste
-    // et masquerait le phénomène qu'on veut montrer ici.
+    // Les adversaires sont hors d'atteinte sur les deux Pistes ADN : sans
+    // ça, grimper d'un cran au classement rapporterait plus que tout le
+    // reste et masquerait le phénomène qu'on veut montrer ici.
+    //
+    // Il en faut TROIS depuis le ruling du 2026-08-15 (« une Piste ADN à 0
+    // vaut 0 »). À deux joueurs, la dernière place rapporte encore 3 points
+    // dès qu'on a marqué le moindre point : envoyer un Vert sur une piste
+    // vide ferait gagner 3, plus que les 2 points du Bleu, et le glouton
+    // choisirait la piste. À quatre, la dernière place vaut 0 : le Vert en
+    // Piste ne rapporte rien du tout, et la comparaison porte bien sur les
+    // seules couleurs, ce que ce test veut éprouver.
     const titans = [
       titan(1, { repaire: ["bleu", "orange", "orange", "vert", "vert"] }),
       titan(2, { bagarre: 10, destruction: 10 }),
+      titan(3, { bagarre: 9, destruction: 9 }),
+      titan(4, { bagarre: 8, destruction: 8 }),
     ];
     const total = (a) => computeFinalScore(titans, { 1: a }, null).totals[1].total;
 

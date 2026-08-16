@@ -1,0 +1,1213 @@
+/* ============================================================
+   PROJET TITAN — titan-style.css  (refactoring v1)
+   ============================================================ */
+
+/* ── 1. TOKENS ─────────────────────────────────────────────── */
+:root {
+  /* Brand palette */
+  --p1: #fff;--p2: #26124A;--p3: #3A1A6B;--p4: #5421A0;--p5: #d4c2e681;
+
+  /* Accent palette */
+  --o1: #ff9239;--y1: #FFD93D;--m1: #FF2E63;--m2: #E91E63;--g1: #16E08C;--g2: #00C97A;--teal: #2DD4BF;--adrenaline: #86ff71;
+
+  /* Neutral / text */
+  --cream: #fffaee;--ink: #0E0420;--muted: rgb(212, 194, 230);
+
+  /* Block colours */
+  --bleu: #2D8DF5;--bleu-eclair: #71dbff;--rose: #EC4899;--orange: #FB923C;--rouge: #EF4444;--vert: #22C55E;--blanc-e: #fff;
+
+  /* Misc */
+  --shadow-deep: 0 20px 60px rgba(255, 46, 99, .25), 0 0 0 1px rgba(255, 255, 255, .04);
+  --radius-sm: 8px;
+  --radius-md: 18px;
+  --radius-lg: 24px;
+  --gap-sm: 12px;
+  --gap-md: 18px;
+  --gap-lg: 20px;
+
+  /* Spacing scale */
+  --space-1: 6px;
+  --space-2: 12px;
+  --space-3: 20px;
+  --space-4: 24px;
+  --space-5: 28px;
+  --space-6: 48px;
+}
+
+/* ── 2. RESET ───────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+
+/* ── 3. BASE ────────────────────────────────────────────────── */
+html { scroll-behavior: smooth; overflow-x: hidden }
+
+body {
+  font-family: 'Outfit', Arial, sans-serif;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--cream);
+  background: linear-gradient(180deg, #2d1d5d 50%, #0a0212 100%);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Grain overlay */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence baseFrequency='.9' numOctaves='2' seed='5'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity: .25;
+  mix-blend-mode: overlay;
+}
+
+/* ── 4. TYPOGRAPHY HELPERS ──────────────────────────────────── */
+.font-titan  { font-family: 'Titan One', sans-serif;  font-weight: 400; letter-spacing: .01em }
+.font-bowl   { font-family: 'Bowlby One', sans-serif; letter-spacing: .08em }
+.mono        { font-family: 'Space Grotesk', monospace }
+
+/* Sections headings */
+.eyebrow {
+  display: inline-block;
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+  color: var(--cream);
+  padding: 4px 12px 4px 4px;
+  margin-bottom: var(--space-3);
+}
+
+h2.title {
+  font-family: 'Bangers', 'Titan One', sans-serif;
+  font-size: clamp(2.4rem, 5vw, 4.2rem);
+  line-height: .95;
+  letter-spacing: .06em;
+  color: var(--y1);
+  margin-bottom: var(--space-4);
+}
+h2.title em     { color: var(--y1); font-style: normal }
+h2.title .accent{ color: var(--bleu-eclair) }
+
+.lede {
+  font-size: 1.15rem;
+  max-width: 780px;
+  margin-bottom: var(--space-6);
+  line-height: 1.6;
+}
+.lede strong { color: var(--y1); font-weight: 700 }
+
+h3.sub {
+  font-family: 'Bowlby One', sans-serif;
+  font-size: 1.7rem;
+  margin: 36px 0 18px;
+  letter-spacing: .08em;
+}
+
+h4.kicker {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: .85rem;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--y1);
+  margin: 0 0 10px;
+}
+
+/* ── 5. LAYOUT ──────────────────────────────────────────────── */
+section.block {
+  position: relative;
+  z-index: 3;
+  padding: 90px 8vw;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--gap-lg) }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap-lg) }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px }
+
+@media (max-width: 900px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr }
+  section.block              { padding: 60px 5vw }
+}
+
+/* ── 6. NAV ─────────────────────────────────────────────────── */
+.toc-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 300;
+  background: transparent;
+  padding: 12px 0;
+  pointer-events: none;
+}
+.toc-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* Burger button */
+.burger-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  cursor: pointer;
+  padding: 8px;
+  background: none;
+  border: none;
+  z-index: 100;
+  pointer-events: all;
+}
+.burger-btn span {
+  display: block;
+  width: 28px;
+  height: 3px;
+  background: var(--o1);
+  border-radius: 2px;
+}
+
+/* Burger menu */
+.burger-menu {
+  display: none;
+  position: fixed;
+  top: 0; right: 0;
+  width: 280px;
+  height: 100vh;
+  background: rgb(10 2 28 / 41%);
+  backdrop-filter: blur(20px);
+  z-index: 200;
+  padding: 70px 24px 24px;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: all;
+}
+.burger-menu.open { display: flex }
+.burger-menu a {
+  color: var(--cream);
+  text-decoration: none;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: .9rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, .06);
+  box-shadow: 0 0 8px rgba(255, 217, 61, .05);
+}
+.burger-menu a:hover {
+  color: var(--y1);
+  background: rgba(255, 217, 61, .08);
+  border-color: rgba(255, 217, 61, .3);
+  box-shadow: 0 0 12px rgba(255, 217, 61, .15);
+}
+.burger-close {
+  position: absolute;
+  top: 18px; right: 20px;
+  background: none;
+  border: none;
+  color: var(--cream);
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+  pointer-events: all;
+}
+.burger-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(0, 0, 0, .5);
+  pointer-events: all;
+}
+.burger-overlay.open { display: block }
+
+/* ── 7. COVER ───────────────────────────────────────────────── */
+.cover {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 8vw;
+  gap: 40px;
+  overflow: hidden;
+  z-index: 3;
+}
+.cover::before, .cover::after { display: none }
+
+.cover-left {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.tagline {
+  margin-top: var(--space-4);
+  font-size: 1.2rem;
+  font-weight: 600;
+  max-width: 460px;
+  line-height: 1.4;
+  text-align: center;
+}
+.tagline em { color: var(--y1); font-style: normal; font-weight: 800 }
+
+.subtag {
+  margin-top: 8px;
+  font-size: .9rem;
+  color: var(--muted);
+  font-weight: 400;
+  font-style: italic;
+  text-align: center;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: var(--space-4);
+  max-width: 380px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.meta-card {
+  background: rgba(255, 255, 255, .06);
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 255, 255, .25);
+  border-radius: 12px;
+  padding: 10px 8px;
+  text-align: center;
+}
+.meta-card .ico { font-size: 1.4rem; margin-bottom: 3px; height: 1.4rem; display: flex; align-items: center; justify-content: center }
+.meta-card .ico img { width: 2.1rem; height: 2.1rem; object-fit: contain }
+.meta-card .num { font-family: 'Titan One', sans-serif; font-size: 1.2rem; color: var(--y1); line-height: 1 }
+.meta-card .lbl { font-size: .65rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-top: 4px; font-weight: 600 }
+
+@media (max-width: 900px) {
+  .cover { padding: 60px 5vw }
+}
+
+/* ── 8. PANELS ──────────────────────────────────────────────── */
+.panel {
+  background: linear-gradient(160deg, rgb(41 13 84 / 0%), rgb(18 7 39 / 43%));
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  position: relative;
+  overflow: hidden;
+}
+.panel.glow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(160deg, rgb(83 39 151 / 40%), rgb(63 18 132 / 51%));
+  z-index: -1;
+}
+#passifs .grid-2 { margin-top: .8rem }
+
+/* ── 9. CALLOUTS ────────────────────────────────────────────── */
+.callout {
+  background: linear-gradient(135deg, rgba(0, 161, 230, .12), rgba(45, 126, 212, .08));
+  border-left: 5px solid var(--g1);
+  padding: 18px 24px;
+  border-radius: 0 18px 18px 0;
+  margin-top: var(--space-4);
+  font-size: .98rem;
+}
+.callout strong { color: var(--cream) }
+.callout.warn {
+  background: linear-gradient(135deg, rgba(255, 107, 26, .12), rgba(255, 46, 99, .10));
+  border-left-color: var(--o1);
+}
+.callout.warn strong { color: var(--o1) }
+
+/* ── 10. MATERIAL GRID ──────────────────────────────────────── */
+.material-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 28px;
+}
+.mat {
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(160deg, rgba(0, 0, 0, .35), rgba(0, 0, 0, .15));
+  border: 1.5px solid rgba(255, 255, 255, .08);
+}
+.mat .qty  { font-family: 'Bangers', 'Titan One', sans-serif; font-size: 2.6rem; line-height: 1 }
+.mat .nm   { font-family: 'Bowlby One', sans-serif; font-size: 1rem; color: var(--y1); margin-top: 6px }
+.mat .det  { font-size: .82rem; margin-top: 6px }
+.mat .swatch { position: absolute; top: 14px; right: 14px; width: 24px; height: 24px; border-radius: 8px; border: 2px solid rgba(255, 255, 255, .4) }
+
+/* Colour accents on mat cards */
+.mat[data-c="bleu"]   { border-left: 4px solid var(--bleu) }
+.mat[data-c="rose"]   { border-left: 4px solid var(--rose) }
+.mat[data-c="orange"] { border-left: 4px solid var(--orange) }
+.mat[data-c="rouge"]  { border-left: 4px solid var(--rouge) }
+.mat[data-c="vert"]   { border-left: 4px solid var(--vert) }
+
+/* Swatches */
+.swatch.bleu   { background: var(--bleu) }
+.swatch.rose   { background: var(--rose) }
+.swatch.orange { background: var(--orange) }
+.swatch.rouge  { background: var(--rouge) }
+.swatch.vert   { background: var(--vert) }
+
+/* ── 11. BOARD 9×9 ──────────────────────────────────────────── */
+.bigcity-board {
+  display: grid;
+  grid-template-columns: auto repeat(9, 40px);
+  grid-template-rows: auto repeat(9, 40px);
+  gap: 3px;
+  margin: 24px 0;
+  justify-content: center;
+}
+.bigcity-board .lbl {
+  font-family: 'Space Grotesk';
+  font-weight: 700;
+  font-size: .75rem;
+  color: rgba(255, 255, 255, .5);
+  display: grid;
+  place-items: center;
+}
+.bigcity-board .cell {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgba(255, 255, 255, .08);
+}
+.bigcity-board .cell.bat { background: rgb(81 67 122); border: none }
+.bigcity-board .cell.titan { position: relative }
+.bigcity-board .cell.titan::after {
+  font-family: 'Titan One';
+  color: #fff;
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: .85rem;
+}
+.bigcity-board .cell.titan-tl { background: linear-gradient(135deg, #6366f1, #3b82f6, #06b6d4) }
+.bigcity-board .cell.titan-tl::after { content: 'T1' }
+.bigcity-board .cell.titan-tr { background: linear-gradient(135deg, #f43f5e, #fb923c, #fbbf24) }
+.bigcity-board .cell.titan-tr::after { content: 'T2' }
+.bigcity-board .cell.titan-bl { background: linear-gradient(135deg, #22c55e, #06d46d, #63f1b1) }
+.bigcity-board .cell.titan-bl::after { content: 'T3' }
+.bigcity-board .cell.titan-br { background: linear-gradient(135deg, #f50be9, #ef44b9, #a855f7) }
+.bigcity-board .cell.titan-br::after { content: 'T4' }
+
+.legend-row { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; justify-content: center }
+.lg { display: flex; align-items: center; gap: 8px; font-size: .85rem; color: #fff }
+.lg .sw { width: 18px; height: 18px; border-radius: 5px }
+
+/* ── 12. CHECKLIST ──────────────────────────────────────────── */
+.check-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--gap-sm);
+  margin-top: var(--space-4);
+}
+.chk {
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: .92rem;
+  color: var(--cream);
+}
+.chk::before {
+  content: '';
+  width: 25px;
+  height: 25px;
+  border-radius: 6px;
+  background: var(--p5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+/* ── 13. THRESHOLD ──────────────────────────────────────────── */
+.threshold-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-lg);
+  margin-top: var(--space-4);
+  max-width: 600px;
+}
+.thresh {
+  border-radius: 20px;
+  padding: 18px 22px;
+  position: relative;
+  overflow: hidden;
+}
+.thresh .num   { font-family: 'Bowlby One', sans-serif; font-size: 1.3rem; line-height: 1.2; display: flex; align-items: center; gap: 8px; white-space: nowrap }
+
+@media (max-width: 900px) {
+  .threshold-cards { grid-template-columns: 1fr }
+}
+
+/* ── 14. GLOSSARY ───────────────────────────────────────────── */
+.glossary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--gap-md);
+  margin-top: var(--space-4);
+}
+@media (max-width: 900px) { .glossary-grid { grid-template-columns: 1fr } }
+
+.gloss {
+  background: linear-gradient(160deg, rgb(46 27 76 / 50%), rgba(38, 18, 74, .7));
+  border-radius: 20px;
+  padding: 22px;
+  display: flex;
+  gap: var(--gap-md);
+  align-items: flex-start;
+  min-width: 0;
+}
+.gloss > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.gloss-tag {
+  flex: 0 0 auto;
+  font-family: 'Bowlby One', sans-serif;
+  font-size: 1.5rem;
+  letter-spacing: .08em;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+}
+.gloss-tag.dil { background: var(--bleu); font-size: 1.05rem; width: auto; min-width: 64px; padding: 0 6px }
+.gloss-tag.ko  { background: #e32347; color: var(--cream); font-size: 1.05rem; width: auto; min-width: 64px; padding: 0 6px }
+.gloss-tag.e,
+.gloss-tag.p { width: 80px; height: 80px; padding: 0; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden }
+.gloss-tag.e img,
+.gloss-tag.p img { width: 100%; height: 100%; object-fit: contain }
+
+/* Fatigue & Seuil 4 — conteneurs dédiés, agrandis ×3 (240px) par rapport aux autres
+   entrées du glossaire (80px), à la demande de Nikola. Les PNG sources sont recadrés/
+   mesurés sur leur contenu réel : pas besoin de transform: scale() compensatoire. */
+.gloss-tag.fat-icon,
+.gloss-tag.seuil4-icon {
+  width: 80px;
+  height: 80px;
+  padding: 0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.gloss-tag.fat-icon img,
+.gloss-tag.seuil4-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.gloss h5      { font-family: 'Bowlby One', sans-serif; font-size: 1.05rem; margin-bottom: 6px; color: var(--cream); letter-spacing: .08em }
+.gloss-tag.p ~ div h5 { color: var(--adrenaline) }
+
+/* ── ICÔNES PNG INLINE (remplacement emojis) ──────────────────── */
+.icon-img {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+.icon-img--sm { width: 52px; height: 52px; vertical-align: middle; }
+.icon-img--sm[src*="Titan_256"] { margin-top: -10px; }
+/* Fatigue réduite de 25% par rapport aux autres icônes inline (52px -> 39px), à la demande de Nikola */
+.icon-img--sm[src*="Fatigue_256"] { width: 39px; height: 39px; }
+.gloss p { font-size: .92rem; color: #fff }
+
+/* ── 16. ROUND SEQUENCE ─────────────────────────────────────── */
+.round-sequence-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 48px;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+.round-sequence-header h3.sub { margin: 0; flex: 1; min-width: 250px }
+.round-sequence-header .flow-step { flex: 0 0 200px; margin: 0 }
+
+.round-flow {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-top: 28px;
+  position: relative;
+}
+
+@media (max-width: 900px) {
+  .round-flow { grid-template-columns: 1fr }
+  .round-sequence-header { flex-direction: column }
+  .round-sequence-header .flow-step { flex: 1; width: 100% }
+}
+
+.flow-step {
+  background: linear-gradient(160deg, rgba(58, 26, 107, .7), rgba(38, 18, 74, .9));
+  border: 1.5px solid rgba(255, 217, 61, .2);
+  border-radius: 18px;
+  padding: 20px 16px;
+  position: relative;
+}
+.flow-step .stp { font-family: 'Titan One', sans-serif; color: var(--cream); font-size: 2rem; letter-spacing: .15em }
+.flow-step .nm  { font-family: 'Bowlby One', sans-serif; font-size: 1.1rem; margin: 6px 0; color: var(--y1) }
+.flow-step .det { font-size: .85rem; color: #fff; line-height: 1.4 }
+.flow-step:not(:last-child)::after {
+  content: '➜';
+  position: absolute;
+  right: -18px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--o1);
+  font-size: 1.3rem;
+  font-weight: 900;
+  z-index: 2;
+}
+.flow-step:nth-child(5)::after { display: none }
+@media (max-width: 900px) { .flow-step:not(:last-child)::after { display: none } }
+
+/* ── 17. ACTION CARDS ───────────────────────────────────────── */
+.actions-deck {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--gap-lg);
+  margin-top: 28px;
+}
+@media (max-width: 900px) {
+  .actions-deck { grid-template-columns: 1fr }
+}
+.act-card {
+  background: linear-gradient(180deg, rgba(58, 26, 107, .85), rgba(21, 8, 40, .95));
+  border-radius: var(--radius-lg);
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid rgba(255, 217, 61, .25);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, .4);
+}
+.act-head {
+  padding: 22px 22px 16px;
+  background: linear-gradient(135deg, var(--card-c1, var(--o1)), var(--card-c2, var(--m1)));
+  position: relative;
+}
+.act-head .num {
+  position: absolute;
+  top: 14px; right: 18px;
+  font-family: 'Titan One', sans-serif;
+  font-size: 3.2rem;
+  line-height: 1;
+  color: rgba(0, 0, 0, .18);
+}
+.act-head .name { font-family: 'Bangers', 'Titan One', sans-serif; font-size: 1.8rem; color: #fff; letter-spacing: .06em }
+.act-head .force {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  background: rgba(0, 0, 0, .3);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-family: 'Bowlby One', sans-serif;
+  color: #fff;
+  font-size: .9rem;
+}
+.act-body { padding: 20px 22px; flex: 1 }
+.act-body p { font-size: .92rem; color: #fff; margin-bottom: 10px }
+
+.act-body .pill {
+  display: inline-block;
+  background: rgba(255, 217, 61, .15);
+  color: var(--y1);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: .78rem;
+  font-weight: 700;
+  margin-right: 6px;
+}
+.act-body .pill.plus  { background: rgba(255, 46, 99, .18); color: var(--m1) }
+.act-body .pill.minus { background: rgba(45, 141, 245, .2); color: var(--bleu) }
+.act-foot {
+  padding: 14px 22px;
+  background: rgba(0, 0, 0, .25);
+  border-top: 1px solid rgba(255, 255, 255, .06);
+  font-size: .82rem;
+  color: #fff;
+}
+
+/* Card colour themes */
+.act-card.destruction { --card-c1: #FF6B1A; --card-c2: var(--m1) }
+.act-card.ramasser    { --card-c1: #2D8DF5; --card-c2: #1E3A8A }
+.act-card.combat      { --card-c1: #F44336; --card-c2: #C2185B }
+.act-card.saut        { --card-c1: #FFD93D; --card-c2: #FF6B1A }
+.act-card.charge      { --card-c1: #9333EA; --card-c2: #5421A0 }
+.act-card.rugissement { --card-c1: var(--teal); --card-c2: #0E7C7B }
+
+/* ── MATRICE CARTE PAR CARTE — fusion visuelle des 6 cartes actions ──
+   Un seul tableau collé : chaque carte forme un bloc de lignes séparé visuellement
+   par son bandeau coloré (reprenant l'identité --card-c1/--card-c2 de sa carte d'origine),
+   sans espace entre les blocs. Demande Nikola : "carte par carte, séparées par leur visuel
+   et couleur, mais toutes collées dans le même tableau". */
+.card-matrix-wrap {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 2px solid rgba(255, 217, 61, .2);
+  margin-top: 12px;
+}
+.card-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+  background: rgba(21, 8, 40, .92);
+}
+.card-matrix td, .card-matrix th { vertical-align: middle }
+
+/* Bandeau d'en-tête de chaque carte : nom + force, fond dégradé coloré */
+.card-matrix .cm-head td {
+  padding: 14px 18px;
+  font-family: 'Bangers', 'Titan One', sans-serif;
+  font-size: 1.3rem;
+  letter-spacing: .05em;
+  color: #fff;
+  background: linear-gradient(100deg, var(--card-c1), var(--card-c2));
+}
+.card-matrix .cm-head .cm-force {
+  float: right;
+  font-family: 'Bowlby One', sans-serif;
+  font-size: .8rem;
+  background: rgba(0, 0, 0, .25);
+  padding: 4px 12px;
+  border-radius: 999px;
+}
+
+/* Ligne de note libre (texte d'intro/règle générale de la carte, pas Élément/Cond./Effet) */
+.card-matrix .cm-note td {
+  padding: 10px 18px;
+  font-size: .85rem;
+  color: #fff;
+  background: rgba(255, 255, 255, .03);
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+
+/* En-tête de colonnes (répété visuellement léger sous chaque bandeau) */
+.card-matrix .cm-cols th {
+  text-align: left;
+  font-family: 'Bowlby One', sans-serif;
+  font-weight: 400;
+  font-size: .65rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .45);
+  padding: 6px 18px;
+  background: rgba(255, 255, 255, .02);
+}
+
+/* Lignes de données Élément / Cond. / Effet */
+.card-matrix .cm-row td {
+  padding: 9px 18px 9px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, .07);
+  color: #fff;
+}
+.card-matrix .cm-row td:first-child { padding-left: 18px }
+.card-matrix .cm-row .cm-elem { width: 26%; white-space: nowrap }
+.card-matrix .cm-row .cm-cond { width: 14%; white-space: nowrap }
+
+/* Pied de carte (immunité, bonus, restriction...) */
+.card-matrix .cm-foot td {
+  padding: 10px 18px 16px;
+  font-size: .82rem;
+  color: rgba(255, 255, 255, .75);
+  background: rgba(0, 0, 0, .18);
+  border-bottom: 4px solid rgba(0, 0, 0, .3);
+}
+.card-matrix tbody:last-of-type .cm-foot td { border-bottom: none }
+
+@media (max-width: 700px) {
+  .card-matrix { font-size: .78rem }
+  .card-matrix .cm-row .cm-elem,
+  .card-matrix .cm-row .cm-cond { white-space: normal }
+}
+
+/* ── 18. MATRIX TABLE ───────────────────────────────────────── */
+.table-wrap {
+  overflow-x: auto;
+  margin-top: var(--space-4);
+  border-radius: 18px;
+  border: 1.5px solid rgba(255, 217, 61, .2);
+}
+table.matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+  min-width: 760px;
+  background: rgba(21, 8, 40, .6);
+}
+table.matrix th {
+  background: transparent;
+  color: rgba(255, 255, 255, .5);
+  font-family: 'Bowlby One', sans-serif;
+  font-weight: 400;
+  padding: 14px 12px;
+  text-align: left;
+  font-size: .8rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+}
+table.matrix td    { padding: 12px; border-bottom: 1px solid rgba(255, 255, 255, .07); color: #fff }
+table.matrix tr.row-shade-a td { background: rgba(255, 255, 255, .025) }
+table.matrix tr.row-shade-b td { background: rgba(0, 0, 0, .12) }
+.badge{ display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 6px; font-weight: 700; font-size: .75rem; vertical-align: middle; line-height: 1.2 }
+
+.b-dil  { background: var(--bleu); color: #fff }
+.b-rage { background: #e32347; color: var(--cream) }
+.b-auto { background: transparent }
+
+/* ── 19. EVENTS ─────────────────────────────────────────────── */
+.events-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--gap-md);
+  margin-top: 28px;
+}
+.evt {
+  background: linear-gradient(160deg, rgb(120 23 122 / 13%), rgb(255 80 60 / 48%));
+  border-radius: var(--radius-md);
+  padding: 22px;
+  position: relative;
+  overflow: hidden;
+}
+.evt::before { display: none }
+.evt .nm  { font-family: 'Bowlby One', sans-serif; font-size: 1.2rem; color: var(--y1); margin-bottom: 8px }
+.evt .ef  { font-size: .9rem; color: #fff }
+.evt .ico { font-size: 1.6rem; margin-bottom: 8px; display: block }
+
+/* ── 20. SCORING ────────────────────────────────────────────── */
+.score-elements {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: var(--space-3);
+}
+.scel {
+  border-radius: var(--radius-md);
+  padding: 18px;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(160deg, rgb(69 27 133 / 49%), rgb(60 40 99 / 8%));
+}
+.scel.bleu   { --c: var(--bleu) }
+.scel.rose   { --c: #ec4899 }
+.scel.orange { --c: var(--orange) }
+.scel.rouge  { --c: var(--rouge) }
+.scel.vert   { --c: var(--vert) }
+.scel .nm {
+  font-family: 'Bowlby One', sans-serif;
+  font-size: 1rem;
+  color: var(--c, var(--o1));
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.scel .nm::before {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--c, var(--o1));
+  flex: 0 0 auto;
+}
+.scel .scale { font-family: 'Space Grotesk', monospace; font-weight: 700; color: var(--y1); font-size: .9rem; margin-bottom: 8px }
+.scel .det   { font-size: .82rem; color: #fff }
+
+/* Trophies */
+.trophy-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-top: var(--space-4);
+}
+@media (max-width: 700px) { .trophy-row { grid-template-columns: 1fr } }
+
+.trophy, .trophy1 {
+  border-radius: 18px;
+  padding: 24px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.trophy  { background: linear-gradient(135deg, #FFD93D, #FF6B1A); color: var(--p1) }
+.trophy1 { background: linear-gradient(90deg, #9C4F96, #FF6355, #FBA949, #FAE442, #8BD448, #2AA8F2); color: var(--p1) }
+
+/* Shared trophy text styles */
+.trophy .pts, .trophy1 .pts { font-family: 'Titan One', sans-serif; font-size: 2.5rem; line-height: 1; color: #fff; text-shadow: 2px 2px 0 var(--p3) }
+.trophy h5,  .trophy1 h5   { font-family: 'Bowlby One', sans-serif; font-size: 1.2rem; margin-bottom: 4px }
+.trophy p,   .trophy1 p    { font-size: .88rem; font-weight: 500 }
+
+/* Podium */
+.podium {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+}
+@media (max-width: 700px) { .podium { grid-template-columns: repeat(2, 1fr) } }
+
+.pod {
+  background: rgba(0, 0, 0, .4);
+  border: 2px solid rgba(255, 217, 61, .2);
+  border-radius: 14px;
+  padding: 16px;
+  text-align: center;
+}
+.pod .rk  { font-family: 'Bowlby One'; color: var(--y1); font-size: 1rem; margin-bottom: 6px; letter-spacing: .08em }
+.pod .pts { font-family: 'Titan One', sans-serif; font-size: 2.2rem; color: var(--cream); line-height: 1 }
+
+/* Podium ranks — shared text-shadow */
+.pod-or, .pod-argent, .pod-bronze { box-shadow: 0 0 20px rgba(var(--pod-glow), .45) }
+.pod-or     .rk, .pod-or     .pts,
+.pod-argent .rk, .pod-argent .pts,
+.pod-bronze .rk, .pod-bronze .pts { color: #fff }
+.pod-or     .pts,
+.pod-argent .pts,
+.pod-bronze .pts { text-shadow: 0 2px 6px rgba(0, 0, 0, .3) }
+
+.pod-or     { background: linear-gradient(135deg, #FFD700, #B8860B); border: 2px solid #FFD700; --pod-glow: 255,215,0 }
+.pod-argent { background: linear-gradient(135deg, #C0C0C0, #808080); border: 2px solid #C0C0C0; --pod-glow: 192,192,192; box-shadow: 0 0 16px rgba(192,192,192,.35) }
+.pod-bronze { background: linear-gradient(135deg, #ffa449, #8B4513); border: 2px solid #ffa449; --pod-glow: 255,164,73;  box-shadow: 0 0 14px rgba(255,164,73,.35) }
+
+/* ── 21. SCORE TABLE & EXAMPLE BOX ─────────────────────────── */
+.example-box {
+  background: linear-gradient(180deg, rgba(45, 141, 245, .08), rgba(58, 26, 107, .4));
+  border: 1.5px solid rgba(45, 141, 245, .3);
+  border-radius: 20px;
+  padding: 28px;
+  margin-top: var(--space-4);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 768px) { .example-box { padding: 18px 20px } }
+.example-box h4 { font-family: 'Bowlby One'; color: var(--bleu); font-size: 1.1rem; margin-bottom: 14px }
+
+.score-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .85rem;
+  min-width: 100%;
+  table-layout: auto;
+  margin-top: 16px;
+}
+.score-table th, .score-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+  text-align: left;
+}
+.score-table th { font-family: 'Bowlby One'; color: var(--y1); font-weight: 400; text-transform: uppercase; font-size: .78rem; letter-spacing: .1em }
+.score-table .total { background: linear-gradient(90deg, rgba(255, 217, 61, .15), rgba(255, 107, 26, .15)); font-weight: 700 }
+.score-table .total td { color: var(--y1) }
+
+/* ── 22. STEPS / TUTORIAL ───────────────────────────────────── */
+.steps { display: grid; gap: 18px; margin-top: var(--space-4) }
+.step {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: var(--space-3);
+  background: linear-gradient(360deg, rgb(89 31 178 / 37%), rgb(47 17 101));
+  border-radius: 20px;
+  padding: 24px;
+  align-items: center;
+}
+.step .stp-n { font-family: 'Bangers', 'Titan One', sans-serif; font-size: 3.2rem; color: var(--o1); line-height: .9; letter-spacing: .06em }
+.step h5     { font-family: 'Bowlby One'; font-size: 1.1rem; color: var(--y1); margin: 0 0 8px; line-height: 1 }
+.step p      { font-size: .92rem; color: #fff; margin-bottom: 6px }
+/* ── 23. SMASH CTA (bouton "DÉTRUIRE LA VILLE") ─────────────── */
+.smash-cta-wrap {
+  position: relative;
+  margin-top: 40px;
+  display: flex;
+  justify-content: center;
+  min-height: 90px;
+}
+
+.smash-cta {
+  font-family: 'Bangers', 'Titan One', sans-serif;
+  font-size: clamp(1.3rem, 3vw, 1.8rem);
+  letter-spacing: .05em;
+  color: #fff;
+  background: linear-gradient(135deg, var(--o1), var(--m1));
+  border: 3px solid rgba(255, 255, 255, .25);
+  border-radius: 16px;
+  padding: 18px 36px;
+  cursor: pointer;
+  box-shadow: 0 14px 40px rgba(255, 46, 99, .35), 0 0 0 1px rgba(255, 255, 255, .05);
+  transition: transform .15s ease, box-shadow .15s ease;
+  position: relative;
+  z-index: 2;
+}
+.smash-cta:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 18px 50px rgba(255, 46, 99, .45), 0 0 0 1px rgba(255, 255, 255, .08);
+}
+.smash-cta:active { transform: translateY(1px) scale(.98) }
+
+.smash-cta.is-smashed {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(.9);
+  transition: opacity .12s ease, transform .12s ease;
+}
+
+.smash-cta-wrap.is-gone {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .4s ease;
+}
+
+/* Champ de fragments */
+.smash-frag-field {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.smash-frag {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--fw, 16px);
+  height: var(--fh, 16px);
+  background: var(--fc, var(--o1));
+  border-radius: 3px;
+  opacity: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .15) inset;
+}
+
+.smash-frag.is-falling {
+  opacity: 1;
+  animation: smashFall var(--fdur, 900ms) cubic-bezier(.4, 0, .7, .3) forwards;
+  animation-delay: var(--fdelay, 0ms);
+}
+
+@keyframes smashFall {
+  0% {
+    transform: translate(-50%, -50%) translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) translate(var(--fx, 0px), var(--fy, 220px)) rotate(var(--frot, 270deg));
+    opacity: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .smash-cta { padding: 14px 26px }
+}
+
+/* ── 24. LEXIQUE POPUP ───────────────────────────────────────── */
+.lex-btn {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  z-index: 250;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(18, 7, 39, .75);
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 217, 61, .3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+  transition: transform .15s ease, border-color .15s ease;
+  pointer-events: all;
+}
+.lex-btn:hover { transform: scale(1.08); border-color: rgba(255, 217, 61, .6) }
+.lex-btn-ico { font-size: 1.3rem; line-height: 1 }
+
+.lex-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 260;
+  background: rgba(0, 0, 0, .4);
+}
+.lex-overlay.open { display: block }
+
+/* Popup contraint à ~15% max de la surface d'écran (max-width × max-height) */
+.lex-popup {
+  display: none;
+  position: fixed;
+  bottom: 78px;
+  left: 20px;
+  z-index: 270;
+  width: min(38vw, 360px);
+  max-height: min(38vh, 360px);
+  background: rgb(18 7 39 / 96%);
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(255, 217, 61, .25);
+  border-radius: 18px;
+  padding: 14px 16px 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+  overflow-y: auto;
+}
+.lex-popup.open { display: block }
+
+.lex-popup-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, .08);
+}
+.lex-popup-title {
+  font-family: 'Bowlby One', sans-serif;
+  font-size: .95rem;
+  color: var(--y1);
+  letter-spacing: .05em;
+}
+.lex-popup-close {
+  background: none;
+  border: none;
+  color: var(--cream);
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+}
+.lex-popup-close:hover { color: var(--y1) }
+
+.lex-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.lex-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .03);
+  text-align: center;
+  position: relative;
+  border: 1.5px solid transparent;
+  cursor: default;
+  transition: border-color .12s ease, background .12s ease;
+}
+.lex-item:hover {
+  border-color: rgba(255, 217, 61, .6);
+  background: rgba(255, 217, 61, .07);
+  z-index: 5;
+}
+.lex-item img { width: 30px; height: 30px; object-fit: contain }
+.lex-item span {
+  font-size: .62rem;
+  font-weight: 600;
+  color: var(--cream);
+  line-height: 1.15;
+  letter-spacing: .01em;
+}
+.lex-item--badge { justify-content: center }
+.lex-item--badge .badge { font-size: .68rem; padding: 2px 7px }
+
+/* Tooltip de définition au survol */
+.lex-item::after {
+  content: attr(data-def);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  width: 150px;
+  max-width: 50vw;
+  background: rgb(10 2 28 / 97%);
+  border: 1px solid rgba(255, 217, 61, .35);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: .68rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--cream);
+  text-align: left;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s ease, transform .15s ease;
+  z-index: 10;
+}
+.lex-item:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+/* Évite que le tooltip des items du haut soit coupé par le popup */
+.lex-grid > .lex-item:nth-child(-n+3)::after {
+  bottom: auto;
+  top: calc(100% + 8px);
+  transform: translateX(-50%) translateY(-4px);
+}
+.lex-grid > .lex-item:nth-child(-n+3):hover::after {
+  transform: translateX(-50%) translateY(0);
+}
+/* Colonne de gauche (1, 4, 7, 10) : ancre le tooltip à gauche pour qu'il ne déborde pas du popup */
+.lex-grid > .lex-item:nth-child(3n+1)::after {
+  left: 0;
+  transform: translateX(0) translateY(4px);
+}
+.lex-grid > .lex-item:nth-child(3n+1):hover::after {
+  transform: translateX(0) translateY(0);
+}
+.lex-grid > .lex-item:nth-child(3n+1):nth-child(-n+3)::after {
+  transform: translateX(0) translateY(-4px);
+}
+.lex-grid > .lex-item:nth-child(3n+1):nth-child(-n+3):hover::after {
+  transform: translateX(0) translateY(0);
+}
+/* Colonne de droite (3, 6, 9, 12) : ancre le tooltip à droite */
+.lex-grid > .lex-item:nth-child(3n)::after {
+  left: auto;
+  right: 0;
+  transform: translateX(0) translateY(4px);
+}
+.lex-grid > .lex-item:nth-child(3n):hover::after {
+  transform: translateX(0) translateY(0);
+}
+.lex-grid > .lex-item:nth-child(3n):nth-child(-n+3)::after {
+  transform: translateX(0) translateY(-4px);
+}
+.lex-grid > .lex-item:nth-child(3n):nth-child(-n+3):hover::after {
+  transform: translateX(0) translateY(0);
+}
+
+@media (max-width: 600px) {
+  .lex-popup { width: min(78vw, 320px); max-height: min(45vh, 380px); left: 12px; bottom: 72px }
+  .lex-btn { left: 12px; bottom: 16px; width: 44px; height: 44px }
+  .lex-grid { grid-template-columns: repeat(3, 1fr) }
+}

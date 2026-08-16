@@ -255,6 +255,24 @@ export function bestVertAssignments(titans, { exact = false } = {}) {
 // survivre jusqu'au décompte.
 const DECOTE_PORTEE = 0.35;
 
+/* ── VALEUR D'UN TITAN SORTI DU RING ──────────────────────────
+   Depuis le ruling du 2026-08-16, un Titan poussé hors de BIG CITY attend
+   son tour pour rentrer, et sa rentrée lui mange son Mouvement gratuit.
+   Éjecter un adversaire lui coûte donc, concrètement, un tour de jeu.
+
+   `computeFinalScore` ne peut pas voir ça : sortir quelqu'un ne change
+   aucun score, ni le sien ni le mien. Sans le terme ci-dessous, l'IA n'a
+   littéralement aucune raison de le faire, alors que c'est devenu une des
+   actions les plus fortes du jeu. C'est le même raisonnement que pour
+   `valeurAPortee` : quand le barème est aveugle à une réalité de la
+   partie, on l'écrit explicitement plutôt que de laisser l'IA jouer à
+   côté du jeu.
+
+   Chiffrage : sur les campagnes de référence, un gagnant marque ~45 points
+   en 12 tours, soit ~3,75 points par tour. On retient 4, arrondi au plus
+   proche — perdre son tour, c'est perdre à peu près ça. */
+const VALEUR_TOUR_PERDU = 4;
+
 export function valeurAPortee(titan, gameState, rayon = 2) {
   const { board = {}, looseBlocks = {} } = gameState;
   if (!titan?.cell) return 0;
@@ -369,6 +387,10 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
 
   let note = noteDe(mien);
 
+  // Être soi-même hors du ring coûte un tour : tout profil doit chercher à
+  // l'éviter, même le Novice, qui comprend très bien qu'il ne joue pas.
+  if (moi.horsPlateau) note -= VALEUR_TOUR_PERDU;
+
   if (reglages.voitPortee) {
     note += valeurAPortee(moi, gameState) * poids.portee;
   }
@@ -384,6 +406,12 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
     if (adversaires.length > 0) {
       const meilleurAdverse = Math.max(...adversaires.map((t) => noteDe(scores.totals[t.id])));
       note -= meilleurAdverse * 0.5;
+      // Sortir un adversaire du ring lui coûte son tour. L'Expert, seul à
+      // raisonner en différentiel, le valorise au même coefficient que le
+      // reste de sa nuisance. Le tempérament Agressif y est plus sensible :
+      // c'est exactement le genre de coup qu'il doit chercher.
+      const ejectes = adversaires.filter((t) => t.horsPlateau).length;
+      if (ejectes > 0) note += ejectes * VALEUR_TOUR_PERDU * 0.5 * poids.adn;
     }
   }
 

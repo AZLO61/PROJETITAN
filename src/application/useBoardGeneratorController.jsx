@@ -3,29 +3,44 @@ import * as Domain from "../domain/index.js";
 import { TITAN_COLORS } from "../ui/titans/constants.js";
 import { TitanIcon } from "../ui/titans/TitanVisuals.jsx";
 
-export function useBoardGeneratorController() {
-  const {
-    STOCK_INITIAL, COULEURS, COLOR_HEX, ROWS, BUILDING_ROWS, BUILDING_COLS, socleMarker, isSocleMarker, socleValue, isBuildingCell,
-    countStandingBuildings, countColorOnBoard, countActiveTeleporters, checkEndGameTriggers, shuffle, buildBag, getQuadrant, generateBoard,
-    CORNERS, TITAN_GRADIENT, ACTION_CARDS, CARD_LABEL, PHASES, getActivePhases, PHASE_LABELS, EVENT_NAMES, CARD_FORCE, placeTitans, nextDetonateur,
-    rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, releaseSocle, projectInDirection, resolveToutCasserBatiments, resolveToutCasserBlocs,
-    resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
-    resolveGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, chebyshevDistance, resolveBoingBoing,
-    canRage, makeDecisionRequest, getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
-    getRecuperationPool, resolveRecuperation, programCards, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
-    resolveFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS, scoreBareme, PODIUM_POINTS,
-    rankWithTies, countRepaireColors, computeFinalScore,
-    pick,
-    // IA : profils et choix de coup (cf. src/domain/aiEvaluation.js et aiPlanner.js)
-    FORCES, TEMPERAMENTS, makeProfile, profileLabel, bestVertAssignment,
-    planMovement, planCardPlay, planRecuperation, planProgrammation
-  } = Domain;
+/* Destructuration du domaine au NIVEAU MODULE, et non plus à l'intérieur du
+   hook. Ces fonctions sont des constantes de module : les déclarer dans le
+   corps du composant en faisait, aux yeux de `react-hooks/exhaustive-deps`,
+   des valeurs susceptibles de changer d'un rendu à l'autre — d'où une
+   trentaine d'avertissements sans objet qui noyaient les vrais. Aucun
+   identifiant ne change, seul leur emplacement bouge. */
+const {
+  STOCK_INITIAL, COULEURS, COLOR_HEX, ROWS, BUILDING_ROWS, BUILDING_COLS, socleMarker, isSocleMarker, socleValue, isBuildingCell,
+  countStandingBuildings, countColorOnBoard, countActiveTeleporters, checkEndGameTriggers, manchesMax, shuffle, buildBag, getQuadrant, generateBoard,
+  CORNERS, TITAN_GRADIENT, ACTION_CARDS, CARD_LABEL, PHASES, getActivePhases, PHASE_LABELS, EVENT_NAMES, CARD_FORCE, placeTitans, nextDetonateur,
+  rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, releaseSocle, projectInDirection, estSurLePlateau, indexerTitans, rentrerEnJeu,
+  resolveToutCasserBatiments, resolveToutCasserBlocs,
+  resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
+  resolveGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, chebyshevDistance, resolveBoingBoing,
+  canRage, canDil, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
+  getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
+  getRecuperationPool, resolveRecuperation, programCards, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
+  resolveFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, resolveFautPasMeChauffer, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS,
+  scoreBareme, PODIUM_POINTS, rankWithTies, countRepaireColors, computeFinalScore, classementFinal,
+  pick,
+  // IA : profils et choix de coup (cf. src/domain/aiEvaluation.js et aiPlanner.js)
+  FORCES, TEMPERAMENTS, makeProfile, profileLabel, bestVertAssignment,
+  planMovement, planCardPlay, planRecuperation, planProgrammation, choisirRepartitionEcroulement
+} = Domain;
 
+export function useBoardGeneratorController() {
   const [nbJoueurs, setNbJoueurs] = useState(4);
   const [setupDone, setSetupDone] = useState(false);
   const [eventsEnabled, setEventsEnabled] = useState(false);
   const [state, setState] = useState(() => generateBoard());
   const [titanState, setTitanState] = useState(() => placeTitans(4));
+  // `actionLog` et `looseBlocks` sont déclarés ICI, en tête, et non plus au
+  // milieu du fichier : `advanceManche` doit lire `looseBlocks` pour évaluer
+  // les déclencheurs de fin de partie, et un tableau de dépendances est
+  // évalué au moment du rendu — une déclaration plus bas provoquerait une
+  // ReferenceError de zone morte temporelle.
+  const [actionLog, setActionLog] = useState([]);
+  const [looseBlocks, setLooseBlocks] = useState({});
   const [seedCount, setSeedCount] = useState(1);
   const [mancheNumber, setMancheNumber] = useState(1);
   const [activePlayerId, setActivePlayerId] = useState(() => titanState.detonateur);
@@ -137,11 +152,27 @@ export function useBoardGeneratorController() {
   }, [nbJoueurs, eventsEnabled, titanModes, tirerProfils]);
 
   const advanceManche = useCallback(() => {
-    // La limite de Manches du livret (6 a 3 Titans, 4 a 4 Titans) n'etait
-    // appliquee nulle part : la partie continuait indefiniment. On arrete
-    // ici, au moment ou la Manche se termine.
-    if (mancheNumber >= manchesMax(nbJoueurs)) {
-      setActionLog((prev) => [...prev, `🏁 Fin de partie : ${manchesMax(nbJoueurs)} Manches jouées à ${nbJoueurs} Titans.`]);
+    // ── FIN DE PARTIE ──
+    // Deux défauts corrigés ici d'un coup.
+    //
+    // 1) `manchesMax` était appelée sans jamais avoir été importée : variable
+    //    libre, donc ReferenceError à la fin de CHAQUE Manche, et le jeu
+    //    inutilisable au-delà de la Manche 1. Elle est désormais
+    //    destructurée avec le reste du domaine, en tête de module.
+    //
+    // 2) Les trois déclencheurs « plateau » du livret (Apocalypse Urbaine,
+    //    Pénurie, Vide Spatial) étaient calculés par checkEndGameTriggers,
+    //    affichés dans le bandeau d'en-tête... et rien de plus. Aucun ne
+    //    terminait la partie. Ils passent maintenant par le même contrôle
+    //    que la limite de Manches — checkEndGameTriggers renvoyant DÉJÀ la
+    //    raison « dernière Manche », il n'y a plus qu'une seule condition
+    //    d'arrêt, et donc plus de risque de divergence entre les deux.
+    //
+    // Le moment est le bon : le livret précise que la partie s'arrête à la
+    // FIN de la Manche en cours, jamais en plein tour.
+    const raisonsFin = checkEndGameTriggers(state.board, looseBlocks, apocalypseThreshold, mancheNumber, nbJoueurs);
+    if (raisonsFin.length > 0) {
+      setActionLog((prev) => [...prev, `🏁 Fin de partie après ${mancheNumber} Manche(s) :`, ...raisonsFin]);
       setShowScoring(true);
       setActivePlayerId(null);
       return;
@@ -182,7 +213,11 @@ export function useBoardGeneratorController() {
     setRecupMode(false);
     setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0);
     setVolDirection(null); // Phase Repos suivante : le nouveau Détonateur devra rechoisir un sens
-  }, [mancheNumber, nbJoueurs, titanState.ordreJeu, titanState.detonateur]);
+    // Dépendance sur `state` et non `state.board` : les résolveurs mutent le
+    // plateau en place puis forcent le rendu par `setState((p) => ({ ...p }))`,
+    // donc la référence de `.board` ne change jamais (même raison que pour le
+    // useMemo de `endGameReasons` plus bas).
+  }, [mancheNumber, nbJoueurs, titanState.ordreJeu, titanState.detonateur, state, looseBlocks, apocalypseThreshold]);
 
   const canValidatePhase = useCallback(
     (titanId) => {
@@ -267,6 +302,9 @@ export function useBoardGeneratorController() {
     }
   }, [titanState.players, rainbowWinnerId]);
 
+  // { titanId, cout } — déplacements consommés par une rentrée sur le
+  // plateau, à retrancher du Mouvement gratuit de ce tour-là uniquement.
+  const [coutRentree, setCoutRentree] = useState(null);
   const [movingTitanOverride, setMovingTitanOverride] = useState(null); // { titanId, cell } hoisted before first use
   const [selectedTitanId, setSelectedTitanId] = useState(null);
 
@@ -287,23 +325,25 @@ export function useBoardGeneratorController() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePlayerId, phase]);
   const selectedTitan = titanState.players.find((t) => t.id === selectedTitanId) || null;
-  const titansByCell = {};
   // Pendant animation de déplacement, on substitue la position visuelle du Titan animé
   const effectivePlayers = movingTitanOverride
     ? titanState.players.map((t) =>
         t.id === movingTitanOverride.titanId ? { ...t, cell: movingTitanOverride.cell } : t
       )
     : titanState.players;
-  effectivePlayers.forEach((t) => (titansByCell[t.cell] = t.id));
+  // Un Titan éjecté n'est PAS sur le plateau : il ne doit apparaître ni sur
+  // la grille 2D, ni en 3D, ni dans aucun calcul d'occupation. Sa `cell`
+  // n'indique plus où il est mais par où il rentrera à son tour.
+  const titansByCell = indexerTitans(effectivePlayers);
+  const titansEnAttente = titanState.players.filter((t) => !estSurLePlateau(t));
   const titanCorners = {};
-  titanState.players.forEach((t) => {
+  effectivePlayers.forEach((t) => {
     // Le lookup `CORNERS[t.corner]` qui vivait ici n'était jamais lu :
     // seul l'id du Titan est stocké. Retiré, aucun changement de contenu.
-    titanCorners[t.cell] = { titanId: t.id };
+    if (estSurLePlateau(t)) titanCorners[t.cell] = { titanId: t.id };
   });
 
-  const [actionLog, setActionLog] = useState([]);
-  const [looseBlocks, setLooseBlocks] = useState({});
+  // (`actionLog` et `looseBlocks` sont déclarés en tête de hook, cf. commentaire là-bas.)
   const [teaMode, setTeaMode] = useState(false);
   const [teaAdrenaline, setTeaAdrenaline] = useState(0);
   const [tcAdrenaline, setTcAdrenaline] = useState(0); // Tout Casser : +1 energie par Adrenaline
@@ -321,6 +361,10 @@ export function useBoardGeneratorController() {
   const [bbMode, setBbMode] = useState(false);
   const [bbAdrenaline, setBbAdrenaline] = useState(0);
   const [bbDest, setBbDest] = useState(null);
+  // Écroulement d'Amas en attente de répartition par le joueur :
+  // { cellKey, blocs, energie, choix } — un choix de case par débris, posé
+  // dans l'ordre. Nul quand aucune répartition n'est en cours.
+  const [ecroulement, setEcroulement] = useState(null);
   const [decisionQueue, setDecisionQueue] = useState([]);
   const [progSelection, setProgSelection] = useState([]);
   const [progCountdown, setProgCountdown] = useState(null);   // null | 1-3
@@ -433,6 +477,32 @@ export function useBoardGeneratorController() {
     }));
   }, [activePlayerId]);
 
+  // ── RETOUR EN JEU D'UN TITAN ÉJECTÉ ──
+  // Ruling Nikola du 2026-08-16 : un Titan poussé hors de BIG CITY attend
+  // SON tour pour revenir, jamais avant — « ça évite l'acharnement ». C'est
+  // donc ici, à l'ouverture de son tour en Phase Action, qu'il rentre.
+  // Un seul effet, qui POSE ou EFFACE le coût de rentrée. Deux effets
+  // séparés sur la même dépendance se seraient annulés : React les exécute
+  // dans l'ordre de déclaration, et celui qui remet à zéro aurait effacé la
+  // valeur que l'autre venait d'écrire.
+  useEffect(() => {
+    if (phase !== "action" || activePlayerId == null) { setCoutRentree(null); return; }
+    const joueur = aiTitanStateRef.current.players.find((t) => t.id === activePlayerId);
+    if (!joueur?.horsPlateau) { setCoutRentree(null); return; }
+    const retour = rentrerEnJeu(activePlayerId, {
+      board: aiStateRef.current.board,
+      titans: aiTitanStateRef.current.players,
+      looseBlocks: aiLooseBlocksRef.current,
+    });
+    setActionLog((prev) => [...prev, ...retour.log]);
+    // La rentrée se paie sur le Mouvement gratuit du tour : il lui reste
+    // d'autant moins de cases à parcourir, et il devra peut-être dépenser
+    // une Adrénaline pour retrouver de la marge.
+    setCoutRentree(retour.rentre ? { titanId: activePlayerId, cout: retour.cout } : null);
+    if (retour.rentre) setTitanState((p) => ({ ...p, players: [...p.players] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePlayerId, phase]);
+
   // ── DÉCISIONS IA ──
   // Les heuristiques à priorité fixe qui vivaient ici ont été retirées.
   // Elles jouaient toujours la carte la plus haute d'un ordre codé en dur,
@@ -486,6 +556,10 @@ export function useBoardGeneratorController() {
   useEffect(() => { aiPassifUsedRef.current = passifUsed; }, [passifUsed]);
   useEffect(() => { aiActivePlayerIdRef.current = activePlayerId; }, [activePlayerId]);
   useEffect(() => { aiTitanModesRef.current = titanModes; }, [titanModes]);
+  // Les minuteries de l'IA lisent le coût de rentrée bien après le rendu :
+  // il leur faut une ref à jour, pas la valeur figée par la fermeture.
+  const coutRentreeRef = useRef(coutRentree);
+  useEffect(() => { coutRentreeRef.current = coutRentree; }, [coutRentree]);
 
   useEffect(() => {
     if (!setupDone) return;
@@ -545,7 +619,12 @@ export function useBoardGeneratorController() {
         // courait vers un tas de Bleu à 0 point. planMovement note la case
         // au score réel.
         const jeu = { titans: curTitanState.players, board: curState.board, looseBlocks: curLooseBlocks };
-        const choix = planMovement(playerId, jeu, profilDe(playerId));
+        // Portée réduite si le Titan vient de rentrer sur le plateau : sa
+        // rentrée a consommé une partie de son Mouvement gratuit.
+        const deja = coutRentreeRef.current && coutRentreeRef.current.titanId === playerId
+          ? coutRentreeRef.current.cout
+          : 0;
+        const choix = planMovement(playerId, jeu, profilDe(playerId), Math.max(0, 2 - deja));
         if (choix) {
           resolveFreeMovement(playerId, choix.destKey, jeu);
           setTitanState((p) => ({ ...p, players: [...p.players] }));
@@ -594,6 +673,13 @@ export function useBoardGeneratorController() {
           if (dest) {
             const res = resolveBoingBoing(playerId, dest, mise, mancheNumber, jeu2);
             newLog = res.log; newDecisions = res.decisions || []; // défensif (fix session) : certains résolveurs (ex. resolveJeNePartagePas) ne retournent jamais "decisions", d'autres l'omettent sur leurs early-returns "applied:false" — sans ce garde, newDecisions.some(...) plus bas plante avec "Cannot read properties of undefined (reading 'some')"
+            // L'IA n'a pas d'interface de répartition : elle applique la
+            // répartition par défaut, cases vierges d'abord.
+            if (res.ecroulement) {
+              const choix = choisirRepartitionEcroulement(res.ecroulement, jeu2);
+              const suite = resolveEcroulementAmas(playerId, res.ecroulement, choix, jeu2);
+              newLog = [...newLog, ...suite.log];
+            }
             setState((p) => ({ ...p })); setLooseBlocks((p) => ({ ...p }));
           } else {
             newLog = [`IA T${playerId} : Boing Boing sans destination, défausse.`];
@@ -604,27 +690,23 @@ export function useBoardGeneratorController() {
           newLog = res.log; newDecisions = res.decisions || []; // défensif (fix session) : certains résolveurs (ex. resolveJeNePartagePas) ne retournent jamais "decisions", d'autres l'omettent sur leurs early-returns "applied:false" — sans ce garde, newDecisions.some(...) plus bas plante avec "Cannot read properties of undefined (reading 'some')"
           setLooseBlocks((p) => ({ ...p }));
         } else if (cardId === "faut_pas_me_chauffer") {
+          // Même résolveur de domaine que pour un joueur humain (cf.
+          // revealFPMC). L'IA ne mise pas d'Adrénaline en secret — faute de
+          // règle de décision pour ça — mais elle subit et applique
+          // désormais TOUT le reste de la carte : projection de la cible,
+          // Bagarre, DIL/RAGE. Auparavant elle n'en produisait que les
+          // décisions, sans le moindre effet physique.
           const targets = getFPMCTargets(playerId, { titans: curTitanState2.players });
           if (targets.length === 0) {
             newLog = [`FPMC (IA T${playerId}) : aucune cible.`];
           } else {
             newLog = [`FPMC (IA T${playerId}) vs ${targets.length} cible(s)`];
             targets.forEach((defId) => {
-              const atk = curTitanState2.players.find((t) => t.id === playerId);
-              const def = curTitanState2.players.find((t) => t.id === defId);
-              if (!atk || !def) return;
-              const atkSum = getProgrammedSum(atk);
-              const defSum = getProgrammedSum(def);
-              if (atkSum > defSum) {
-                newDecisions.push(makeDecisionRequest("RAGE", playerId, defId, "Faut Pas Me Chauffer"));
-                newLog.push(`FPMC : T${playerId}(${atkSum}) > T${defId}(${defSum}) → RAGE`);
-              } else if (atkSum === defSum) {
-                newDecisions.push(makeDecisionRequest("DIL", playerId, defId, "Faut Pas Me Chauffer"));
-                newLog.push(`FPMC : Égalité → DIL`);
-              } else {
-                newLog.push(`FPMC : T${playerId}(${atkSum}) < T${defId}(${defSum}) → défaite IA`);
-              }
+              const res = resolveFautPasMeChauffer(playerId, defId, targets.length, jeu2);
+              newLog.push(...res.log);
+              newDecisions.push(...(res.decisions || []));
             });
+            setState((p) => ({ ...p })); setLooseBlocks((p) => ({ ...p }));
           }
         } else {
           newLog = [`IA T${playerId} : carte inconnue (${cardId}), défausse.`];
@@ -923,33 +1005,39 @@ export function useBoardGeneratorController() {
   }, []);
 
   const dilValidateAttackerPick = useCallback(() => {
-    setDecisionQueue((prev) => {
-      const [cur, ...rest] = prev;
-      if (!cur || cur.attackerChoices.length !== 2) return prev;
-      if (cur.defenderIsAi) {
-        // Bug remonté : le défenseur IA n'a jamais son mot à dire — la
-        // décision restait en attente d'un clic humain qui ne viendrait
-        // jamais. On auto-résout immédiatement ici avec la même heuristique
-        // que l'auto-résolution IA↔IA (valeur marginale la plus faible pour
-        // le défenseur = celle qu'il perd), au lieu de passer par le stade
-        // DEFENDER_PICK de l'UI.
-        const defender = titanState.players.find((t) => t.id === cur.defenderId);
-        if (defender) {
-          const defValued = cur.attackerChoices.map((color) => ({
-            color,
-            defVal: marginalValue(color, defender.repaire, titanState.players, cur.defenderId),
-          }));
-          const defChoice = defValued.reduce((best, curr) => (curr.defVal < best.defVal ? curr : best));
-          const idx = defender.repaire.indexOf(defChoice.color);
-          if (idx !== -1) defender.repaire.splice(idx, 1);
-          setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} (IA) perd 1 bloc ${defChoice.color} (décision automatique).`]);
-          setTitanState((p) => ({ ...p, players: [...p.players] }));
-        }
-        return rest;
-      }
-      return [{ ...cur, stage: "DEFENDER_PICK" }, ...rest];
-    });
-  }, [titanState.players]);
+    // La mutation du Repaire se faisait AUTREFOIS à l'intérieur de l'updater
+    // passé à setDecisionQueue. C'est exactement le motif éliminé partout
+    // ailleurs dans ce fichier : React ne garantit pas qu'un updater n'est
+    // appelé qu'une fois, et le défenseur pouvait perdre deux blocs au lieu
+    // d'un (aujourd'hui invisible faute de StrictMode, donc une bombe à
+    // retardement pour le jour où quelqu'un l'active pour déboguer).
+    // Réécrit en séquence synchrone : on lit, on décide, on mute, on dépile.
+    const cur = decisionQueue[0];
+    if (!cur || cur.attackerChoices.length !== 2) return;
+
+    if (!cur.defenderIsAi) {
+      setDecisionQueue((prev) => (prev[0] === cur ? [{ ...cur, stage: "DEFENDER_PICK" }, ...prev.slice(1)] : prev));
+      return;
+    }
+
+    // Défenseur IA : il n'a jamais son mot à dire par l'interface, la
+    // décision resterait en attente d'un clic qui ne viendrait pas. Même
+    // heuristique que l'auto-résolution IA↔IA — il perd la couleur dont la
+    // valeur marginale lui coûte le moins.
+    const defender = titanState.players.find((t) => t.id === cur.defenderId);
+    if (defender) {
+      const defValued = cur.attackerChoices.map((color) => ({
+        color,
+        defVal: marginalValue(color, defender.repaire, titanState.players, cur.defenderId),
+      }));
+      const defChoice = defValued.reduce((best, curr) => (curr.defVal < best.defVal ? curr : best));
+      const idx = defender.repaire.indexOf(defChoice.color);
+      if (idx !== -1) defender.repaire.splice(idx, 1);
+      setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} (IA) perd 1 bloc ${defChoice.color} (décision automatique).`]);
+      setTitanState((p) => ({ ...p, players: [...p.players] }));
+    }
+    setDecisionQueue((prev) => prev.slice(1));
+  }, [decisionQueue, titanState.players]);
 
   const resolveDilDefenderPick = useCallback(
     (color) => {
@@ -1240,6 +1328,16 @@ export function useBoardGeneratorController() {
           { dr: 1, dc: 0 }, { dr: 1, dc: -1 }, { dr: 0, dc: -1 }, { dr: -1, dc: -1 },
         ];
         for (const { dr, dc } of DIRS) {
+          // Bug trouvé au scan : seule une direction PORTANT UN OBSTACLE
+          // devenait cliquable. Le domaine, lui, gère parfaitement la charge
+          // à vide (resolveTeteEnAvant : « avance librement, aucun obstacle
+          // rencontré ») et l'IA pouvait jouer ce coup — le joueur humain
+          // non. Sur un plateau bien détruit, la carte devenait injouable
+          // dans plusieurs directions sans que rien ne l'explique à l'écran.
+          // On mémorise donc la dernière case libre atteinte, et on la
+          // propose en cible si aucun obstacle ne s'est présenté.
+          let derniereCaseLibre = null;
+          let obstacleTrouve = false;
           for (let step = 1; step <= teaMaxRange; step++) {
             const nr = oR + dr * step;
             const nc = oC + dc * step;
@@ -1251,11 +1349,15 @@ export function useBoardGeneratorController() {
             const hasLooseBlock = stack.length > 0; // bloc libre OU socle libre
             const occupantId = titansByCell2[key];
             const isAdverseOccupant = occupantId && occupantId !== selectedTitan.id;
-            if (hasBuilding) { targets.set(key, { dr, dc }); break; }
-            if (hasLooseBlock) { targets.set(key, { dr, dc }); break; }
-            if (isAdverseOccupant) { targets.set(key, { dr, dc }); break; }
+            if (hasBuilding || hasLooseBlock || isAdverseOccupant) {
+              targets.set(key, { dr, dc });
+              obstacleTrouve = true;
+              break;
+            }
             // case vide (bâtiment vide, route libre) → on continue
+            derniereCaseLibre = key;
           }
+          if (!obstacleTrouve && derniereCaseLibre) targets.set(derniereCaseLibre, { dr, dc });
         }
         return targets;
       })()
@@ -1300,23 +1402,14 @@ export function useBoardGeneratorController() {
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
   }, [selectedTitanId, teaTargets, teaAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, canPlayCard, markCardPlayed, captureSnapshot]);
 
-  // Bug remonté : "un Titan avait 0 carte à jouer en pleine Manche". Cause
-  // trouvée : Fatigue (Graouhhh/Boing Boing) peut piocher une carte encore
-  // dans `programmed` (pas seulement `hand`) chez la victime — cette carte
-  // ne sera donc jamais "jouée" via markCardPlayed, et cardsPlayedCountRef
-  // (qui compte les rounds réellement joués pour savoir quand un Titan a
-  // fini sa Manche) ne le sait pas : le système continue d'attendre un 3e
-  // tour de la victime alors qu'il ne lui reste plus aucune carte. Ce
-  // helper compense manuellement le compteur pour chaque victime concernée,
-  // juste après la résolution d'une action qui a déclenché une Fatigue sur
-  // une carte programmée (voir jouerGraouhhh / jouerBoingBoing).
-  const compensateFatiguedRounds = useCallback((victimIds) => {
-    if (!victimIds || victimIds.length === 0) return;
-    const prevCount = cardsPlayedCountRef.current;
-    const newCount = { ...prevCount };
-    victimIds.forEach((id) => { newCount[id] = (newCount[id] || 0) + 1; });
-    cardsPlayedCountRef.current = newCount;
-  }, []);
+  // `compensateFatiguedRounds` vivait ici. Il rattrapait le compteur de
+  // rounds quand la Fatigue volait une carte ENCORE PROGRAMMÉE, laissant sa
+  // victime avec moins de 3 cartes à jouer dans la Manche en cours.
+  //
+  // Ce rattrapage n'a plus lieu d'être : ruling re-précisé par Nikola le
+  // 2026-08-15, la Fatigue ne pioche QUE dans la main, jamais dans les
+  // cartes de la Manche en cours (cf. getNonPlayedPool). La cause étant
+  // supprimée, le pansement l'est aussi.
 
   const jouerGraouhhh = useCallback(() => {
     if (!selectedTitanId || !canPlayCard("graouhhh")) return;
@@ -1326,12 +1419,11 @@ export function useBoardGeneratorController() {
     });
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
-    compensateFatiguedRounds(result.fatiguedProgrammed);
     markCardPlayed(selectedTitanId, "graouhhh");
     setGraouMode(false);
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, direction, state.board, titanState.players, looseBlocks, enqueueDecisions, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot, compensateFatiguedRounds]);
+  }, [selectedTitanId, direction, state.board, titanState.players, looseBlocks, enqueueDecisions, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
 
   const bbMaxRange = PORTEE_BOING_BOING + bbAdrenaline;
   const bbReachable = selectedTitan
@@ -1364,14 +1456,51 @@ export function useBoardGeneratorController() {
     if (result.applied && actuallyUseAdrenaline) attacker.adrenaline -= actuallyUseAdrenaline;
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
-    compensateFatiguedRounds(result.fatiguedProgrammed);
+    // Atterrissage sur un Amas : la carte est jouée, mais la répartition des
+    // débris revient au joueur, case par case (ruling Nikola du 2026-08-16).
+    if (result.ecroulement) setEcroulement({ ...result.ecroulement, choix: [] });
     if (result.applied) { markCardPlayed(selectedTitanId, "boing_boing"); setBbMode(false); setBbDest(null); }
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, bbDest, bbAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot, compensateFatiguedRounds]);
+  }, [selectedTitanId, bbDest, bbAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
 
-  const moveMaxRange = 2 + moveAdrenaline;
+  // Le Mouvement gratuit vaut 2 cases, +1 par Adrénaline dépensée, MOINS ce
+  // qu'a coûté une éventuelle rentrée sur le plateau ce tour-ci. C'est ce
+  // qui peut forcer un Titan éjecté à dépenser une Adrénaline pour retrouver
+  // de la marge (ruling Nikola du 2026-08-16).
+  const coutRentreeCeTour = coutRentree && coutRentree.titanId === selectedTitanId ? coutRentree.cout : 0;
+  const moveMaxRange = Math.max(0, 2 + moveAdrenaline - coutRentreeCeTour);
+
+  // ── RÉPARTITION DES DÉBRIS D'UN AMAS ÉCROULÉ ──
+  // Cases proposées pour le PROCHAIN débris. Elles changent à chaque pose :
+  // on ne peut empiler que lorsqu'il ne reste plus de case vierge.
+  const ecroulementCells = ecroulement
+    ? getEcroulementCells(ecroulement.cellKey, { board: state.board, looseBlocks }, ecroulement.choix).eligibles
+    : [];
+  const ecroulementPoserDebris = useCallback((cellKey) => {
+    setEcroulement((prev) => {
+      if (!prev || prev.choix.length >= prev.blocs.length) return prev;
+      return { ...prev, choix: [...prev.choix, cellKey] };
+    });
+  }, []);
+  const ecroulementAnnulerDernier = useCallback(() => {
+    setEcroulement((prev) => (prev && prev.choix.length > 0 ? { ...prev, choix: prev.choix.slice(0, -1) } : prev));
+  }, []);
+  const ecroulementValider = useCallback(() => {
+    if (!ecroulement || ecroulement.choix.length !== ecroulement.blocs.length) return;
+    const result = resolveEcroulementAmas(
+      activePlayerId,
+      { cellKey: ecroulement.cellKey, blocs: ecroulement.blocs, energie: ecroulement.energie },
+      ecroulement.choix,
+      { board: state.board, titans: titanState.players, looseBlocks }
+    );
+    setActionLog((prev) => [...prev, ...result.log]);
+    setEcroulement(null);
+    setState((prev) => ({ ...prev }));
+    setLooseBlocks((prev) => ({ ...prev }));
+    setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+  }, [ecroulement, activePlayerId, state.board, titanState.players, looseBlocks]);
   const { reachable: moveReachable, classic: moveClassic, teleport: moveTeleport } = selectedTitan
     ? getMovementReachable(selectedTitan.cell, moveMaxRange, state.board, titansByCell, looseBlocks)
     : { reachable: new Set(), classic: new Set(), teleport: new Set() };
@@ -1516,54 +1645,44 @@ export function useBoardGeneratorController() {
   const revealFPMC = useCallback(() => {
     const cur = fpmcCurrent;
     if (!cur || !fpmcAttackerId) return;
-    const attackerTotal = fpmcAttackerBase + cur.attackerBid;
-    const defenderTotal = cur.defenderBase + cur.defenderBid;
-    const log = [];
-    log.push(`Révélation — T${fpmcAttackerId}: ${attackerTotal} vs T${cur.defenderId}: ${defenderTotal}`);
     const attacker = titanState.players.find((t) => t.id === fpmcAttackerId);
     const defender = titanState.players.find((t) => t.id === cur.defenderId);
-    const dr = Math.sign(rowIndex(defender.cell[0]) - rowIndex(attacker.cell[0]));
-    const dc = Math.sign(Number(defender.cell.slice(1)) - Number(attacker.cell.slice(1)));
-    const projDistance = fpmcNTargets + 1;
-    const decisions = [];
-    if (attackerTotal > defenderTotal) {
-      const bagarreSet = new Set([cur.defenderId]);
-      const landing = projectInDirection(defender.cell[0], Number(defender.cell.slice(1)), dr, dc, projDistance, { board: state.board, looseBlocks, titans: titanState.players, log, bagarreSet });
-      defender.cell = landing.row + landing.col;
-      decisions.push(makeDecisionRequest("RAGE", fpmcAttackerId, cur.defenderId, "Faut Pas Me Chauffer"));
-      attacker.bagarre = (attacker.bagarre || 0) + bagarreSet.size;
-      log.push(`Victoire T${fpmcAttackerId} → RAGE · +Bagarre · T${cur.defenderId} → ${defender.cell}`);
-    } else if (attackerTotal === defenderTotal) {
-      const bagarreSet = new Set([cur.defenderId]);
-      const landing = projectInDirection(defender.cell[0], Number(defender.cell.slice(1)), dr, dc, projDistance, { board: state.board, looseBlocks, titans: titanState.players, log, bagarreSet });
-      defender.cell = landing.row + landing.col;
-      decisions.push(makeDecisionRequest("DIL", fpmcAttackerId, cur.defenderId, "Faut Pas Me Chauffer"));
-      attacker.bagarre = (attacker.bagarre || 0) + bagarreSet.size;
-      log.push(`Égalité → DIL · T${cur.defenderId} → ${defender.cell}`);
-    } else {
-      log.push(`Défaite T${fpmcAttackerId} — aucun effet.`);
-    }
+    if (!attacker || !defender) return;
+
+    // La résolution vit désormais dans le domaine, avec les cinq autres
+    // cartes (cf. resolveFautPasMeChauffer). La version manuscrite qui
+    // occupait cette place avait raté trois correctifs successifs :
+    // immunité de l'initiateur, auto-collision du Titan projeté, et
+    // « bagarre non remportée = aucun point ». Le contrôleur ne fait plus
+    // que ce qui lui revient : débiter les mises et rafraîchir l'affichage.
+    const result = resolveFautPasMeChauffer(fpmcAttackerId, cur.defenderId, fpmcNTargets, {
+      board: state.board, titans: titanState.players, looseBlocks,
+    }, { attackerBid: cur.attackerBid, defenderBid: cur.defenderBid });
+
     attacker.adrenaline = Math.max(0, (attacker.adrenaline || 0) - cur.attackerBid);
     defender.adrenaline = Math.max(0, (defender.adrenaline || 0) - cur.defenderBid);
-    setActionLog((prev) => [...prev, ...log]);
-    enqueueDecisions(decisions);
+    setActionLog((prev) => [...prev, ...result.log]);
+    enqueueDecisions(result.decisions);
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setFpmcCurrent(null);
-  }, [fpmcCurrent, fpmcAttackerId, fpmcAttackerBase, fpmcNTargets, titanState.players, state.board, looseBlocks, enqueueDecisions]);
+  }, [fpmcCurrent, fpmcAttackerId, fpmcNTargets, titanState.players, state.board, looseBlocks, enqueueDecisions]);
 
   const jouerToutCasser = useCallback(() => {
     if (!selectedTitanId || !canPlayCard("tout_casser")) return;
     captureSnapshot();
     const attacker = titanState.players.find((t) => t.id === selectedTitanId);
-    const bonus = Math.min(tcAdrenaline, attacker.adrenaline || 0);
-    if (bonus) attacker.adrenaline -= 1;
+    // Bug trouvé au scan : le débit était figé à 1 (`attacker.adrenaline -= 1`)
+    // alors que le bonus d'énergie, lui, passait entier au résolveur. Miser
+    // deux Adrénalines sur Tout Casser rendait donc la seconde gratuite.
+    const bonus = Math.min(Number(tcAdrenaline) || 0, attacker.adrenaline || 0);
+    if (bonus > 0) attacker.adrenaline -= bonus;
     const result = resolveToutCasser(selectedTitanId, { board: state.board, titans: titanState.players, looseBlocks }, bonus);
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
     markCardPlayed(selectedTitanId, "tout_casser");
-    setTcAdrenaline(false);
+    setTcAdrenaline(0); // état numérique : `false` y était écrit par erreur
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
@@ -1586,6 +1705,14 @@ export function useBoardGeneratorController() {
       )
     : null;
 
+  // Le tableau de scoring affichait une colonne par Titan et un total, sans
+  // jamais désigner de vainqueur : au joueur de comparer les chiffres à
+  // l'œil. Le classement est calculé ici, départage compris (Adrénaline,
+  // plus haut Socle, Force des cartes non jouées — ruling du 2026-08-15).
+  const classementFinalPartie = finalScoreResult
+    ? classementFinal(titanState.players, finalScoreResult.totals)
+    : null;
+
   // ⚠️ Dépendances posées sur `state` / `looseBlocks` / `titanState` (objets
   // de haut niveau) et NON sur `state.board` : les résolutions de cartes
   // mutent `state.board` en place puis forcent le rendu par
@@ -1601,7 +1728,10 @@ export function useBoardGeneratorController() {
     () => JSON.stringify({
       b: Object.entries(state.board).map(([k, v]) => [k, v.blocks.join(""), v.socle]),
       l: Object.entries(looseBlocks).map(([k, v]) => [k, (v || []).join(",")]),
-      t: titanState.players.map((p) => [p.id, p.cell]),
+      // `horsPlateau` fait partie de la signature : un Titan qui rentre par
+      // la case exacte d'où il est sorti ne change pas de `cell`, et la 3D
+      // ne se serait jamais reconstruite pour le refaire apparaître.
+      t: titanState.players.map((p) => [p.id, p.cell, p.horsPlateau ? 1 : 0]),
     }),
     [state, looseBlocks, titanState]
   );
@@ -1720,7 +1850,7 @@ export function useBoardGeneratorController() {
                 }}>
                   <span style={{ fontSize: ".82rem", fontWeight: 700 }}>{n} Titans</span>
                   <span style={{ fontSize: ".68rem", opacity: on ? 0.85 : 0.5 }}>
-                    {n === 4 ? "4 Manches" : "6 Manches"}
+                    {manchesMax(n)} Manches
                   </span>
                 </button>
               );
@@ -1854,6 +1984,11 @@ export function useBoardGeneratorController() {
   return {
     nbJoueurs,
     setNbJoueurs,
+    // Le nombre de Manches de la partie vient du domaine (manchesMax), qui
+    // en est propriétaire. Il était recopié en dur à deux endroits de
+    // l'interface — un `nbJoueurs === 4 ? 4 : 6` qui aurait silencieusement
+    // divergé le jour où la durée d'une partie change.
+    manchesMaxPartie: manchesMax(nbJoueurs),
     setupDone,
     setSetupDone,
     eventsEnabled,
@@ -1917,6 +2052,7 @@ export function useBoardGeneratorController() {
     selectedTitan,
     titansByCell,
     effectivePlayers,
+    titansEnAttente,
     titanCorners,
     actionLog,
     setActionLog,
@@ -1942,6 +2078,11 @@ export function useBoardGeneratorController() {
     setBbAdrenaline,
     bbDest,
     setBbDest,
+    ecroulement,
+    ecroulementCells,
+    ecroulementPoserDebris,
+    ecroulementAnnulerDernier,
+    ecroulementValider,
     decisionQueue,
     setDecisionQueue,
     progSelection,
@@ -2026,6 +2167,7 @@ export function useBoardGeneratorController() {
     bbSelectCell,
     jouerBoingBoing,
     moveMaxRange,
+    coutRentreeCeTour,
     moveReachable,
     moveClassic,
     moveTeleport,
@@ -2047,6 +2189,7 @@ export function useBoardGeneratorController() {
     getVertCount,
     updateVertAssignment,
     finalScoreResult,
+    classementFinalPartie,
     endGameReasons,
     boardSignature3D,
     perimeterCells,

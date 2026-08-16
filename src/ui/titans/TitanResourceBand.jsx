@@ -191,26 +191,30 @@ export default function TitanResourceBand({
                     style={{ display: "inline-flex", gap: 3, alignItems: "center", cursor: "help", marginLeft: "auto" }}
                   >
                     {/* Les cartes encore à jouer sont pleines, les autres
-                        gardent leur contour jaune. Sur son propre Titan, le
-                        survol d'un carré donne le nom de la carte : c'est son
-                        jeu, il a le droit de le relire. */}
+                        gardent leur contour jaune. SEUL LE NOMBRE est public.
+
+                        Fuite d'information corrigée le 2026-08-15, remontée
+                        par Nikola en test réel : le survol d'un carré
+                        révélait le NOM de la carte encore à jouer sur le
+                        Titan actif. L'intention d'origine — « c'est son jeu,
+                        il a le droit de le relire » — oublie que l'appareil
+                        circule de main en main : à l'inter-tour, c'est
+                        l'adversaire qui le tient, et il lui suffisait de
+                        survoler pour lire la programmation restante. Une
+                        carte programmée reste secrète jusqu'à sa résolution,
+                        sans exception. */}
                     {[
-                      ...t.programmed.map((cardId) => ({ cardId, restante: true })),
-                      ...t.playedThisManche.map((cardId) => ({ cardId, restante: false, jouee: true })),
-                      ...(t.discardedHidden || []).map(() => ({ cardId: null, restante: false })),
+                      ...t.programmed.map(() => ({ restante: true })),
+                      ...t.playedThisManche.map(() => ({ restante: false })),
+                      ...(t.discardedHidden || []).map(() => ({ restante: false })),
                     ].map((c, i) => (
                       <span
                         key={i}
-                        title={
-                          estMoi && c.cardId
-                            ? `${CARD_LABEL[c.cardId]}${c.restante ? " — à jouer" : " — jouée"}`
-                            : c.restante ? "Carte encore à jouer" : "Carte déjà passée"
-                        }
+                        title={c.restante ? "Carte encore à jouer" : "Carte déjà passée"}
                         style={{
                           width: 9, height: 9, borderRadius: 2, display: "inline-block",
                           background: c.restante ? "#FFD93D" : "transparent",
                           border: "1.5px solid #FFD93D",
-                          cursor: estMoi && c.cardId ? "help" : "default",
                         }}
                       />
                     ))}

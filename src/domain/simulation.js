@@ -24,7 +24,7 @@
    avec l'IA (`appliquerCoup`), pour qu'il ne puisse exister aucune
    divergence entre ce que l'IA croit jouer et ce qui se produit.
 
-   Il s'en écarte sur trois points, tous assumés et tous documentés ici :
+   Il s'en écarte sur quatre points, tous assumés et tous documentés ici :
 
    1. DIL et RAGE sont résolus en valeur attendue (chaque camp joue son
       intérêt) et non par la file de décisions de l'application. Contre
@@ -35,6 +35,17 @@
       décrit donc le jeu SANS Événements.
    3. Le sens du Vol de Phase Repos est tiré au sort au lieu d'être
       choisi par le Détonateur, faute de règle de décision pour l'IA.
+   4. Sur Faut Pas Me Chauffer, les deux camps misent 0 Adrénaline : la
+      mise cachée n'a pas de règle de décision pour l'IA. Le reste de la
+      carte — comparaison des sommes, projection de la cible, Bagarre,
+      DIL/RAGE — est bien joué par le vrai résolveur depuis le scan du
+      2026-08-15. Auparavant la carte n'avait AUCUN effet physique ici,
+      et cet écart-là n'était pas documenté.
+
+   Deux écarts ont disparu au scan du 2026-08-15, ils sont notés pour
+   mémoire : le simulateur n'évaluait aucun déclencheur de fin de partie
+   (toutes les parties allaient au bout des Manches, donc plus longues que
+   les vraies), et l'IA ne visait jamais un Titan avec Boing Boing.
 
    ------------------------------------------------------------
    REPRODUCTIBILITÉ
@@ -48,12 +59,15 @@
 
 import {
   applyRestitution,
+  checkEndGameTriggers,
+  classementFinal,
   computeFinalScore,
   generateBoard,
   manchesMax,
   nextDetonateur,
   placeTitans,
   programCards,
+  rentrerEnJeu,
   resolveFreeMovement,
   resolveRecuperation,
   resolveVolPhaseRepos,
@@ -76,6 +90,8 @@ import { pick, setSeed } from "./rng.js";
 import { verifierHygiene, verifierInvariants } from "./invariants.js";
 
 const ROUNDS_PAR_MANCHE = 3;
+// Portée du passif Mouvement gratuit, hors Adrénaline dépensée.
+const PORTEE_MOUVEMENT = 2;
 
 /** Profils tirés au sort pour une partie, un par Titan. */
 export function profilsAleatoires(nbJoueurs) {
@@ -96,7 +112,7 @@ export function profilsAleatoires(nbJoueurs) {
  * @param {object} options.profils     { [titanId]: { force, temperament } }
  * @param {number} options.seed        graine, pour rejouer la partie
  */
-export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier = false } = {}) {
+export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier = false, apocalypseThreshold = 5 } = {}) {
   setSeed(seed);
   // Journal des anomalies : violations d'invariants, Manches sautées,
   // tours sans coup jouable. Toujours rempli, même hors mode `verifier`,
@@ -150,7 +166,17 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
   let detonateur = titanState.detonateur;
 
   const total = manchesMax(nbJoueurs);
+  // Les trois déclencheurs « plateau » du livret (Apocalypse Urbaine,
+  // Pénurie, Vide Spatial) n'étaient évalués NULLE PART dans le simulateur —
+  // la fonction n'était même pas importée. Toutes les parties allaient donc
+  // jusqu'à la limite de Manches, systématiquement plus longues que les
+  // vraies, et l'ensemble des statistiques d'équilibrage décrivait un jeu
+  // qui n'existe pas. Le contrôleur applique désormais exactement le même
+  // contrôle, au même moment (fin de Manche, jamais en plein tour).
+  let manchesJouees = 0;
+  let raisonsFin = [];
   for (let manche = 1; manche <= total; manche++) {
+    manchesJouees = manche;
     // L'ordre de la Manche suit l'ordre de jeu, mais DÉMARRE au Détonateur
     // en cours. Le simulateur reproduisait auparavant le bug du
     // contrôleur, qui repartait toujours du premier de l'ordre figé : la
@@ -182,8 +208,23 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
         if (!titan || titan.programmed.length === 0) continue;
         const profil = profilsUtilises[id];
 
-        // 1. Mouvement gratuit (2 cases), passif de chaque tour.
-        const mouvement = planMovement(id, etat, profil);
+        // Un Titan éjecté hors de BIG CITY rentre au DÉBUT de son tour, pas
+        // avant (ruling Nikola : « ça évite l'acharnement »). La rentrée se
+        // paie sur son Mouvement gratuit du tour.
+        let porteeMouvement = PORTEE_MOUVEMENT;
+        if (titan.horsPlateau) {
+          const retour = rentrerEnJeu(id, etat);
+          if (!retour.rentre) {
+            anomalies.push({ type: "rentree-impossible", manche, round, titanId: id, cellule: retour.cellule });
+            continue;
+          }
+          porteeMouvement = Math.max(0, PORTEE_MOUVEMENT - retour.cout);
+          controler("rentree", manche, round, id);
+        }
+
+        // 1. Mouvement gratuit (2 cases, réduit d'autant s'il vient de
+        //    rentrer sur le plateau), passif de chaque tour.
+        const mouvement = porteeMouvement > 0 ? planMovement(id, etat, profil, porteeMouvement) : null;
         if (mouvement) resolveFreeMovement(id, mouvement.destKey, etat);
         controler("mouvement", manche, round, id);
 
@@ -223,18 +264,19 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
     controler("vol-phase-repos", manche);
 
     // ── FIN DE MANCHE ──
-    if (manche < total) {
-      for (const t of etat.titans) {
-        // Les cartes non volées reviennent en main immédiatement.
-        t.hand.push(...t.playedThisManche, ...(t.discardedHidden || []));
-        t.playedThisManche = [];
-        t.discardedHidden = [];
-        applyRestitution(t, manche + 1);
-        t.adrenaline = (t.adrenaline || 0) + 1;
-      }
-      detonateur = nextDetonateur(ordreJeu, detonateur);
-      controler("fin-de-manche", manche);
+    raisonsFin = checkEndGameTriggers(etat.board, etat.looseBlocks, apocalypseThreshold, manche, nbJoueurs);
+    if (raisonsFin.length > 0) break;
+
+    for (const t of etat.titans) {
+      // Les cartes non volées reviennent en main immédiatement.
+      t.hand.push(...t.playedThisManche, ...(t.discardedHidden || []));
+      t.playedThisManche = [];
+      t.discardedHidden = [];
+      applyRestitution(t, manche + 1);
+      t.adrenaline = (t.adrenaline || 0) + 1;
     }
+    detonateur = nextDetonateur(ordreJeu, detonateur);
+    controler("fin-de-manche", manche);
   }
 
   // ── DÉCOMPTE ──
@@ -243,13 +285,20 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
   const verts = bestVertAssignments(etat.titans, { exact: true });
   const scores = computeFinalScore(etat.titans, verts, null);
 
-  const classement = [...etat.titans]
-    .map((t) => ({ id: t.id, total: scores.totals[t.id].total }))
-    .sort((a, b) => b.total - a.total);
+  // Le tri par score seul laissait les égalités se départager par ordre
+  // d'identifiant. classementFinal applique le vrai départage du livret
+  // (Adrénaline, puis plus haut Socle, puis Force des cartes non jouées).
+  const classement = classementFinal(etat.titans, scores.totals);
 
   return {
     seed,
     nbJoueurs,
+    // Combien de Manches la partie a réellement duré, et ce qui l'a
+    // arrêtée. C'est un indicateur d'auteur à part entière : si la moitié
+    // des parties s'arrêtent en Manche 2 sur Apocalypse Urbaine, le seuil
+    // est mal réglé, et aucune statistique de scoring ne le dirait.
+    manchesJouees,
+    raisonsFin,
     profils: profilsUtilises,
     detonateurInitial,
     positionsDepart,
@@ -277,10 +326,10 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
  * @param {object|null} options.profils profils imposés, ou null pour tirer
  *                                      au sort à chaque partie
  */
-export function lancerCampagne({ parties = 100, nbJoueurs = 4, seed = 1, profils = null, verifier = false } = {}) {
+export function lancerCampagne({ parties = 100, nbJoueurs = 4, seed = 1, profils = null, verifier = false, apocalypseThreshold = 5 } = {}) {
   const resultats = [];
   for (let i = 0; i < parties; i++) {
-    resultats.push(jouerPartie({ nbJoueurs, profils, seed: seed + i, verifier }));
+    resultats.push(jouerPartie({ nbJoueurs, profils, seed: seed + i, verifier, apocalypseThreshold }));
   }
   return { parties, nbJoueurs, seed, resultats, stats: agreger(resultats), anomalies: agregerAnomalies(resultats) };
 }
@@ -390,6 +439,20 @@ export function agreger(resultats) {
   const ecarts = resultats.map((r) => r.ecartPremierDernier);
   const scoresGagnants = resultats.map((r) => r.classement[0].total);
 
+  // Durée réelle des parties et cause d'arrêt. Depuis que les déclencheurs
+  // de fin sont appliqués, une partie ne va plus forcément au bout de ses
+  // Manches — savoir laquelle des trois conditions coupe le plus souvent,
+  // et à quelle Manche, est une information d'équilibrage directe.
+  const durees = resultats.map((r) => r.manchesJouees ?? 0);
+  const causesFin = {};
+  for (const r of resultats) {
+    for (const raison of r.raisonsFin || []) {
+      // On ne garde que la nature du déclencheur, pas ses chiffres.
+      const cle = raison.split(":")[0].trim();
+      causesFin[cle] = (causesFin[cle] || 0) + 1;
+    }
+  }
+
   return {
     parties: n,
     parTitan: finaliser(parTitan),
@@ -403,6 +466,12 @@ export function agreger(resultats) {
       victoires: victoiresDetonateur,
       taux: victoiresDetonateur / n,
       attenduSiEquilibre: 1 / resultats[0].nbJoueurs,
+    },
+    duree: {
+      manchesMoyennes: Number(moyenne(durees).toFixed(2)),
+      mancheMin: Math.min(...durees),
+      mancheMax: Math.max(...durees),
+      causesFin,
     },
     tension: {
       ecartMoyenPremierDernier: Number(moyenne(ecarts).toFixed(2)),
