@@ -66,10 +66,16 @@ describe("force — le Novice regarde moins loin, il ne triche pas", () => {
   const novice = makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE);
   const confirme = makeProfile(FORCES.CONFIRME, TEMPERAMENTS.OPPORTUNISTE);
 
-  it("le Novice est insensible à l'Adrénaline capitalisée, le Confirmé non", () => {
+  it("le Novice compte son Adrénaline, comme le Confirmé", () => {
+    /* Il l'ignorait totalement jusqu'au 2026-08-18, et la gaspillait donc
+       sans compter. Ce sont des jetons posés devant lui, qui valent 3 points
+       chacun et qui figurent sur la feuille de score : les ignorer ne
+       modélisait pas un débutant mais un joueur qui n'a pas lu les règles.
+       C'est l'un des deux angles morts qui le plombaient, avec la
+       programmation au hasard (cf. FORCE_SETTINGS). */
     const sans = etat([titan(1), titan(2)]);
     const avec = etat([titan(1, { adrenaline: 4 }), titan(2)]);
-    expect(evaluatePosition(1, avec, novice)).toBe(evaluatePosition(1, sans, novice));
+    expect(evaluatePosition(1, avec, novice)).toBeGreaterThan(evaluatePosition(1, sans, novice));
     expect(evaluatePosition(1, avec, confirme)).toBeGreaterThan(evaluatePosition(1, sans, confirme));
   });
 
@@ -161,7 +167,7 @@ describe("valeur à portée — l'IA voit ce qui traîne autour d'elle", () => {
     // main est de l'observation élémentaire, pas du calcul d'expert, et un
     // vrai débutant ne laisse pas trois blocs sur sa propre case.
     // Ouvert dans le cadre de la demande « améliore de 30 % l'IA Novice »
-    // (cf. FORCE_SETTINGS et scripts/mesure-novice.mjs).
+    // (cf. FORCE_SETTINGS et scripts/mesure-forces.mjs).
     const vide = etat([titan(1), titan(2)]);
     const entoure = etat([titan(1), titan(2)], {}, { E5: ["bleu", "bleu", "bleu"] });
     for (const force of [FORCES.NOVICE, FORCES.CONFIRME, FORCES.EXPERT]) {
@@ -172,12 +178,19 @@ describe("valeur à portée — l'IA voit ce qui traîne autour d'elle", () => {
 
   it("le Novice reste plus myope que le Confirmé", () => {
     // Ce qui le distingue toujours : il ne voit ni le score complet (bonus
-    // Rose, trophées, Pistes ADN, Adrénaline) ni les adversaires. Ouvrir la
-    // valeur à portée ne devait pas effacer la hiérarchie des forces.
+    // Rose, trophées, Pistes ADN) ni les adversaires, et il ne regarde
+    // autour de lui que ce qu'il peut atteindre ce tour-ci. Renforcer le
+    // Novice ne devait pas effacer la hiérarchie des forces.
     expect(FORCE_SETTINGS[FORCES.NOVICE].voitScoreComplet).toBe(false);
     expect(FORCE_SETTINGS[FORCES.NOVICE].voitAdversaires).toBe(false);
+    expect(FORCE_SETTINGS[FORCES.NOVICE].rayonPortee).toBeLessThan(FORCE_SETTINGS[FORCES.CONFIRME].rayonPortee);
     expect(FORCE_SETTINGS[FORCES.CONFIRME].voitScoreComplet).toBe(true);
+    // Le différentiel adverse reste la marche entre Confirmé et Expert :
+    // c'est de là que vient toute la nuisance, et lui seul l'a.
+    expect(FORCE_SETTINGS[FORCES.CONFIRME].poidsAdversaires).toBe(0);
+    expect(FORCE_SETTINGS[FORCES.EXPERT].poidsAdversaires).toBeGreaterThan(0);
   });
+
 });
 
 describe("blocs Vert — l'IA sait où elle les poserait", () => {
@@ -362,18 +375,27 @@ describe("tirage pondéré — le Novice revient vers son meilleur coup", () => 
     expect(d.A).toBe(3000);
   });
 
-  it("un biais de 1 redonne exactement le tirage uniforme", () => {
-    // Garde-fou : la pondération ne doit pas changer le comportement des
-    // profils qui n'en demandent pas.
+  it("le Novice penche vers son meilleur coup sans jamais s'y enfermer", () => {
+    // Garde-fou de la pondération elle-même : sur deux candidats, le mieux
+    // noté doit dominer largement, sans que l'autre disparaisse.
     setSeed(999);
-    const uniforme = { note: 0 };
     const deux = [{ note: 5, id: "X" }, { note: 4, id: "Y" }];
-    const profil = { force: FORCES.CONFIRME, temperament: TEMPERAMENTS.OPPORTUNISTE };
+    const profil = { force: FORCES.NOVICE, temperament: TEMPERAMENTS.OPPORTUNISTE };
     const compte = { X: 0, Y: 0 };
     for (let i = 0; i < 2000; i++) compte[chooseAmongBest(deux, profil).id]++;
-    // Le Confirmé a un biais de 2 : X domine, mais Y sort quand même.
     expect(compte.X).toBeGreaterThan(compte.Y);
     expect(compte.Y).toBeGreaterThan(0);
-    expect(uniforme.note).toBe(0);
+  });
+
+  it("à topN 1, il n'y a plus de tirage du tout", () => {
+    // Depuis le 2026-08-18 le Confirmé joue lui aussi son meilleur coup :
+    // ce qui le sépare de l'Expert est la VUE (le différentiel adverse),
+    // plus le bruit. Deux profils déterministes, donc, et c'est voulu.
+    setSeed(4);
+    const deux = [{ note: 5, id: "X" }, { note: 4, id: "Y" }];
+    for (const force of [FORCES.CONFIRME, FORCES.EXPERT]) {
+      const profil = { force, temperament: TEMPERAMENTS.OPPORTUNISTE };
+      for (let i = 0; i < 50; i++) expect(chooseAmongBest(deux, profil).id).toBe("X");
+    }
   });
 });

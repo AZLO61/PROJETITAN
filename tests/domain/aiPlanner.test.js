@@ -262,13 +262,33 @@ describe("programmation — troisième molette du profil", () => {
     expect(planProgrammation(1, jeu, confirme, 1)).toHaveLength(3);
   });
 
-  it("le Novice programme au hasard et n'obtient pas toujours la même main", () => {
+  it("le Novice prépare sa Manche, mal : il note ses cartes mais se trompe parfois", () => {
+    /* Il tirait ses 3 cartes AU HASARD dans sa main de 6 jusqu'au
+       2026-08-18, ce qui n'était pas « un débutant » mais « personne » :
+       toute la Manche subie avant d'avoir joué un seul coup. C'était, de
+       loin, ce qui le plombait le plus (cf. FORCE_SETTINGS).
+
+       La force joue désormais là où elle joue partout ailleurs : dans la
+       molette de bruit. Il pioche parmi ses trois meilleures cartes, donc
+       sa main varie d'un tirage à l'autre — mais elle n'est plus tirée
+       dans le vide. */
     const titans = [titan(1, { cell: "E5", hand: main }), titan(2, { cell: "A1" })];
     const jeu = etat(titans, { E4: ["rouge"] });
     setSeed(23);
     const vues = new Set();
     for (let i = 0; i < 40; i++) vues.add(planProgrammation(1, jeu, novice, 1).join("|"));
     expect(vues.size).toBeGreaterThan(1);
+
+    // Sa main reste tirée dans le haut du panier : sur 40 programmations,
+    // elle recoupe toujours largement celle de l'Expert, qui prend les
+    // trois meilleures. Un tirage vraiment au hasard ne tiendrait pas ça.
+    setSeed(23);
+    const parfaite = new Set(planProgrammation(1, jeu, expert, 1));
+    let communes = 0;
+    for (let i = 0; i < 40; i++) {
+      communes += planProgrammation(1, jeu, novice, 1).filter((c) => parfaite.has(c)).length;
+    }
+    expect(communes / 40).toBeGreaterThan(1.5); // > la moitié des 3 cartes
   });
 
   it("rend la main entière quand elle tient déjà dans la programmation", () => {

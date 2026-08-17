@@ -534,9 +534,16 @@ export function planRecuperation(titanId, gameState, profile = makeProfile()) {
  * permettrait DANS L'ÉTAT ACTUEL, ce qui est une approximation honnête de
  * « cette carte me servirait-elle ? ».
  *
- * Le Novice ne fait pas ce calcul du tout et programme au hasard : c'est
- * exactement l'erreur du débutant, qui subit sa programmation au lieu de
- * la préparer.
+ * LE NOVICE NOTE SES CARTES LUI AUSSI, depuis le 2026-08-18. Il tirait
+ * jusque-là ses 3 cartes AU HASARD dans sa main de 6, ce qui n'était pas
+ * « un débutant » mais « personne » : trois cartes sur six décidées à la
+ * pièce, c'est toute la Manche subie, quelle que soit la qualité du jeu
+ * ensuite. C'était de loin ce qui le plombait le plus.
+ *
+ * La force continue de jouer, mais là où elle joue partout ailleurs : dans
+ * la molette de bruit de `chooseAmongBest`. Le Novice pioche parmi ses
+ * trois meilleures cartes, l'Expert prend les trois meilleures. Un débutant
+ * prépare sa Manche, mal.
  */
 export function planProgrammation(titanId, gameState, profile = makeProfile(), mancheNumber = 1, nbCartes = 3) {
   const titan = gameState.titans.find((t) => t.id === titanId);
@@ -544,10 +551,6 @@ export function planProgrammation(titanId, gameState, profile = makeProfile(), m
 
   const main = [...titan.hand];
   if (main.length <= nbCartes) return main;
-
-  if (profile?.force === FORCES.NOVICE) {
-    return shuffled(main).slice(0, nbCartes);
-  }
 
   const notees = main.map((cardId) => {
     let meilleure = -Infinity;
@@ -559,10 +562,17 @@ export function planProgrammation(titanId, gameState, profile = makeProfile(), m
     return { cardId, note: meilleure };
   });
 
-  return notees
-    .sort((a, b) => b.note - a.note)
-    .slice(0, nbCartes)
-    .map((c) => c.cardId);
+  // Une carte à la fois, chacune retirée de la pioche : à topN = 1 on
+  // retrouve exactement « les trois meilleures dans l'ordre », donc le
+  // comportement inchangé de l'Expert et du Confirmé.
+  const restantes = [...notees];
+  const choisies = [];
+  while (choisies.length < nbCartes && restantes.length > 0) {
+    const pick = chooseAmongBest(restantes, profile);
+    choisies.push(pick.cardId);
+    restantes.splice(restantes.indexOf(pick), 1);
+  }
+  return choisies;
 }
 
 /* ── REPLI D'UN ÉLÉMENT ARRÊTÉ FAUTE DE PUISSANCE ─────────────

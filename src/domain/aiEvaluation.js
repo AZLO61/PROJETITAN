@@ -102,28 +102,45 @@ export const FORCE_LABELS = Object.freeze({
 // portée immédiate. C'est de la lecture de plateau élémentaire, pas du
 // calcul d'expert — un débutant humain la fait spontanément.
 //
-// Les deux réglages ont été choisis PAR MESURE, pas au jugé. Demande de
-// Nikola le 2026-08-17 : « améliore de 30 % l'intelligence de l'IA Novice ».
-// L'intelligence n'étant pas directement mesurable, on prend ce qui l'est —
-// le score moyen sur une campagne d'un Expert contre trois Novices, seule la
-// FORCE variant. Protocole et chiffres reproductibles :
-// `node scripts/mesure-novice.mjs 120 <graine>`.
+// `rayonPortee` dit jusqu'où porte ce regard. Le Novice se limite à ses deux
+// cases, c'est-à-dire à ce qu'il peut atteindre ce tour-ci ; les deux autres
+// voient à 3 et anticipent leur déplacement suivant. Poussé à 4, le terme
+// devient contre-productif et fait PERDRE des points (mesuré) : l'IA se met
+// en route vers des tas qu'elle n'atteindra jamais.
 //
-//   graine 77  : 16,49 → 20,99  (+27,3 %)
-//   graine 501 : 16,54 → 21,82  (+31,9 %)
-//   moyenne    : +29,6 %
+// ------------------------------------------------------------
+// COMMENT CES RÉGLAGES ONT ÉTÉ CHOISIS
 //
-// La seconde graine n'a servi qu'à VÉRIFIER, jamais à régler : sans elle, on
-// ne saurait pas distinguer un vrai gain d'un surajustement à une série de
-// parties particulière. Un biais de 4 donnait +37 % en moyenne, au-delà de la
-// cible ; c'est pourquoi il est resté à 3.
+// Par mesure, jamais au jugé. Demande de Nikola le 2026-08-18 : « améliore
+// la pire des IA de 30 %, et celle du milieu de 20 % ». L'intelligence n'étant
+// pas directement mesurable, on prend ce qui l'est — le score moyen sur une
+// campagne d'UN Expert contre TROIS IA de la force mesurée, tempérament
+// identique pour tous, seule la FORCE variant. Deux séries de graines, la
+// seconde servant uniquement à vérifier qu'on n'a pas surajusté la première.
+// Protocole rejouable : `node scripts/mesure-forces.mjs 60`.
 //
-// Le taux de victoire du Novice passe de 2,8 % à 8-9 %, et la hiérarchie
-// reste franche : l'Expert gagne encore plus de 8 parties sur 10.
+//   NOVICE    24,01 → 32,09   (+33,7 %)   victoires 3-7 % → 9-12 %
+//   CONFIRMÉ  31,66 → 36,22   (+14,4 %)   victoires 15,6 % → 23 %
+//
+// Ce qui a réellement fait bouger le Novice, ce n'est pas la molette de
+// bruit — elle vaut quelques points — mais deux angles morts : il ignorait
+// l'Adrénaline, et il PROGRAMMAIT AU HASARD (cf. planProgrammation).
+//
+// Le Confirmé s'arrête à +14 % et c'est un plafond de structure, pas un
+// réglage à pousser : il joue déjà systématiquement le meilleur coup qu'il
+// voit, au score complet. Le seul écart qui lui reste avec l'Expert est
+// l'évaluation différentielle — et la lui donner FAIT BAISSER son score
+// (36,22 → 34,36 en mesure), parce que trois Confirmés nuisibles se
+// neutralisent entre eux au lieu de marquer. Le porter à +20 % le mettrait
+// à égalité avec l'Expert, ce qui supprimerait la marche entre les deux
+// niveaux au lieu de la déplacer.
+//
+// La hiérarchie reste franche : le Novice plafonne aux deux tiers du score
+// de l'Expert, le Confirmé à un peu plus de 90 %.
 export const FORCE_SETTINGS = Object.freeze({
-  [FORCES.NOVICE]: { voitScoreComplet: false, voitAdversaires: false, voitPortee: true, topN: 3, biais: 3 },
-  [FORCES.CONFIRME]: { voitScoreComplet: true, voitAdversaires: false, voitPortee: true, topN: 2, biais: 2 },
-  [FORCES.EXPERT]: { voitScoreComplet: true, voitAdversaires: true, voitPortee: true, topN: 1, biais: 1 },
+  [FORCES.NOVICE]: { voitScoreComplet: false, voitAdrenaline: true, voitAdversaires: false, poidsAdversaires: 0, voitPortee: true, rayonPortee: 2, topN: 3, biais: 3 },
+  [FORCES.CONFIRME]: { voitScoreComplet: true, voitAdrenaline: true, voitAdversaires: false, poidsAdversaires: 0, voitPortee: true, rayonPortee: 3, topN: 1, biais: 1 },
+  [FORCES.EXPERT]: { voitScoreComplet: true, voitAdrenaline: true, voitAdversaires: true, poidsAdversaires: 0.5, voitPortee: true, rayonPortee: 3, topN: 1, biais: 1 },
 });
 
 /* ── TEMPÉRAMENT ──────────────────────────────────────────── */
@@ -404,7 +421,16 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
     // exactement l'erreur du joueur débutant, qui ramasse sans regarder
     // la piste ADN ni compter ses paires.
     if (!reglages.voitScoreComplet) {
-      return detail.bareme * poids.bareme + detail.socles * poids.socles;
+      return (
+        detail.bareme * poids.bareme +
+        detail.socles * poids.socles +
+        // L'Adrénaline entre dans la vue du Novice le 2026-08-18. Ce sont
+        // des jetons posés devant lui, qui valent 3 points chacun et qui
+        // sont écrits sur la feuille de score : les ignorer ne modélisait
+        // pas un débutant mais un joueur qui n'a pas lu les règles. Il les
+        // gaspillait donc sans compter, et n'avait aucune raison d'en voler.
+        (reglages.voitAdrenaline ? detail.adrenalinePts * poids.adrenaline : 0)
+      );
     }
     return (
       detail.bareme * poids.bareme +
@@ -424,7 +450,7 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
   if (moi.horsPlateau) note -= VALEUR_TOUR_PERDU;
 
   if (reglages.voitPortee) {
-    note += valeurAPortee(moi, gameState) * poids.portee;
+    note += valeurAPortee(moi, gameState, reglages.rayonPortee ?? 2) * poids.portee;
   }
 
   // Évaluation différentielle, réservée à l'Expert. C'est le seul vrai
@@ -433,17 +459,18 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
   // en coûte 6 au leader devient meilleur qu'un coup qui lui en rapporte
   // 5 sans gêner personne. Toute la nuisance émerge de là, sans qu'aucune
   // heuristique « attaque le premier » n'ait été écrite.
-  if (reglages.voitAdversaires) {
+  const poidsAdverse = reglages.poidsAdversaires ?? 0;
+  if (poidsAdverse > 0) {
     const adversaires = titans.filter((t) => t.id !== titanId);
     if (adversaires.length > 0) {
       const meilleurAdverse = Math.max(...adversaires.map((t) => noteDe(scores.totals[t.id])));
-      note -= meilleurAdverse * 0.5;
+      note -= meilleurAdverse * poidsAdverse;
       // Sortir un adversaire du ring lui coûte son tour. L'Expert, seul à
       // raisonner en différentiel, le valorise au même coefficient que le
       // reste de sa nuisance. Le tempérament Agressif y est plus sensible :
       // c'est exactement le genre de coup qu'il doit chercher.
       const ejectes = adversaires.filter((t) => t.horsPlateau).length;
-      if (ejectes > 0) note += ejectes * VALEUR_TOUR_PERDU * 0.5 * poids.adn;
+      if (ejectes > 0) note += ejectes * VALEUR_TOUR_PERDU * poidsAdverse * poids.adn;
     }
   }
 

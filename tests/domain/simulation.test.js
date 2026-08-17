@@ -70,7 +70,11 @@ describe("simulateur — reproductibilité", () => {
     // complète, ce qui ressemblait à tort à une perte de reproductibilité.
     const params = { parties: 3, nbJoueurs: 4, seed: 500 };
     expect(lancerCampagne(params).stats).toEqual(lancerCampagne(params).stats);
-  });
+    // Délai explicite, comme pour le test d'échelle plus bas : le Novice
+    // NOTE désormais sa programmation au lieu de la tirer au hasard
+    // (2026-08-18), ce qui alourdit mécaniquement toute campagne où il
+    // joue. Coût assumé et mesuré, pas une régression à masquer.
+  }, 20000);
 });
 
 describe("simulateur — l'échelle de force est bien ordonnée", () => {
