@@ -2382,18 +2382,24 @@ function chebyshevDistance(r1, c1, r2, c2) {
    ATTERRIR. Un bâtiment encore debout est exclu (saute-mouton autorisé en
    vol, jamais d'arrêt dessus) ; une case portant un Titan reste incluse,
    c'est tout l'objet de la carte (DIL, projection, +1 Bagarre). */
+// Extrait pour être partagé avec `boingBoingStepCost` : le tracé manuel du
+// chemin (demande Nikola, cf. plus bas) doit appliquer EXACTEMENT la même
+// notion d'obstacle que le calcul automatique, sous peine de laisser le
+// joueur dessiner un trajet que le moteur refuserait.
+function isBoingBoingObstacle(key, { board, looseBlocks = {}, titans = [] }) {
+  const b = board[key];
+  if (b && b.blocks.length > 0) return true;
+  if ((looseBlocks[key] || []).length > 0) return true;
+  return titans.some((t) => estSurLePlateau(t) && t.cell === key);
+}
+
+function isStandingBuilding(key, board) {
+  const b = board[key];
+  return Boolean(b && b.blocks.length > 0);
+}
+
 function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, titans = [] }) {
-  const titansByCell = indexerTitans(titans);
-  const isObstacle = (key) => {
-    const b = board[key];
-    if (b && b.blocks.length > 0) return true;
-    if ((looseBlocks[key] || []).length > 0) return true;
-    return Boolean(titansByCell[key]);
-  };
-  const isStandingBuilding = (key) => {
-    const b = board[key];
-    return Boolean(b && b.blocks.length > 0);
-  };
+  const isObstacle = (key) => isBoingBoingObstacle(key, { board, looseBlocks, titans });
 
   const dist = new Map([[startCell, 0]]);
   // 0-1 BFS : les arêtes de coût 0 passent en tête de file, celles de
@@ -2427,10 +2433,31 @@ function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, tita
   const reach = new Map();
   dist.forEach((d, key) => {
     if (key === startCell || d === 0) return;
-    if (isStandingBuilding(key)) return; // atterrissage interdit sur un bâtiment debout
+    if (isStandingBuilding(key, board)) return; // atterrissage interdit sur un bâtiment debout
     reach.set(key, d);
   });
   return reach;
+}
+
+/* ============================================================
+   BOING BOING — TRACÉ DU CHEMIN CASE PAR CASE
+   ============================================================
+   Retour Nikola (test à la table, 2026-08-18) : « je dois indiquer par
+   plusieurs clics sur les différentes cases mon chemin, pour que ce soit
+   clair pour tout le monde à la table. » `getBoingBoingReach` ne donne que
+   l'ENSEMBLE des cases atteignables avec leur distance minimale — jamais un
+   chemin précis, et un clic unique sur la destination ne montrait donc
+   jamais la trajectoire réellement prise.
+
+   `boingBoingStepCost` applique la même règle case par case : coût 0 entre
+   deux obstacles adjacents du même groupe collé, coût 1 sinon. Le joueur
+   choisit lui-même chaque case intermédiaire (l'interface ne calcule plus le
+   plus court chemin à sa place) ; seule la case de DÉPART échappe à la
+   notion d'obstacle, exactement comme dans le calcul automatique. */
+function boingBoingStepCost(fromKey, toKey, fromIsOrigin, { board, looseBlocks = {}, titans = [] }) {
+  const fromObstacle = !fromIsOrigin && isBoingBoingObstacle(fromKey, { board, looseBlocks, titans });
+  const toObstacle = isBoingBoingObstacle(toKey, { board, looseBlocks, titans });
+  return fromObstacle && toObstacle ? 0 : 1;
 }
 
 function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameState) {
@@ -3890,6 +3917,7 @@ export {
   PORTEE_BOING_BOING,
   chebyshevDistance,
   getBoingBoingReach,
+  boingBoingStepCost,
   resolveBoingBoing,
   getEcroulementCells,
   resolveEcroulementAmas,

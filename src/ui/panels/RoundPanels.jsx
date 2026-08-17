@@ -60,6 +60,9 @@ export default function RoundPanels({ vm }) {
     jnpSelected,
     bbMode,
     bbDest,
+    bbPath,
+    bbNextClickable,
+    bbDestIsBuilding,
     moveMode,
     recupMode,
     waitingNextTitan,
@@ -70,8 +73,7 @@ export default function RoundPanels({ vm }) {
     teaTargets,
     jouerTeteEnAvant,
     bbReachable,
-    bbReach,
-    bbSelectCell,
+    bbPathClick,
     moveReachable,
     moveClassic,
     moveTeleport,
@@ -115,7 +117,7 @@ export default function RoundPanels({ vm }) {
     if (currentRepli) { if (currentRepli.cases.includes(key)) choisirRepli(key); return; }
     if (ecroulement) { if (ecroulementCells.includes(key)) ecroulementPoserDebris(key); return; }
     if (jnpMode) { if (jnpPool.has(key)) jnpToggleCell(key); return; }
-    if (bbMode) { if (bbReachable.has(key)) bbSelectCell(key); return; }
+    if (bbMode) { bbPathClick(key); return; }
     if (teaMode) { if (teaTargets.has(key)) jouerTeteEnAvant(key); return; }
     if (moveMode) { if (moveReachable.has(key)) jouerMouvementGratuit(key); return; }
     if (recupMode) {
@@ -147,7 +149,14 @@ export default function RoundPanels({ vm }) {
     } else if (jnpMode) {
       jnpPool.forEach((k) => add(k, 0x16e08c, jnpSelected.includes(k) ? 0.8 : 0.4));
     } else if (bbMode) {
-      bbReachable.forEach((k) => add(k, 0x16e08c, bbDest === k ? 0.8 : 0.4));
+      // Chemin cliqué case par case (demande Nikola, 2026-08-18) : la zone
+      // théorique reste visible en fond très pâle, les cases déjà posées
+      // dans le chemin ressortent, la pointe actuelle (bbDest) le plus, et
+      // les voisines cliquables ensuite ont leur propre teinte pour inviter
+      // le prochain clic — plus un seul "un clic = arrivée".
+      bbReachable.forEach((k) => { if (!bbPath.includes(k)) add(k, 0x16e08c, 0.12); });
+      bbNextClickable.forEach((k) => { if (!bbPath.includes(k)) add(k, 0x16e08c, 0.45); });
+      bbPath.forEach((k) => add(k, 0x16e08c, k === bbDest ? 0.85 : 0.6));
     } else if (teaMode) {
       teaTargets.forEach((_, k) => add(k, 0xfb923c, 0.55));
     } else if (moveMode) {
@@ -346,22 +355,23 @@ export default function RoundPanels({ vm }) {
               const inPerimeter = perimeterKeys.has(key);
               const jnpSelectable = jnpMode && jnpPool.has(key);
               const jnpIsSelected = jnpMode && jnpSelected.includes(key);
-              /* Boing Boing : seul un BÂTIMENT ENCORE DEBOUT interdit
-                 l'atterrissage. Un Titan sur la case, lui, est une cible
-                 parfaitement légitime — c'est même l'effet principal de la
-                 carte : « Titan présent → DIL, projeté de la valeur
-                 restante, +1 Bagarre » (livret, carte 04). Le moteur le
-                 gère depuis toujours (cf. resolveBoingBoing), c'est
-                 l'interface qui refusait le clic et peignait la case en
-                 rouge « atterrissage impossible ». Bug remonté par Nikola
-                 le 2026-08-17 : « je ne peux pas sauter sur un Titan alors
-                 qu'il est seul sur sa case ».
-                 `bbReachable` filtre déjà les bâtiments debout, ce test
-                 n'est donc plus qu'une ceinture de sécurité. */
-              const bbBloquee = bbMode && bbReachable.has(key)
-                && isBldg && cellData && cellData.blocks.length > 0;
-              const bbSelectable = bbMode && bbReachable.has(key) && !bbBloquee;
-              const bbIsSelected = bbMode && bbDest === key;
+              /* Boing Boing : chemin cliqué case par case (demande Nikola,
+                 2026-08-18). `bbPath` est la trajectoire déjà tracée,
+                 `bbNextClickable` les voisines directes de sa pointe encore
+                 dans le budget, `bbReachable` la zone théorique complète
+                 (simple fond, plus la seule source de vérité du clic). La
+                 pointe (bbDest) reste cliquable comme n'importe quelle case
+                 du chemin — un Titan dessus est une cible légitime (DIL,
+                 projection, +1 Bagarre, livret carte 04) — mais ne peut pas
+                 être VALIDÉE comme arrivée si c'est un bâtiment encore
+                 debout (bbDestIsBuilding) : le chemin doit continuer. */
+              const bbInPath = bbMode && bbPath.includes(key);
+              const bbIsTip = bbMode && bbDest === key;
+              const bbBloquee = bbIsTip && bbDestIsBuilding;
+              const bbNextSelectable = bbMode && !bbInPath && bbNextClickable.has(key);
+              const bbFaintReach = bbMode && !bbInPath && !bbNextSelectable && bbReachable.has(key);
+              const bbSelectable = bbNextSelectable;
+              const bbIsSelected = bbInPath && !bbBloquee;
               const moveSelectable = moveMode && moveReachable.has(key);
               const moveIsClassic = moveMode && moveClassic.has(key); // accessible sans téléporteur
               const moveIsTeleport = moveMode && !moveClassic.has(key) && moveTeleport.has(key); // téléporteur uniquement
@@ -407,6 +417,8 @@ export default function RoundPanels({ vm }) {
                 cellBg = "rgba(239,68,68,.16)";
               } else if (jnpSelectable || bbSelectable) {
                 cellBg = "rgba(22,224,140,.12)";
+              } else if (bbFaintReach) {
+                cellBg = "rgba(22,224,140,.05)"; // zone théorique, pas encore cliquable
               } else if (inPerimeter) {
                 if (isBldg && topBlock) {
                   // Bâtiment dans le périmètre : couleur du bloc seule, sans overlay Titan
@@ -439,11 +451,13 @@ export default function RoundPanels({ vm }) {
                   // du haut vers le bas, et la case garde des reperes
                   // d'etages discrets sur son bord gauche.
                   title={bbBloquee
-                    ? `${key} — atterrissage impossible : le bâtiment est encore debout`
+                    ? `${key} — bâtiment encore debout, tu peux passer par-dessus mais pas y atterrir : continue ton chemin`
+                    : bbInPath
+                    ? `${key} — déjà dans ton chemin, reclique ici pour revenir à ce point`
                     : bbSelectable && titansByCell[key]
-                    ? `${key} — sauter sur ce Titan : Dilemme, projection et +1 Bagarre (distance ${bbReach.get(key)})`
+                    ? `${key} — sauter sur ce Titan : Dilemme, projection et +1 Bagarre`
                     : bbSelectable
-                    ? `${key} — atterrissage possible (distance ${bbReach.get(key)}, éléments contigus comptés pour 1 case)`
+                    ? `${key} — case suivante possible`
                     : cellData
                     ? `${key} · ${cellData.blocks.length} étage${cellData.blocks.length > 1 ? "s" : ""} · socle ${cellData.socle}${
                         cellData.blocks.length
@@ -462,7 +476,7 @@ De haut en bas : ${[...cellData.blocks].reverse().map((c) => BLOCK_NAME[c] || c)
                     // téléphone et débordait la grille.
                     minWidth: 0, aspectRatio: "1 / 1", borderRadius: 4, position: "relative",
                     zIndex: hoverCell === key ? 55 : undefined,
-                    cursor: repliSelectable || jnpSelectable || bbSelectable || teaSelectable || moveSelectable || recupSelectable || titansByCell[key] ? "pointer" : "default",
+                    cursor: repliSelectable || jnpSelectable || bbSelectable || bbInPath || teaSelectable || moveSelectable || recupSelectable || titansByCell[key] ? "pointer" : "default",
                     background: cellBg,
                     border: repliSelectable
                       ? `2px ${repliDefaut ? "solid" : "dashed"} #fb923c`

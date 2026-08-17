@@ -105,7 +105,11 @@ export default function BoardPanel({ vm }) {
     bbAdrenaline,
     setBbAdrenaline,
     bbDest,
-    setBbDest,
+    bbPath,
+    setBbPath,
+    bbBudgetUsed,
+    bbUndoLastCell,
+    bbDestIsBuilding,
     progSelection,
     setProgSelection,
     progCountdown,
@@ -776,7 +780,7 @@ export default function BoardPanel({ vm }) {
                               <button
                                 onClick={() => {
                                   if (animating) return;
-                                  setTeaMode(false); setBbMode(false); setBbDest(null); setJnpMode(false); setJnpSelected([]);
+                                  setTeaMode(false); setBbMode(false); setBbPath([]); setJnpMode(false); setJnpSelected([]);
                                   discardCurrentCard(selectedTitan.id, cardId);
                                 }}
                                 title="L'action n'est finalement pas intéressante — défausser sans effet, face cachée"
@@ -889,17 +893,36 @@ export default function BoardPanel({ vm }) {
               </div>
             )}
 
-            {/* Mode BB — dest sélectionnée */}
-            {bbMode && bbDest && (
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
-                <span style={{ fontSize: ".75rem", color: "#FFD93D" }}>Destination : {bbDest}</span>
-                <button onClick={jouerBoingBoing} style={smallBtn(true, "#16E08C", "#00C97A")}>Sauter !</button>
-                <button onClick={toggleBbMode} style={cancelBtn()}>Annuler</button>
-              </div>
-            )}
-            {bbMode && !bbDest && (
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
-                <span style={{ fontSize: ".75rem", color: "#FFD93D" }}>Clique une case dans le rayon {bbMaxRange} (tous azimuts)</span>
+            {/* Mode BB — chemin cliqué case par case (demande Nikola,
+                2026-08-18 : « je dois indiquer par plusieurs clics mon
+                chemin, pour que ce soit clair pour tout le monde »). Chaque
+                clic sur une case adjacente à la pointe l'ajoute au chemin ;
+                recliquer une case déjà posée y revient (annule ce qui suit).
+                "Sauter !" valide la DERNIÈRE case du chemin comme
+                atterrissage — désactivé sur un bâtiment encore debout,
+                simple point de passage. */}
+            {bbMode && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: ".75rem", color: "#FFD93D" }}>
+                  {bbPath.length === 0
+                    ? `Clique une case adjacente pour commencer ton chemin (budget ${bbMaxRange})`
+                    : `Chemin : ${bbPath.join(" → ")} · ${bbBudgetUsed}/${bbMaxRange}`}
+                </span>
+                {bbDestIsBuilding && (
+                  <span style={{ fontSize: ".72rem", color: "#FF2E63" }}>
+                    Bâtiment encore debout — continue, tu ne peux pas y atterrir.
+                  </span>
+                )}
+                {bbPath.length > 0 && (
+                  <button onClick={bbUndoLastCell} style={cancelBtn()}>↩️ Annuler la dernière case</button>
+                )}
+                <button
+                  onClick={jouerBoingBoing}
+                  disabled={!bbDest || bbDestIsBuilding}
+                  style={smallBtn(Boolean(bbDest) && !bbDestIsBuilding, "#16E08C", "#00C97A")}
+                >
+                  Sauter !
+                </button>
                 <button onClick={toggleBbMode} style={cancelBtn()}>Annuler</button>
               </div>
             )}

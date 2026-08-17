@@ -16,7 +16,7 @@ const {
   rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, releaseSocle, projectInDirection, estSurLePlateau, indexerTitans, rentrerEnJeu,
   resolveToutCasserBatiments, resolveToutCasserBlocs,
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
-  resolveGraouhhh, scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
+  resolveGraouhhh, scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, boingBoingStepCost, resolveBoingBoing,
   choisirRepliIA, appliquerRepli, appliquerReplElement,
   canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
@@ -221,7 +221,7 @@ export function useBoardGeneratorController() {
     setRecupMode(false);
     setPassifUsed({});
     setBbMode(false);
-    setBbDest(null);
+    setBbPath([]);
     setJnpMode(false);
     setJnpSelected([]);
     setGraouMode(false);
@@ -457,7 +457,12 @@ export function useBoardGeneratorController() {
   const [jnpSelected, setJnpSelected] = useState([]);
   const [bbMode, setBbMode] = useState(false);
   const [bbAdrenaline, setBbAdrenaline] = useState(0);
-  const [bbDest, setBbDest] = useState(null);
+  // Chemin cliqué case par case (demande Nikola, 2026-08-18 : « je dois
+  // indiquer par plusieurs clics mon chemin »). `bbDest` — la case où la
+  // carte atterrit — n'est plus qu'un dérivé : la dernière case du chemin.
+  // Une seule source de vérité, jamais désynchronisée.
+  const [bbPath, setBbPath] = useState([]);
+  const bbDest = bbPath.length > 0 ? bbPath[bbPath.length - 1] : null;
   // Écroulement d'Amas en attente de répartition par le joueur :
   // { cellKey, blocs, energie, choix } — un choix de case par débris, posé
   // dans l'ordre. Nul quand aucune répartition n'est en cours.
@@ -624,7 +629,7 @@ export function useBoardGeneratorController() {
     setPhase(snap.phase);
     setPassifUsed(structuredClone(snap.passifUsed));
     setActionLog([...snap.actionLog]);
-    setMoveMode(false); setRecupMode(false); setBbMode(false); setBbDest(null);
+    setMoveMode(false); setRecupMode(false); setBbMode(false); setBbPath([]);
     setJnpMode(false); setJnpSelected([]); setGraouMode(false);
     /* Les files en attente sont RESTAURÉES, plus vidées. Les vider défaisait
        le plateau sans défaire les décisions qu'il avait déclenchées : on
@@ -1815,16 +1820,16 @@ export function useBoardGeneratorController() {
   const closeAllCardModes = useCallback(() => {
     setTeaMode(false);
     setGraouMode(false);
-    setBbMode(false); setBbDest(null);
+    setBbMode(false); setBbPath([]);
     setJnpMode(false); setJnpSelected([]);
   }, []);
 
   const toggleGraouMode = useCallback(() => {
-    setGraouMode((m) => { const next = !m; if (next) { setTeaMode(false); setBbMode(false); setBbDest(null); setJnpMode(false); setJnpSelected([]); } return next; });
+    setGraouMode((m) => { const next = !m; if (next) { setTeaMode(false); setBbMode(false); setBbPath([]); setJnpMode(false); setJnpSelected([]); } return next; });
   }, []);
 
   const toggleTeaMode = useCallback(() => {
-    setTeaMode((m) => { const next = !m; if (next) { setGraouMode(false); setBbMode(false); setBbDest(null); setJnpMode(false); setJnpSelected([]); } return next; });
+    setTeaMode((m) => { const next = !m; if (next) { setGraouMode(false); setBbMode(false); setBbPath([]); setJnpMode(false); setJnpSelected([]); } return next; });
   }, []);
 
   const jouerTeteEnAvant = useCallback((targetKey) => {
@@ -1916,12 +1921,75 @@ export function useBoardGeneratorController() {
 
   const toggleBbMode = useCallback(() => {
     setBbMode((m) => { const next = !m; if (next) { setTeaMode(false); setGraouMode(false); setJnpMode(false); setJnpSelected([]); } return next; });
-    setBbDest(null);
+    setBbPath([]);
   }, []);
-  const bbSelectCell = useCallback((key) => { if (!bbReachable.has(key)) return; setBbDest((prev) => (prev === key ? null : key)); }, [bbReachable]);
+
+  /* ── CHEMIN DE BOING BOING, CASE PAR CASE ──
+     Demande de Nikola (test à la table, 2026-08-18) : « je dois indiquer
+     par plusieurs clics sur les différentes cases mon chemin, pour que ce
+     soit clair pour tout le monde. » Le clic unique sur la destination
+     laissait le moteur choisir SA trajectoire (la plus courte) sans jamais
+     la montrer ; le joueur trace maintenant la sienne, case adjacente par
+     case adjacente, avec la même règle de coût que le calcul automatique
+     (`boingBoingStepCost`) — le moteur de résolution, lui, ne regarde
+     toujours que la dernière case (`bbDest`), inchangé. */
+  const bbBudgetUsed = useMemo(() => {
+    if (!selectedTitan || bbPath.length === 0) return 0;
+    let total = 0;
+    let prev = selectedTitan.cell;
+    let prevIsOrigin = true;
+    for (const key of bbPath) {
+      total += boingBoingStepCost(prev, key, prevIsOrigin, { board: state.board, looseBlocks, titans: titanState.players });
+      prev = key;
+      prevIsOrigin = false;
+    }
+    return total;
+  }, [selectedTitan, bbPath, state.board, looseBlocks, titanState.players]);
+
+  // Cases cliquables EN PLUS du chemin déjà tracé : les voisines directes de
+  // la pointe actuelle, dans la limite du budget restant. `bbPath` seul (pas
+  // `bbReachable`, qui ne connaît que le plus court chemin) décide de ce qui
+  // est jouable ensuite.
+  const bbNextClickable = useMemo(() => {
+    if (!selectedTitan || !bbMode) return new Set();
+    const tipKey = bbPath.length > 0 ? bbPath[bbPath.length - 1] : selectedTitan.cell;
+    const fromIsOrigin = bbPath.length === 0;
+    const tr = rowIndex(tipKey[0]);
+    const tc = Number(tipKey.slice(1));
+    const out = new Set();
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = tr + dr, nc = tc + dc;
+        if (nr < 0 || nr > 8 || nc < 1 || nc > 9) continue;
+        const key = rowFromIndex(nr) + nc;
+        const cost = boingBoingStepCost(tipKey, key, fromIsOrigin, { board: state.board, looseBlocks, titans: titanState.players });
+        if (bbBudgetUsed + cost > bbMaxRange) continue;
+        out.add(key);
+      }
+    }
+    return out;
+  }, [selectedTitan, bbMode, bbPath, bbBudgetUsed, bbMaxRange, state.board, looseBlocks, titanState.players]);
+
+  const bbPathClick = useCallback((key) => {
+    if (!selectedTitan) return;
+    // Recliquer une case déjà posée dans le chemin revient dessus — annule
+    // tout ce qui a été tracé après. Pas besoin d'un bouton "annuler" dédié
+    // pour corriger un trajet, juste recliquer où on veut reprendre.
+    const idx = bbPath.indexOf(key);
+    if (idx !== -1) { setBbPath(bbPath.slice(0, idx + 1)); return; }
+    if (!bbNextClickable.has(key)) return; // pas une voisine directe, ou budget dépassé
+    setBbPath((prev) => [...prev, key]);
+  }, [selectedTitan, bbPath, bbNextClickable]);
+
+  const bbUndoLastCell = useCallback(() => { setBbPath((prev) => prev.slice(0, -1)); }, []);
+
+  // Un bâtiment encore debout se traverse en vol (saute-mouton) mais ne se
+  // reçoit jamais comme atterrissage — la pointe du chemin doit continuer.
+  const bbDestIsBuilding = Boolean(bbDest && state.board[bbDest]?.blocks?.length > 0);
 
   const jouerBoingBoing = useCallback(() => {
-    if (!selectedTitanId || !bbDest || !canPlayCard("boing_boing")) return;
+    if (!selectedTitanId || !bbDest || bbDestIsBuilding || !canPlayCard("boing_boing")) return;
     captureSnapshot();
     const attacker = titanState.players.find((t) => t.id === selectedTitanId);
     const actuallyUseAdrenaline = Math.min(bbAdrenaline, attacker.adrenaline || 0);
@@ -1936,11 +2004,11 @@ export function useBoardGeneratorController() {
     // Atterrissage sur un Amas : la carte est jouée, mais la répartition des
     // débris revient au joueur, case par case (ruling Nikola du 2026-08-16).
     if (result.ecroulement) setEcroulement({ ...result.ecroulement, choix: [] });
-    if (result.applied) { markCardPlayed(selectedTitanId, "boing_boing"); setBbMode(false); setBbDest(null); }
+    if (result.applied) { markCardPlayed(selectedTitanId, "boing_boing"); setBbMode(false); setBbPath([]); }
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, bbDest, bbAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, bbDest, bbDestIsBuilding, bbAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
 
   // Le Mouvement gratuit vaut 2 cases, +1 par Adrénaline dépensée, MOINS ce
   // qu'a coûté une éventuelle rentrée sur le plateau ce tour-ci. C'est ce
@@ -2128,7 +2196,7 @@ export function useBoardGeneratorController() {
     [selectedTitanId, titanState.players, looseBlocks]
   );
   const toggleJnpMode = useCallback(() => {
-    setJnpMode((m) => { const next = !m; if (next) { setTeaMode(false); setGraouMode(false); setBbMode(false); setBbDest(null); } return next; });
+    setJnpMode((m) => { const next = !m; if (next) { setTeaMode(false); setGraouMode(false); setBbMode(false); setBbPath([]); } return next; });
     setJnpSelected([]);
   }, []);
   const jnpToggleCell = useCallback((key) => {
@@ -2726,7 +2794,13 @@ export function useBoardGeneratorController() {
     bbAdrenaline,
     setBbAdrenaline,
     bbDest,
-    setBbDest,
+    bbPath,
+    setBbPath,
+    bbBudgetUsed,
+    bbNextClickable,
+    bbPathClick,
+    bbUndoLastCell,
+    bbDestIsBuilding,
     ecroulement,
     ecroulementCells,
     repliQueue,
@@ -2820,7 +2894,6 @@ export function useBoardGeneratorController() {
     bbReachable,
     bbReach,
     toggleBbMode,
-    bbSelectCell,
     jouerBoingBoing,
     moveMaxRange,
     coutRentreeCeTour,
