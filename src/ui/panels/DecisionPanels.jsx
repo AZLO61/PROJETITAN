@@ -492,7 +492,19 @@ export default function DecisionPanels({ vm }) {
                   ))}
                   <tr style={{ background: "rgba(255,217,61,.1)", fontWeight: 700 }}>
                     <td style={{ padding: "5px 8px", color: "#FFD93D" }}>TOTAL</td>
-                    {titanState.players.map((t) => <td key={t.id} style={{ padding: "5px 8px", color: "#FFD93D", textAlign: "center" }}>{finalScoreResult.totals[t.id].total}</td>)}
+                    {(() => {
+                      // Retour de Nikola : le total seul suffit pour se
+                      // repérer en cours de partie, à condition de porter
+                      // lui-même la médaille — plus besoin du bloc Classement
+                      // séparé pour ça (lui ne reste qu'en fin de partie, où
+                      // le départage du livret a un enjeu réel).
+                      const meilleur = Math.max(...titanState.players.map((t) => finalScoreResult.totals[t.id].total));
+                      return titanState.players.map((t) => (
+                        <td key={t.id} style={{ padding: "5px 8px", color: "#FFD93D", textAlign: "center" }}>
+                          {finalScoreResult.totals[t.id].total === meilleur ? "🥇 " : ""}{finalScoreResult.totals[t.id].total}
+                        </td>
+                      ));
+                    })()}
                   </tr>
                 </tbody>
               </table>
@@ -504,11 +516,17 @@ export default function DecisionPanels({ vm }) {
               sans jamais dire qui gagne. Le classement applique le
               départage du livret : Adrénaline restante, puis Socle de plus
               haute valeur, puis Force des cartes non jouées. Une égalité
-              qui résiste aux trois est annoncée comme telle. */}
-          {classementFinalPartie && scoresReveles && (
+              qui résiste aux trois est annoncée comme telle.
+
+              Retour de Nikola : en cours de partie, ce départage ne sert à
+              rien — le total et une médaille suffisent, et les deux vivent
+              déjà dans le tableau ci-dessus (ligne TOTAL). Le classement ne
+              s'affiche donc plus qu'en fin de partie, où le départage a un
+              enjeu réel. */}
+          {gameOver && classementFinalPartie && scoresReveles && (
             <div style={{ marginTop: 14 }}>
               <div style={{ color: "#FFD93D", fontSize: ".74rem", fontWeight: 700, marginBottom: 6 }}>
-                {gameOver ? "🏆 Classement final" : "🏆 Classement provisoire"}
+                🏆 Classement final
               </div>
               {classementFinalPartie.map((ligne) => (
                 <div key={ligne.id} style={{

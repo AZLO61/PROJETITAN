@@ -13,7 +13,7 @@ import { TitanIcon } from "../titans/TitanVisuals.jsx";
 // bloquantes du jeu (DIL/RAGE et Vol Phase Repos) soient immédiatement
 // reconnaissables comme telles, où qu'on soit dans l'écran.
 export default function RepoVolBanner({ vm }) {
-  const { phase, mancheNumber, titanState, titanModes, volDirection, chooseVolDirection } = vm;
+  const { phase, mancheNumber, titanState, titanModes, volDirection, chooseVolDirection, titanDisplayName } = vm;
   if (phase !== "repos") return null;
 
   const mainColor = "#e32347";
@@ -45,7 +45,7 @@ export default function RepoVolBanner({ vm }) {
       {!volDirection ? (
         <div>
           <p style={{ marginBottom: 8, color: "rgba(255,255,255,.85)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <TitanIcon titanId={detonateurId} size={18} /> Titan {detonateurId} (Détonateur) choisit le sens de la chaîne :
+            <TitanIcon titanId={detonateurId} size={18} /> {titanDisplayName ? titanDisplayName(detonateurId) : `Titan ${detonateurId}`} (Détonateur) choisit le sens de la chaîne :
           </p>
           {detonateurEstIa ? (
             <div style={{ color: "#a855f7", fontWeight: 700, fontSize: ".8rem" }}>

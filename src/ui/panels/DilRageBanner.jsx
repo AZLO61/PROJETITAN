@@ -3,6 +3,19 @@ import { COLOR_HEX, SOCLE_OPTION, getDilOptions } from "../../domain/index.js";
 import { smallBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
 import { BLOCK_NAME } from "../blockNames.js";
+import { TitanIcon } from "../titans/TitanVisuals.jsx";
+
+// Retour de Nikola : "T1"/"T3" en toutes lettres dans les panneaux, alors
+// que l'icône du Titan (déjà utilisée au Classement) dit la même chose plus
+// vite à lire sur une tablette partagée à la table.
+function TitanTag({ id, titanDisplayName }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <TitanIcon titanId={id} size={18} variant="plain" />
+      {titanDisplayName ? titanDisplayName(id) : `Titan ${id}`}
+    </span>
+  );
+}
 
 /* Vignette d'une option de Dilemme. Une option est soit une COULEUR du
    Repaire, soit « un Socle tiré au sort » (livret V36.2). Le Socle est
@@ -36,7 +49,7 @@ const compteOption = (defender, option) =>
 // avec un traitement visuel plus imposant : bordure plus épaisse,
 // halo lumineux, taille de police augmentée, icône d'alerte.
 export default function DilRageBanner({ vm }) {
-  const { currentDecision, decisionQueue, titanState, dilAttackerPick, dilValidateAttackerPick, resolveDilDefenderPick, resolveDilCancelWithAdrenaline, resolveRagePick, resolveRagePickAdrenaline } = vm;
+  const { currentDecision, decisionQueue, titanState, dilAttackerPick, dilValidateAttackerPick, resolveDilDefenderPick, resolveDilCancelWithAdrenaline, resolveRagePick, resolveRagePickAdrenaline, titanDisplayName } = vm;
   if (!currentDecision) return null;
   const isRage = currentDecision.type === "RAGE";
   const mainColor = isRage ? "#e32347" : "#2D8DF5";
@@ -54,7 +67,9 @@ export default function DilRageBanner({ vm }) {
         color: isRage ? "#ff8fa3" : "#71dbff", display: "flex", alignItems: "center", gap: 8,
       }}>
         <span aria-hidden="true">⚠️</span>
-        {currentDecision.type} — {currentDecision.cardLabel} · T{currentDecision.attackerId} vs T{currentDecision.defenderId}
+        {currentDecision.type} — {currentDecision.cardLabel} ·{" "}
+        <TitanTag id={currentDecision.attackerId} titanDisplayName={titanDisplayName} /> vs{" "}
+        <TitanTag id={currentDecision.defenderId} titanDisplayName={titanDisplayName} />
       </div>
       {/* TITAN PAR TITAN. Une seule carte peut ouvrir plusieurs décisions —
           un Graouhhh qui aligne trois Titans en ouvre trois. Elles se
@@ -78,7 +93,10 @@ export default function DilRageBanner({ vm }) {
         const options = getDilOptions(currentDecision.defenderId, { titans: titanState.players });
         return (
           <div>
-            <p style={{ marginBottom: 6 }}>T{currentDecision.attackerId} désigne 2 options chez T{currentDecision.defenderId} :</p>
+            <p style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+              <TitanTag id={currentDecision.attackerId} titanDisplayName={titanDisplayName} /> désigne 2 options chez{" "}
+              <TitanTag id={currentDecision.defenderId} titanDisplayName={titanDisplayName} /> :
+            </p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
               {options.length === 0 && <span style={{ color: "rgba(255,255,255,.5)" }}>Repaire vide.</span>}
               {options.map((c) => {
@@ -89,7 +107,7 @@ export default function DilRageBanner({ vm }) {
                     key={c}
                     onClick={() => dilAttackerPick(c)}
                     title={c === SOCLE_OPTION
-                      ? `Un Socle TIRÉ AU SORT parmi les ${compteOption(defender, c)} de T${currentDecision.defenderId} — tu ne choisis pas lequel, et tu ne connais pas sa valeur avant le tirage`
+                      ? `Un Socle TIRÉ AU SORT parmi les ${compteOption(defender, c)} de ${titanDisplayName(currentDecision.defenderId)} — tu ne choisis pas lequel, et tu ne connais pas sa valeur avant le tirage`
                       : `${BLOCK_NAME[c]} — ${compteOption(defender, c)} en Repaire`}
                     style={{
                       display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
@@ -125,8 +143,8 @@ export default function DilRageBanner({ vm }) {
         const canPay = (defender.adrenaline || 0) >= 1;
         return (
           <div>
-            <p style={{ marginBottom: 6 }}>
-              T{currentDecision.defenderId} : laquelle perdre ?
+            <p style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+              <TitanTag id={currentDecision.defenderId} titanDisplayName={titanDisplayName} /> : laquelle perdre ?
               {currentDecision.autoAttackerPick && (
                 <span style={{ color: "rgba(255,255,255,.55)", fontSize: ".78rem" }}>
                   {" "}— l'attaquant n'avait pas le choix, ce sont les 2 seules options de ton Repaire.
@@ -172,7 +190,9 @@ export default function DilRageBanner({ vm }) {
         const showAdrOpt = defender.repaire.length < 2 && (defender.adrenaline || 0) > 0;
         return (
           <div>
-            <p style={{ marginBottom: 6 }}>T{currentDecision.attackerId} choisit librement :</p>
+            <p style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}>
+              <TitanTag id={currentDecision.attackerId} titanDisplayName={titanDisplayName} /> choisit librement :
+            </p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {defender.repaire.map((c, i) => (
                 <button
