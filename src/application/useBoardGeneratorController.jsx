@@ -2367,17 +2367,29 @@ export function useBoardGeneratorController() {
     ? getPerimeter(selectedTitan.cell[0], Number(selectedTitan.cell.slice(1)))
     : [];
   const perimeterKeys = new Set(perimeterCells.map((c) => c.row + c.col));
+  /* Retour de Nikola : le badge Énergie/Seuil 4 restait câblé sur Tout
+     Casser même pendant que Tête en Avant ou Boing Boing étaient ouverts —
+     il ne bougeait donc jamais avec LEURS boutons +/-. Il suit désormais la
+     carte réellement en cours de configuration. Pour Tête en Avant/Boing
+     Boing, c'est l'énergie de DÉPART de la charge (avant dégression avec la
+     distance parcourue, cf. computeEnergieParDistance) — teaMaxRange et
+     bbMaxRange la calculent déjà avec la même formule (portée + Adrénaline
+     engagée), pas besoin d'un second calcul. */
   const energie = selectedTitan
-    ? computeEnergyToutCasser(
-        perimeterCells,
-        state.board,
-        titansByCell,
-        // Sans ce bonus, l'aperçu "Énergie"/"Seuil 4" du panneau ne bougeait
-        // pas au clic sur "+" alors que la résolution réelle (jouerToutCasser)
-        // en tenait déjà compte : le joueur ne voyait jamais l'effet de son
-        // Adrénaline avant de valider la carte.
-        Math.min(Number(tcAdrenaline) || 0, selectedTitan.adrenaline || 0)
-      )
+    ? teaMode
+      ? teaMaxRange
+      : bbMode
+      ? bbMaxRange
+      : computeEnergyToutCasser(
+          perimeterCells,
+          state.board,
+          titansByCell,
+          // Sans ce bonus, l'aperçu "Énergie"/"Seuil 4" du panneau ne bougeait
+          // pas au clic sur "+" alors que la résolution réelle (jouerToutCasser)
+          // en tenait déjà compte : le joueur ne voyait jamais l'effet de son
+          // Adrénaline avant de valider la carte.
+          Math.min(Number(tcAdrenaline) || 0, selectedTitan.adrenaline || 0)
+        )
     : 0;
 
   // Même raison que ci-dessus pour la dépendance sur `state` et non `state.board`.

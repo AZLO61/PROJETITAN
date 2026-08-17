@@ -260,7 +260,13 @@ export default function BoardPanel({ vm }) {
               </strong>
             </div>
             <div
-              title="Énergie de Tout Casser — à 4 ou plus, les effets forts s'activent"
+              title={
+                teaMode
+                  ? "Énergie de départ de Tête en Avant — à 4 ou plus, les effets forts s'activent. Elle baisse d'1 par case parcourue."
+                  : bbMode
+                  ? "Énergie de départ de Boing Boing — à 4 ou plus, les effets forts s'activent. Elle baisse d'1 par case parcourue."
+                  : "Énergie de Tout Casser — à 4 ou plus, les effets forts s'activent"
+              }
               style={{ cursor: "help" }}
             >
               <span style={{ fontSize: ".7rem", color: "rgba(255,255,255,.55)" }}>Énergie </span>

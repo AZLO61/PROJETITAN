@@ -27,21 +27,16 @@ export default function TitanResourceBand({
   titanModes = {}, titanProfiles = {}, profilsReveles = {}, revelerProfil, profileLabel,
   waitingNextTitan = false, titansEnAttente = [],
 }) {
-  /* QUAND LA TABLETTE CHANGE DE MAINS, PLUS RIEN N'EST PRIVÉ.
-     Bug remonté par Nikola le 2026-08-17 : « même pendant l'inter-tour je
-     peux consulter mes cartes au survol des carrés jaunes pleins ».
-
-     `activePlayerId` reste sur le joueur qui vient de jouer TANT QUE
-     « ▶ Titan suivant » n'a pas été cliqué — c'est-à-dire exactement
-     pendant qu'on se passe l'appareil. Se fier à lui seul rouvrait donc la
-     fuite d'information que le retrait du survol avait fermée le 15 août :
-     l'adversaire qui reçoit la tablette n'a qu'à survoler pour lire la
-     programmation restante.
-
-     `waitingNextTitan` marque précisément cette fenêtre. Pendant l'inter-tour,
-     plus aucun Titan n'est « le mien » et tout ce qui est secret le redevient. */
-  const enInterTour = Boolean(waitingNextTitan);
-  const estSonTour = (id) => activePlayerId === id && !enInterTour;
+  /* SURVOL : UNIQUEMENT SUR SON PROPRE TITAN, TOUJOURS.
+     Une première lecture du retour de Nikola avait ajouté un blocage
+     supplémentaire pendant l'inter-tour (entre la carte jouée et le clic sur
+     « ▶ Titan suivant ») : `activePlayerId` reste sur le joueur qui vient de
+     jouer tant que ce bouton n'est pas cliqué, donc pendant qu'on lui laisse
+     le temps de relire ses propres cartes — pas encore pendant que l'appareil
+     change de mains, ce qui n'arrive qu'AU clic. Reprécisé par Nikola le
+     2026-08-17 : la seule règle voulue est « mon Titan à moi, oui ; les
+     autres Titans, non » — sans exception pour cette fenêtre-là. */
+  const estSonTour = (id) => activePlayerId === id;
   const enAttenteIds = new Set((titansEnAttente || []).map((x) => x.id));
   const colorCount = (titan) => {
     const c = { bleu: 0, rose: 0, orange: 0, rouge: 0, vert: 0 };
