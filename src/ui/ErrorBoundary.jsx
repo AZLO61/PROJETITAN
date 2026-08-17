@@ -18,7 +18,6 @@ export default class ErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
     this.setState({ info });
     // Toujours visible en console pour le debug / les logs CI.
-    // eslint-disable-next-line no-console
     console.error("[ErrorBoundary] Crash intercepté :", error, info);
   }
 

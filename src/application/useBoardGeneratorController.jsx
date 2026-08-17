@@ -29,6 +29,62 @@ const {
   planMovement, planCardPlay, planRecuperation, planProgrammation, choisirRepartitionEcroulement
 } = Domain;
 
+/* ── VALEUR D'UNE OPTION DE DILEMME, POUR L'IA ──
+   Quatre fonctions pures, remontées au niveau du module le 2026-08-18.
+   Elles étaient déclarées DANS le composant, donc reconstruites à chaque
+   rendu : `coutOptionDil` servait de dépendance à `autoResolveIaDecisions`,
+   qui perdait sa mémoïsation à chaque frappe. Elles ne lisent que leurs
+   arguments et le barème du domaine, elles n'ont rien à faire là-dedans. */
+function marginalValue(color, currentRepaire, allPlayers, selfId) {
+  const counts = {};
+  currentRepaire.forEach((c) => { counts[c] = (counts[c] || 0) + 1; });
+  const before = scoreBareme(color, counts[color] || 0);
+  const after = scoreBareme(color, (counts[color] || 0) + 1);
+  let delta = after - before;
+  if (color === "rose") {
+    const selfRose = (counts["rose"] || 0) + 1;
+    const maxOthers = Math.max(0, ...allPlayers
+      .filter((p) => p.id !== selfId)
+      .map((p) => p.repaire.filter((c) => c === "rose").length));
+    if (selfRose > maxOthers) delta += 10;
+    else if (selfRose === maxOthers) delta += 5;
+  }
+  if (color === "orange" && ((counts["orange"] || 0) % 2 === 1)) delta = 0;
+  return delta;
+}
+
+/* VALEUR D'UN SOCLE POUR L'IA — espérance, pas certitude.
+   Le Socle du Dilemme est tiré AU SORT : ni l'attaquant ni la cible ne
+   savent lequel partira. La seule évaluation honnête est donc la valeur
+   MOYENNE des Socles de la cible. Prendre le maximum ferait surestimer
+   l'option à l'IA et lui ferait proposer le Socle bien trop souvent ;
+   prendre le minimum la lui ferait ignorer. */
+function esperanceSocle(defender) {
+  const socles = defender.socles || [];
+  if (socles.length === 0) return 0;
+  return socles.reduce((s, v) => s + v, 0) / socles.length;
+}
+
+/* Ce que l'option rapporte à l'ATTAQUANT s'il la désigne.
+   Quand la carte envoie le bloc au sol, l'attaquant ne gagne rien
+   directement : il ne fait que retirer des points à sa cible. La valeur du
+   coup est donc le COÛT pour la cible, pas le gain marginal chez lui. Sans
+   cette distinction, l'IA évaluait une RAGE de Tout Casser — désormais « au
+   sol » — comme si elle encaissait le bloc. */
+function valeurOptionDil(option, defender, attacker, allPlayers, decision) {
+  const versRepaire = decision.destination === "repaire";
+  if (option === SOCLE_OPTION) return esperanceSocle(defender);
+  if (versRepaire) return marginalValue(option, attacker.repaire, allPlayers, attacker.id);
+  return marginalValue(option, defender.repaire, allPlayers, defender.id);
+}
+
+/* Ce que l'option coûte à la CIBLE si elle l'abandonne. Elle choisit
+   toujours la moins chère des deux. */
+function coutOptionDil(option, defender, allPlayers) {
+  if (option === SOCLE_OPTION) return esperanceSocle(defender);
+  return marginalValue(option, defender.repaire, allPlayers, defender.id);
+}
+
 export function useBoardGeneratorController() {
   const [nbJoueurs, setNbJoueurs] = useState(4);
   const [setupDone, setSetupDone] = useState(false);
@@ -322,7 +378,7 @@ export function useBoardGeneratorController() {
       setPhase(nextPhase);
     }
     setPhaseValidated({});
-  }, [phaseValidated, titanState.ordreJeu, phase, advanceManche, eventsEnabled, gameOver,
+  }, [phaseValidated, titanState.ordreJeu, titanState.detonateur, phase, advanceManche, eventsEnabled, gameOver,
       currentDecision, currentRepli, ecroulement]);
 
   // Rainbow tracking
@@ -1006,55 +1062,6 @@ export function useBoardGeneratorController() {
   //   le défenseur. Humain → flux UI normal (resolveRagePick).
   // - DIL : les deux étapes (choix des 2 options, puis choix de la perte)
   //   sont indépendantes et chacune suit le mode de SON décideur.
-  function marginalValue(color, currentRepaire, allPlayers, selfId) {
-    const counts = {};
-    currentRepaire.forEach((c) => { counts[c] = (counts[c] || 0) + 1; });
-    const before = scoreBareme(color, counts[color] || 0);
-    const after = scoreBareme(color, (counts[color] || 0) + 1);
-    let delta = after - before;
-    if (color === "rose") {
-      const selfRose = (counts["rose"] || 0) + 1;
-      const maxOthers = Math.max(0, ...allPlayers
-        .filter((p) => p.id !== selfId)
-        .map((p) => p.repaire.filter((c) => c === "rose").length));
-      if (selfRose > maxOthers) delta += 10;
-      else if (selfRose === maxOthers) delta += 5;
-    }
-    if (color === "orange" && ((counts["orange"] || 0) % 2 === 1)) delta = 0;
-    return delta;
-  }
-
-  /* VALEUR D'UN SOCLE POUR L'IA — espérance, pas certitude.
-     Le Socle du Dilemme est tiré AU SORT : ni l'attaquant ni la cible ne
-     savent lequel partira. La seule évaluation honnête est donc la valeur
-     MOYENNE des Socles de la cible. Prendre le maximum ferait surestimer
-     l'option à l'IA et lui ferait proposer le Socle bien trop souvent ;
-     prendre le minimum la lui ferait ignorer. */
-  function esperanceSocle(defender) {
-    const socles = defender.socles || [];
-    if (socles.length === 0) return 0;
-    return socles.reduce((s, v) => s + v, 0) / socles.length;
-  }
-
-  /* Ce que l'option rapporte à l'ATTAQUANT s'il la désigne.
-     Quand la carte envoie le bloc au sol, l'attaquant ne gagne rien
-     directement : il ne fait que retirer des points à sa cible. La valeur du
-     coup est donc le COÛT pour la cible, pas le gain marginal chez lui. Sans
-     cette distinction, l'IA évaluait une RAGE de Tout Casser — désormais « au
-     sol » — comme si elle encaissait le bloc. */
-  function valeurOptionDil(option, defender, attacker, allPlayers, decision) {
-    const versRepaire = decision.destination === "repaire";
-    if (option === SOCLE_OPTION) return esperanceSocle(defender);
-    if (versRepaire) return marginalValue(option, attacker.repaire, allPlayers, attacker.id);
-    return marginalValue(option, defender.repaire, allPlayers, defender.id);
-  }
-
-  /* Ce que l'option coûte à la CIBLE si elle l'abandonne. Elle choisit
-     toujours la moins chère des deux. */
-  function coutOptionDil(option, defender, allPlayers) {
-    if (option === SOCLE_OPTION) return esperanceSocle(defender);
-    return marginalValue(option, defender.repaire, allPlayers, defender.id);
-  }
 
   /* ── OÙ VA LE BLOC PERDU ── (arbitrage Nikola du 2026-08-17, carte par carte)
      Le bloc quittait le Repaire de la victime et n'arrivait NULLE PART : ni
@@ -1265,6 +1272,48 @@ export function useBoardGeneratorController() {
     ]);
   }, [autoResolveIaDecisions]);
 
+  /* ── FILE DES REPLIS ──
+     Le pendant de `enqueueDecisions` pour les éléments arrêtés faute de
+     puissance : chaque résolveur de carte appelle les deux à la suite.
+     Déclaré ICI et pas plus bas, à côté du reste de la mécanique de repli :
+     les `useCallback` qui l'appellent le citent dans leur tableau de
+     dépendances, lequel est évalué AU RENDU — une déclaration plus bas
+     donnait une ReferenceError de zone morte temporelle. */
+  const enqueueReplis = useCallback((liste) => {
+    if (!liste || liste.length === 0) return;
+    const modes = aiTitanModesRef.current;
+    const profils = aiTitanProfilesRef.current;
+    const aTrancher = [];
+
+    for (const r of liste) {
+      if (r.cases.length <= 1) continue;
+      if (modes[r.initiatorId] !== "ia") { aTrancher.push(r); continue; }
+
+      const etat = {
+        board: aiStateRef.current.board,
+        looseBlocks: aiLooseBlocksRef.current,
+        titans: aiTitanStateRef.current.players,
+      };
+      const choix = choisirRepliIA(r, etat, profils[r.initiatorId]);
+      if (choix && choix !== r.defaut) {
+        // `appliquerRepli` remonte désormais son propre journal : depuis le
+        // ruling du 2026-08-18, poser l'élément peut chasser un Titan et
+        // rapporter une Bagarre. Sans ça, l'IA marquait un point que rien
+        // n'expliquait dans le journal d'actions.
+        const journal = appliquerRepli(r, choix, etat) || [];
+        setActionLog((prev) => [
+          ...prev,
+          `🤖 Titan ${r.initiatorId} (IA) pose l'élément arrêté en ${choix} plutôt qu'en ${r.defaut}.`,
+          ...journal,
+        ]);
+      }
+    }
+
+    setLooseBlocks((prev) => ({ ...prev }));
+    setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+    if (aTrancher.length > 0) setRepliQueue((prev) => [...prev, ...aTrancher]);
+  }, []);
+
 
   const dilAttackerPick = useCallback((color) => {
     setDecisionQueue((prev) => {
@@ -1474,7 +1523,7 @@ export function useBoardGeneratorController() {
       }
       return next;
     });
-  }, [selectedTitanId, titanState.players]);
+  }, [selectedTitanId]);
 
   const confirmProgrammation = useCallback(() => {
     if (!selectedTitanId) return;
@@ -1549,7 +1598,7 @@ export function useBoardGeneratorController() {
       if (waitingNextTitan) return false;
       return true;
     },
-    [phase, selectedTitan, activePlayerId, passifUsed, waitingNextTitan]
+    [phase, selectedTitan, activePlayerId, waitingNextTitan]
   );
 
   const getPlayBlockReason = useCallback(
@@ -1561,7 +1610,7 @@ export function useBoardGeneratorController() {
       if (waitingNextTitan) return `Confirme "Titan suivant" avant de continuer.`;
       return "";
     },
-    [phase, selectedTitan, activePlayerId, passifUsed, waitingNextTitan]
+    [phase, selectedTitan, activePlayerId, waitingNextTitan]
   );
 
   // Logique d'avancement de round (Phase Action) — commune à "jouer une
@@ -1670,7 +1719,7 @@ export function useBoardGeneratorController() {
   // Bornée au stock réel, comme Boing Boing et le Mouvement gratuit : sans
   // cela le plateau surligne des cibles de charge que la résolution refuse.
   const teaMaxRange = PORTEE_TETE_EN_AVANT + Math.min(teaAdrenaline, selectedTitan?.adrenaline || 0);
-  const teaTargets = selectedTitan && teaMode
+  const teaTargets = useMemo(() => (selectedTitan && teaMode
     ? (() => {
         const targets = new Map(); // key → { dr, dc }
         const oR = rowIndex(selectedTitan.cell[0]);
@@ -1715,7 +1764,12 @@ export function useBoardGeneratorController() {
         }
         return targets;
       })()
-    : new Map();
+    : new Map()),
+    // Mémoïsé pour la même raison que `bbReachable`, `recupPool` et
+    // `jnpPool` : cette Map servait de dépendance à `jouerTeteEnAvant` tout
+    // en étant reconstruite à chaque rendu, ce qui annulait la mémoïsation.
+    [selectedTitan, teaMode, teaMaxRange, state.board, looseBlocks, titanState.players]
+  );
 
   // Un seul mode de carte ouvert a la fois. Chacun affichait son bandeau
   // d'instructions, et rien n'empechait Tete en Avant, Boing Boing, Je Ne
@@ -1756,7 +1810,7 @@ export function useBoardGeneratorController() {
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, teaTargets, teaAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, teaTargets, teaAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, canPlayCard, markCardPlayed, captureSnapshot]);
 
   // `compensateFatiguedRounds` vivait ici. Il rattrapait le compteur de
   // rounds quand la Fatigue volait une carte ENCORE PROGRAMMÉE, laissant sa
@@ -1781,7 +1835,7 @@ export function useBoardGeneratorController() {
     setGraouMode(false);
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, direction, state.board, titanState.players, looseBlocks, enqueueDecisions, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, direction, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
 
   /* PORTÉE AFFICHÉE = PORTÉE RÉELLE.
      Deux écarts corrigés ici, tous deux remontés par Nikola le 2026-08-17.
@@ -1801,12 +1855,21 @@ export function useBoardGeneratorController() {
         moteur refusait. Même borne des deux côtés désormais. */
   const bbAdrenalineDispo = Math.min(bbAdrenaline, selectedTitan?.adrenaline || 0);
   const bbMaxRange = PORTEE_BOING_BOING + bbAdrenalineDispo;
-  const bbReach = selectedTitan
-    ? getBoingBoingReach(selectedTitan.cell, bbMaxRange, {
-        board: state.board, looseBlocks, titans: titanState.players,
-      })
-    : new Map();
-  const bbReachable = new Set(bbReach.keys());
+  /* Mémoïsés, comme `recupPool` et `jnpPool` plus bas. Ces collections
+     étaient reconstruites à CHAQUE rendu — un `new Set` neuf à chaque fois,
+     donc une identité neuve — et servent de dépendance à des `useCallback` :
+     toute la mémoïsation en aval tombait, à chaque frappe, à chaque survol.
+     Le calcul lui-même n'est pas gratuit : `getBoingBoingReach` parcourt le
+     plateau. */
+  const bbReach = useMemo(
+    () => (selectedTitan
+      ? getBoingBoingReach(selectedTitan.cell, bbMaxRange, {
+          board: state.board, looseBlocks, titans: titanState.players,
+        })
+      : new Map()),
+    [selectedTitan, bbMaxRange, state.board, looseBlocks, titanState.players]
+  );
+  const bbReachable = useMemo(() => new Set(bbReach.keys()), [bbReach]);
 
   const toggleBbMode = useCallback(() => {
     setBbMode((m) => { const next = !m; if (next) { setTeaMode(false); setGraouMode(false); setJnpMode(false); setJnpSelected([]); } return next; });
@@ -1834,7 +1897,7 @@ export function useBoardGeneratorController() {
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, bbDest, bbAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, bbDest, bbAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
 
   // Le Mouvement gratuit vaut 2 cases, +1 par Adrénaline dépensée, MOINS ce
   // qu'a coûté une éventuelle rentrée sur le plateau ce tour-ci. C'est ce
@@ -1863,40 +1926,6 @@ export function useBoardGeneratorController() {
      barème, comme pour un déplacement ou une carte, et sa FORCE joue de la
      même façon : l'Expert prend la meilleure case, le Novice tire parmi ses
      trois premières. */
-  const enqueueReplis = useCallback((liste) => {
-    if (!liste || liste.length === 0) return;
-    const modes = aiTitanModesRef.current;
-    const profils = aiTitanProfilesRef.current;
-    const aTrancher = [];
-
-    for (const r of liste) {
-      if (r.cases.length <= 1) continue;
-      if (modes[r.initiatorId] !== "ia") { aTrancher.push(r); continue; }
-
-      const etat = {
-        board: aiStateRef.current.board,
-        looseBlocks: aiLooseBlocksRef.current,
-        titans: aiTitanStateRef.current.players,
-      };
-      const choix = choisirRepliIA(r, etat, profils[r.initiatorId]);
-      if (choix && choix !== r.defaut) {
-        // `appliquerRepli` remonte désormais son propre journal : depuis le
-        // ruling du 2026-08-18, poser l'élément peut chasser un Titan et
-        // rapporter une Bagarre. Sans ça, l'IA marquait un point que rien
-        // n'expliquait dans le journal d'actions.
-        const journal = appliquerRepli(r, choix, etat) || [];
-        setActionLog((prev) => [
-          ...prev,
-          `🤖 Titan ${r.initiatorId} (IA) pose l'élément arrêté en ${choix} plutôt qu'en ${r.defaut}.`,
-          ...journal,
-        ]);
-      }
-    }
-
-    setLooseBlocks((prev) => ({ ...prev }));
-    setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-    if (aTrancher.length > 0) setRepliQueue((prev) => [...prev, ...aTrancher]);
-  }, []);
 
 
   /* Applique le choix du joueur puis dépile.
@@ -2025,9 +2054,12 @@ export function useBoardGeneratorController() {
     [selectedTitanId, moveReachable, moveAdrenaline, moveMaxRange, titanState.players, titansByCell, canUseMovePassif, captureSnapshot, state.board, looseBlocks]
   );
 
-  const recupPool = selectedTitanId
-    ? new Set(getRecuperationPool(selectedTitanId, { titans: titanState.players, looseBlocks }))
-    : new Set();
+  const recupPool = useMemo(
+    () => (selectedTitanId
+      ? new Set(getRecuperationPool(selectedTitanId, { titans: titanState.players, looseBlocks }))
+      : new Set()),
+    [selectedTitanId, titanState.players, looseBlocks]
+  );
   const toggleRecupMode = useCallback(() => {
     if (!recupMode && (!canUseRecupPassif(selectedTitanId) || recupPool.size === 0)) return;
     setRecupMode((m) => !m);
@@ -2042,11 +2074,16 @@ export function useBoardGeneratorController() {
       setLooseBlocks((prev) => ({ ...prev }));
       setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     },
-    [selectedTitanId, recupPool, titanState.players, looseBlocks, canUseRecupPassif, captureSnapshot]
+    [selectedTitanId, recupPool, titanState.players, looseBlocks, state.board, canUseRecupPassif, captureSnapshot]
   );
 
   const jnpNbToPick = selectedTitanId ? (isLanterneRouge(selectedTitanId, { titans: titanState.players }) ? 3 : 2) : 2;
-  const jnpPool = selectedTitanId ? new Set(getJeNePartagePasPool(selectedTitanId, { titans: titanState.players, looseBlocks })) : new Set();
+  const jnpPool = useMemo(
+    () => (selectedTitanId
+      ? new Set(getJeNePartagePasPool(selectedTitanId, { titans: titanState.players, looseBlocks }))
+      : new Set()),
+    [selectedTitanId, titanState.players, looseBlocks]
+  );
   const toggleJnpMode = useCallback(() => {
     setJnpMode((m) => { const next = !m; if (next) { setTeaMode(false); setGraouMode(false); setBbMode(false); setBbDest(null); } return next; });
     setJnpSelected([]);
@@ -2063,7 +2100,7 @@ export function useBoardGeneratorController() {
     if (result.applied) { markCardPlayed(selectedTitanId, "je_ne_partage_pas"); setJnpMode(false); setJnpSelected([]); }
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, jnpSelected, titanState.players, looseBlocks, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, jnpSelected, titanState.players, looseBlocks, state.board, canPlayCard, markCardPlayed, captureSnapshot]);
 
   const jouerFautPasMeChauffer = useCallback(() => {
     if (!selectedTitanId || !canPlayCard("faut_pas_me_chauffer")) return;
@@ -2129,7 +2166,7 @@ export function useBoardGeneratorController() {
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setFpmcCurrent(null);
-  }, [fpmcCurrent, fpmcAttackerId, fpmcNTargets, titanState.players, state.board, looseBlocks, enqueueDecisions, captureSnapshot]);
+  }, [fpmcCurrent, fpmcAttackerId, fpmcNTargets, titanState.players, state.board, looseBlocks, enqueueDecisions, enqueueReplis, captureSnapshot]);
 
   const jouerToutCasser = useCallback(() => {
     if (!selectedTitanId || !canPlayCard("tout_casser")) return;
@@ -2150,7 +2187,7 @@ export function useBoardGeneratorController() {
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, tcAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, tcAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, canPlayCard, markCardPlayed, captureSnapshot]);
 
   const getVertCount = useCallback((titan) => titan.repaire.filter((c) => c === "vert").length, []);
 
@@ -2358,7 +2395,7 @@ export function useBoardGeneratorController() {
       };
     }
     return { what: "", you: "" };
-  }, [phase, currentDecision, selectedTitan, phaseValidated, activePlayerId, volDirection, titanDisplayName]);
+  }, [phase, currentDecision, selectedTitan, phaseValidated, volDirection]);
 
   // ── ÉCRAN CONFIG ──
   if (!setupDone) {

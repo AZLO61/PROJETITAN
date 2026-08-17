@@ -1569,7 +1569,10 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
    relevées avant la première casse.
 ============================================================ */
 function releverPercussion(titanId, gameState, adrenalineBonus = 0) {
-  const { board, titans, looseBlocks, replis } = gameState;
+  // `replis` n'est pas relevé ici : cette fonction ne fait que LISTER les
+  // cibles, elle ne projette rien. Ce sont les sous-résolveurs appelés
+  // ensuite qui déposent leurs replis dans le collecteur partagé.
+  const { board, titans, looseBlocks } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const perimeter = getPerimeter(titan.cell[0], Number(titan.cell.slice(1)));
   const titansByCell = indexerTitans(titans);

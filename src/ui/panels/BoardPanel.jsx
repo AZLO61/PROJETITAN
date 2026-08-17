@@ -1,12 +1,11 @@
 import React from "react";
 import CardVisual from "../cards/CardVisual.jsx";
 import { CARD_EFFECT } from "../cards/cardEffects.js";
-import BlockStockBar from "../cards/BlockStockBar.jsx";
 import TitanResourceBand from "../titans/TitanResourceBand.jsx";
-import { TitanIcon, TitanBadge } from "../titans/TitanVisuals.jsx";
+import { TitanIcon } from "../titans/TitanVisuals.jsx";
 import { TITAN_COLORS } from "../titans/constants.js";
-import { ACTION_CARDS, CARD_LABEL, CARD_FORCE, PHASE_LABELS, EVENT_NAMES, COULEURS, COLOR_HEX, STANDARD_COLORS } from "../../domain/index.js";
-import { btnStyle, smallBtn, cancelBtn } from "../styles.js";
+import { CARD_LABEL, PHASE_LABELS } from "../../domain/index.js";
+import { smallBtn, cancelBtn } from "../styles.js";
 
 // Selecteur d'Adrenaline : le livret dit « +1 par Adrenaline depensee », donc
 // un Titan qui en a plusieurs peut toutes les investir. Une case a cocher ne
@@ -66,76 +65,29 @@ export default function BoardPanel({ vm }) {
   const [moveSkipped, setMoveSkipped] = React.useState(false);
   // Le marqueur de carte cliquee se vide des que la resolution est terminee
   // (waitingNextTitan) ou que le Titan actif change.
+  // Les deux valeurs lues sont extraites AVANT l'effet : dépendre de `vm`
+  // entier relancerait l'effet à chaque rendu du contrôleur, c'est-à-dire à
+  // chaque clic de la partie.
+  const { animating: vmAnimating, activePlayerId: vmActivePlayerId, setPendingCardConfirm: vmSetPendingCardConfirm } = vm;
   React.useEffect(() => {
-    if (!vm.animating) vm.setPendingCardConfirm(null);
-  }, [vm.animating, vm.activePlayerId]);
+    if (!vmAnimating) vmSetPendingCardConfirm(null);
+  }, [vmAnimating, vmActivePlayerId, vmSetPendingCardConfirm]);
   // `undoTick` : un rollback restaure le plateau mais pas l'étape du tour.
   // Sans ça, un joueur qui avait cliqué « Passer aux cartes » restait sans
   // panneau de déplacement après annulation, et ses clics sur le plateau
   // ne produisaient plus rien (bug remonté le 2026-08-17).
   React.useEffect(() => { setMoveSkipped(false); }, [vm.activePlayerId, vm.undoTick]);
   const {
-    nbJoueurs,
-    setNbJoueurs,
-    setupDone,
-    setSetupDone,
-    eventsEnabled,
-    setEventsEnabled,
-    state,
-    setState,
-    titanState,
-    setTitanState,
-    seedCount,
-    setSeedCount,
-    mancheNumber,
-    setMancheNumber,
     activePlayerId,
     setActivePlayerId,
     titanModes,
-    setTitanModes,
-    titanNames,
-    setTitanNames,
     titanDisplayName,
-    titanShort,
-    aiPlaying,
-    setAiPlaying,
-    aiStepLabel,
-    setAiStepLabel,
-    aiPlayingRef,
-    setAiPlayingSync,
     phase,
-    setPhase,
     phaseValidated,
-    setPhaseValidated,
-    currentEvent,
-    setCurrentEvent,
-    rainbowWinnerId,
-    setRainbowWinnerId,
-    showScoring,
-    setShowScoring,
-    show3D,
-    setShow3D,
-    vertAssignments,
-    setVertAssignments,
-    apocalypseThreshold,
-    setApocalypseThreshold,
-    regenerate,
-    advanceManche,
     canValidatePhase,
     getPhaseBlockReason,
     validatePhase,
-    movingTitanOverride,
-    setMovingTitanOverride,
-    selectedTitanId,
-    setSelectedTitanId,
     selectedTitan,
-    titansByCell,
-    effectivePlayers,
-    titanCorners,
-    actionLog,
-    setActionLog,
-    looseBlocks,
-    setLooseBlocks,
     teaMode,
     setTeaMode,
     teaAdrenaline,
@@ -144,8 +96,6 @@ export default function BoardPanel({ vm }) {
     setTcAdrenaline,
     direction,
     setDirection,
-    useAdrenaline,
-    setUseAdrenaline,
     jnpMode,
     setJnpMode,
     jnpSelected,
@@ -156,119 +106,54 @@ export default function BoardPanel({ vm }) {
     setBbAdrenaline,
     bbDest,
     setBbDest,
-    decisionQueue,
-    setDecisionQueue,
     progSelection,
     setProgSelection,
     progCountdown,
     setProgCountdown,
     progCountdownTimer,
     setProgCountdownTimer,
-    volDirection,
-    setVolDirection,
-    fpmcPendingIds,
-    setFpmcPendingIds,
-    fpmcNTargets,
-    setFpmcNTargets,
-    fpmcAttackerId,
-    setFpmcAttackerId,
-    fpmcAttackerBase,
-    setFpmcAttackerBase,
-    fpmcCurrent,
-    setFpmcCurrent,
     moveMode,
-    setMoveMode,
     moveAdrenaline,
     setMoveAdrenaline,
     recupMode,
-    setRecupMode,
     passifUsed,
-    setPassifUsed,
     animating,
     setAnimating,
-    animLabel,
     setAnimLabel,
-    cardsPlayedCountRef,
     pendingCardConfirm,
     setPendingCardConfirm,
     waitingNextTitan,
     setWaitingNextTitan,
-    undoStack,
-    setUndoStack,
-    captureSnapshot,
-    prevActivePlayerRef,
-    handleUndo,
-    aiTriggerRef,
-    aiTrigger,
-    setAiTrigger,
     aiNextPlayerRef,
-    aiStateRef,
-    aiTitanStateRef,
-    aiLooseBlocksRef,
-    aiPassifUsedRef,
-    aiActivePlayerIdRef,
-    aiTitanModesRef,
     canUseMovePassif,
     canUseRecupPassif,
-    autoResolveIaDecisions,
-    enqueueDecisions,
-    currentDecision,
-    dilAttackerPick,
-    dilValidateAttackerPick,
-    resolveDilDefenderPick,
-    resolveDilCancelWithAdrenaline,
-    resolveRagePick,
-    resolveRagePickAdrenaline,
     toggleProgCard,
-    confirmProgrammation,
-    chooseVolDirection,
     canPlayCard,
-    getPlayBlockReason,
     advanceActionRound,
-    markCardPlayed,
     discardCurrentCard,
-    teaMaxRange,
     teaTargets,
     toggleTeaMode,
     graouMode,
     toggleGraouMode,
-    jouerTeteEnAvant,
     jouerGraouhhh,
     bbMaxRange,
-    bbReachable,
     toggleBbMode,
-    bbSelectCell,
     jouerBoingBoing,
     moveMaxRange,
     moveReachable,
     moveClassic,
     moveTeleport,
     toggleMoveMode,
-    jouerMouvementGratuit,
     recupPool,
     toggleRecupMode,
-    jouerRecuperation,
     jnpNbToPick,
-    jnpPool,
     toggleJnpMode,
-    jnpToggleCell,
     jouerJeNePartagePas,
     jouerFautPasMeChauffer,
-    pickFpmcTarget,
-    updateFpmcBid,
-    revealFPMC,
     jouerToutCasser,
-    getVertCount,
-    updateVertAssignment,
-    finalScoreResult,
-    endGameReasons,
-    boardSignature3D,
     perimeterCells,
-    perimeterKeys,
     energie,
-    stats,
-    occupiedCount,
-    tcSel
+    tcSel,
   } = vm;
 
   // ── DÉROULÉ DU TOUR ──
@@ -290,16 +175,13 @@ export default function BoardPanel({ vm }) {
      Bug remonté par Nikola le 2026-08-17 : « si un RAGE ou un Dilemme est
      provoqué pour un joueur humain, il ne peut pas finir son tour sans
      valider cette phase, et même le panneau Ramasser n'apparaît pas tant
-     que ce n'est pas le cas. »
+     que ce n'est pas le cas. » La carte était résolue, `waitingNextTitan`
+     passait à true, et le panneau de fin de tour proposait « ▶ Titan
+     suivant » PAR-DESSUS un DIL/RAGE encore en attente : on pouvait passer
+     la main en laissant une décision dans la file, qui réapparaissait au
+     tour du joueur suivant, hors contexte.
 
-     La carte était résolue, `waitingNextTitan` passait à true, et le
-     panneau de fin de tour proposait « ▶ Titan suivant » PAR-DESSUS un
-     DIL/RAGE encore en attente. On pouvait donc passer la main en laissant
-     une décision non résolue dans la file — elle réapparaissait au tour du
-     joueur suivant, hors contexte. Le ramassage souffrait du même défaut :
-     proposé avant que le sort des blocs de la victime soit tranché, alors
-     que le DIL peut justement en faire tomber un dans le Périmètre. */
-  /* TOUTES les décisions bloquantes comptent, pas seulement le DIL et le
+     TOUTES les décisions bloquantes comptent, pas seulement le DIL et le
      repli. Nikola le 2026-08-18 : « je ne veux pas que le panneau Ramasser
      apparaisse alors qu'il y a un Dilemme ou une Rage à résoudre, il y a un
      ordre précis à respecter. »

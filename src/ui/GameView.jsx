@@ -5,12 +5,11 @@ const RulesPage = lazy(() => import("./rules/RulesPage.jsx"));
 import HeaderPhase from "./panels/HeaderPhase.jsx";
 import RoundPanels from "./panels/RoundPanels.jsx";
 import BoardPanel from "./panels/BoardPanel.jsx";
-import TitanPanel from "./panels/TitanPanel.jsx";
 import DilRageBanner from "./panels/DilRageBanner.jsx";
 import RepoVolBanner from "./panels/RepoVolBanner.jsx";
 import RepliBanner from "./panels/RepliBanner.jsx";
+import FpmcBanner from "./panels/FpmcBanner.jsx";
 import DecisionPanels from "./panels/DecisionPanels.jsx";
-import ScoringPanel from "./panels/ScoringPanel.jsx";
 
 export default function GameView(vm) {
   return (
@@ -35,6 +34,7 @@ export default function GameView(vm) {
           seul endroit, l'affichage ne fait plus que la suivre. */}
       {vm.decisionBloquante === "dil" && <DilRageBanner vm={vm} />}
       {vm.decisionBloquante === "repli" && <RepliBanner vm={vm} />}
+      {vm.decisionBloquante === "fpmc" && <FpmcBanner vm={vm} />}
       {vm.decisionBloquante === "vol" && <RepoVolBanner vm={vm} />}
       {/* ── FIN DE PARTIE ──
           Bug remonté par Nikola le 2026-08-17 : « fais bien la transition de
@@ -57,11 +57,9 @@ export default function GameView(vm) {
         <>
           <RoundPanels vm={vm} />
           <BoardPanel vm={vm} />
-          <TitanPanel vm={vm} />
           <DecisionPanels vm={vm} />
         </>
       )}
-      <ScoringPanel vm={vm} />
 
       {/* Page Règles en superposition. Le reste de l'arbre React n'est pas
           démonté : on retrouve la partie exactement où on l'a laissée. */}

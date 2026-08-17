@@ -3,7 +3,7 @@ import { CARD_LABEL, CARD_FORCE } from "../../domain/cards.js";
 import { TITAN_COLORS } from "./constants.js";
 import { TitanIcon } from "./TitanVisuals.jsx";
 import BlockIcon from "../BlockIcon.jsx";
-import { BLOCK_NAME, baremeHint } from "../blockNames.js";
+import { baremeHint } from "../blockNames.js";
 
 // ============================================================
 // BANDEAU RESSOURCES TITANS

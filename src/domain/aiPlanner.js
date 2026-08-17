@@ -70,11 +70,8 @@ import {
   resolveRecuperation,
   resolveTeteEnAvant,
   resolveToutCasser,
-  rowFromIndex,
-  rowIndex,
 } from "./gameRules.js";
-import { FORCES, chooseAmongBest, evaluatePosition, makeProfile } from "./aiEvaluation.js";
-import { shuffled } from "./rng.js";
+import { chooseAmongBest, evaluatePosition, makeProfile } from "./aiEvaluation.js";
 
 const DIRS = Object.freeze([
   { dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 },

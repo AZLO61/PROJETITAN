@@ -17,28 +17,26 @@ export const BLOCK_NAME = {
 // le Vert à part puisqu'il ne suit pas un barème de couleur.
 export const BLOCK_ORDER = ["bleu", "rose", "orange", "rouge"];
 
-// Barèmes du livret V36, pour rappeler au survol ce que vaut le prochain bloc
-// d'une couleur. Sans ça, il fallait ouvrir les Règles et descendre jusqu'au
-// Scoring pour savoir si un cinquième bloc bleu valait la peine.
-export const BAREME_PALIERS = {
-  bleu: [1, 3, 5, 7, 10, 15, 20, 25, 30],
-  rose: [2, 4, 6, 8, 11, 14, 17, 20],
-  rouge: [3, 7, 11, 16, 22],
-};
+/* ── UN SEUL BARÈME, CELUI DU MOTEUR ──
+   Ce fichier recopiait les trois échelles du livret et les paires d'Orange,
+   avec sa propre fonction de calcul. Le barème vivait donc à DEUX endroits
+   dans le code, et rien ne garantissait qu'ils disent la même chose : une
+   correction de scoring dans `gameRules.js` laissait les infobulles annoncer
+   l'ancienne valeur, en silence. C'est exactement le piège des « quatre
+   endroits » relevé sur les règles de jeu.
 
-// Orange : se compte par paires exactes, un bloc isolé ne rapporte rien.
-const BAREME_ORANGE_PAIRES = [0, 5, 11, 18, 26];
+   L'affichage lit maintenant la même fonction que le décompte final. */
+import { scoreBareme, BAREME } from "../domain/gameRules.js";
+
+export { BAREME as BAREME_PALIERS };
 
 /** Points rapportés par `n` blocs de cette couleur. `null` pour le Vert. */
 export function scoreBloc(color, n) {
-  if (n <= 0) return 0;
-  if (color === "orange") {
-    const paires = Math.floor(n / 2);
-    return BAREME_ORANGE_PAIRES[Math.min(paires, BAREME_ORANGE_PAIRES.length - 1)];
-  }
-  const paliers = BAREME_PALIERS[color];
-  if (!paliers) return null; // vert : pas de barème
-  return paliers[Math.min(n, paliers.length) - 1];
+  // Le Vert n'a pas de barème propre : sa valeur dépend du placement secret
+  // de fin de partie. `scoreBareme` renvoie 0 pour une couleur inconnue, on
+  // distingue donc explicitement ce cas.
+  if (color === "vert") return null;
+  return scoreBareme(color, n);
 }
 
 /** Infobulle : ce que vaut la position actuelle, et ce que rapporte la suite. */

@@ -1,5 +1,4 @@
 import React from "react";
-import { COLOR_HEX } from "../../domain/gameRules.js";
 const CARD_CONFIG = {
   tout_casser:       { label: "Tout Casser",       force: 1, color1: "#FF6B1A", color2: "#FF2E63", icon: "💥" },
   tete_en_avant:     { label: "Tête en Avant",     force: 2, color1: "#9333EA", color2: "#5421A0", icon: "🏃" },
