@@ -1,5 +1,34 @@
 # Changelog
 
+## Non publié — cinquième passe du 2026-08-18 (précisions sur la quatrième)
+
+Un vrai bug trouvé grâce à des précisions de Nikola sur 3 points restés
+ouverts :
+
+- **Le tour d'un Titan IA pouvait démarrer par-dessus un DIL/RAGE encore en
+  attente.** `finishAiTurn` faisait avancer `activePlayerId` dès que la
+  carte de l'IA était jouée, sans jamais attendre qu'un DIL/RAGE qu'elle
+  venait de déclencher soit tranché par le défenseur humain — si le Titan
+  suivant dans l'ordre était lui aussi une IA, son propre tour (mouvement,
+  carte, récupération) démarrait pendant que le joueur avait encore une
+  décision bloquante à l'écran. Même garde-fou que l'effet d'avancement de
+  Phase, qui protégeait déjà la transition Action→Repos mais pas
+  l'enchaînement d'un Titan IA au suivant.
+
+Deux points vérifiés sans bug trouvé :
+
+- **La dégression d'énergie par case parcourue** est correcte partout où
+  elle a été tracée en détail (y compris un cas où l'enquête a d'abord cru
+  trouver un bug, avant de découvrir que c'était une erreur dans le script
+  de vérification, pas dans le moteur). Confirmé par Nikola : la case de
+  collision elle-même (le mur qu'on percute) ne coûte pas d'énergie
+  supplémentaire, seules les cases réellement traversées avant comptent.
+- **La distance de saut Boing Boing F1→A4** reste sans repro exploitable
+  (pas d'état de plateau exact disponible). Le nouveau système de chemin
+  cliqué case par case (cf. quatrième passe) rend ce genre de défaut
+  immédiatement visible et signalable avec précision au prochain test, si
+  le défaut persiste.
+
 ## Non publié — quatrième passe du 2026-08-18 (test à la table)
 
 Fonctionnalité :
