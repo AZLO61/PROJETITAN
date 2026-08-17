@@ -1,5 +1,29 @@
 # Changelog
 
+## Non publié — troisième passe du 2026-08-18 (test à la table)
+
+Règles modifiées (chacune verrouillée par un test) :
+
+- **Fini les rebonds qui repartent en arrière.** Sous le Seuil 4, un élément
+  qui percute un mur ou atteint le bord du plateau s'arrête désormais net,
+  sur une case adjacente à la fois à son origine et à sa destination visée —
+  la même règle que celle déjà appliquée au « 2e obstacle » — au lieu de
+  repartir en sens inverse. Le glossaire, la page Règles et le livret sont mis
+  à jour ; le tutoriel du livret décrit encore l'ancienne trajectoire par
+  rebond et reste à reprendre, le remplacer à la main risquait d'introduire de
+  nouvelles erreurs sur un exemple déjà en partie périmé.
+
+Corrections trouvées lors de la relecture du test à la table :
+
+- **Un panneau DIL/RAGE (ou Faut Pas Me Chauffer) en attente ne bloquait pas
+  le plateau.** Cliquer une case pendant qu'une décision de ce type restait à
+  trancher — sur soi ou sur un autre Titan — pouvait changer la sélection ou
+  déclencher un mode de carte au lieu d'être ignoré, ce qui risquait de faire
+  perdre à l'attaquant la fenêtre pour récupérer son bloc.
+- **L'aperçu d'Énergie de Tout Casser ne suivait pas le bouton "+".**
+  L'Adrénaline ajoutée était bien comptée à la résolution réelle de la carte,
+  mais pas dans le badge Énergie/Seuil 4 affiché avant de valider.
+
 ## Non publié — seconde passe du 2026-08-18 (test à la table)
 
 Règles modifiées (chacune verrouillée par un test) :

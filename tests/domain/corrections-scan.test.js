@@ -349,16 +349,18 @@ describe("Un Titan poussé hors du plateau sort du ring", () => {
     expect(cible.horsPlateau).toBe(true);
   });
 
-  it("un débris, lui, garde le rebond et la faille", () => {
+  it("un débris, lui, garde la faille mais ne rebondit plus", () => {
     setSeed(34);
     // Même configuration, mais l'élément projeté est un débris : sous le
-    // Seuil 4 il rebondit, il ne sort pas du plateau.
+    // Seuil 4 il ne sort pas du plateau — et depuis le ruling du
+    // 2026-08-18 (fini les rebonds qui repartent en arrière), il s'arrête
+    // net sur la case où il se trouve déjà, sans repartir en sens inverse.
     const etat = { board: {}, looseBlocks: {}, titans: [titan(1, "E7")] };
     const landing = projectInDirection("E", 9, 0, 1, 2, {
       board: etat.board, looseBlocks: etat.looseBlocks, titans: etat.titans, log: [], initiatorId: 1,
     });
-    expect(landing.hasBounced).toBe(true);
-    expect(landing.col).toBeLessThan(9);
+    expect(landing.hasBounced).toBe(false);
+    expect(landing.row + landing.col).toBe("E9");
   });
 });
 

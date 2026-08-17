@@ -420,11 +420,12 @@ function SectionTransversales() {
         </div>
       </Panel>
 
-      <Sub>↩️ Rebond et projection</Sub>
+      <Sub>↩️ Arrêt faute de puissance et projection</Sub>
       <Panel style={{ marginBottom: 10 }}>
-        <strong style={{ color: C.teal }}>Rebond —</strong> un élément qui percute un bâtiment ou un
-        bord de plateau repart en sens inverse, gratuitement. Le rebond est offert une seule fois :
-        au deuxième obstacle, l'élément s'arrête.
+        <strong style={{ color: C.teal }}>Arrêt faute de puissance —</strong> un élément qui percute
+        un bâtiment ou atteint le bord du plateau sans l'énergie du Seuil 4 s'arrête net, sur une
+        case adjacente à la fois à celle où il se trouvait et à celle qu'il visait (ou sur place,
+        au bord du plateau, faute de case au-delà). Il ne repart plus en sens inverse.
       </Panel>
       <Panel style={{ marginBottom: 10 }}>
         <strong style={{ color: C.teal }}>Projection —</strong> un <strong>Titan</strong> qui arrive
@@ -457,7 +458,7 @@ function SectionTransversales() {
       <Panel glow style={{ marginBottom: 10 }}>
         <strong style={{ color: C.y1 }}>Ricochet destructeur —</strong> si un élément percute un
         bâtiment avec une énergie de <strong style={{ color: C.m1 }}>4 ou plus</strong>, il lui casse
-        1 bloc au lieu de rebondir. L'élément percutant s'arrête, et c'est le bloc cassé qui repart
+        1 bloc au lieu de s'arrêter net. L'élément percutant s'arrête, et c'est le bloc cassé qui repart
         dans la direction du choc. En dessous du Seuil 4, le bâtiment fait mur comme avant.
       </Panel>
       <Panel>

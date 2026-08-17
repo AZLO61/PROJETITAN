@@ -2325,7 +2325,16 @@ export function useBoardGeneratorController() {
     : [];
   const perimeterKeys = new Set(perimeterCells.map((c) => c.row + c.col));
   const energie = selectedTitan
-    ? computeEnergyToutCasser(perimeterCells, state.board, titansByCell)
+    ? computeEnergyToutCasser(
+        perimeterCells,
+        state.board,
+        titansByCell,
+        // Sans ce bonus, l'aperçu "Énergie"/"Seuil 4" du panneau ne bougeait
+        // pas au clic sur "+" alors que la résolution réelle (jouerToutCasser)
+        // en tenait déjà compte : le joueur ne voyait jamais l'effet de son
+        // Adrénaline avant de valider la carte.
+        Math.min(Number(tcAdrenaline) || 0, selectedTitan.adrenaline || 0)
+      )
     : 0;
 
   // Même raison que ci-dessus pour la dépendance sur `state` et non `state.board`.

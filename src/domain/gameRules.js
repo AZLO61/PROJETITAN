@@ -1078,13 +1078,14 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         // de G9 qui « finissait » sur I9, remonté en test réel.
         sortieDeFaille = rowFromIndex(nr) + nc;
         log.push(`🌀 Faille spatio-temporelle : l'élément ressort en ${sortieDeFaille} (énergie restante ${remaining}).`);
-      } else if (!hasBounced) {
-        hasBounced = true;
-        curDr = -curDr;
-        curDc = -curDc;
-        continue; // rebond gratuit, ne consomme pas d'énergie
       } else {
-        break; // 2e obstacle → arrêt sur la case adjacente courante
+        // Ruling Nikola (test à la table, 2026-08-18) : fini les rebonds qui
+        // repartent en arrière. Sous le Seuil 4, l'élément qui atteint le
+        // bord sans pouvoir franchir la faille s'arrête net, sur la case où
+        // il se trouve déjà — il n'existe pas de case "adjacente à la case
+        // visée" à proposer ici, puisque cette case est hors plateau.
+        log.push(`${rowFromIndex(r)}${c} : bord du plateau atteint, énergie insuffisante pour la faille (${remaining}) → arrêt net, plus de rebond.`);
+        break;
       }
     }
 
@@ -1183,12 +1184,10 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         noterRepli(null, nextKey);
         break;
       }
-      if (!hasBounced) {
-        hasBounced = true;
-        curDr = -curDr;
-        curDc = -curDc;
-        continue;
-      }
+      // Ruling Nikola (test à la table, 2026-08-18) : fini les rebonds qui
+      // repartent en arrière contre un mur. Même traitement que le "2e
+      // obstacle" ci-dessus : arrêt net dès le premier mur sous le Seuil 4,
+      // sur une case choisie par la règle d'adjacence (getCasesRepliDebris).
       noterRepli(rowFromIndex(r) + c, nextKey);
       break; // arrêt sur la case actuelle (r, c)
     }

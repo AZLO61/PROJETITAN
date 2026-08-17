@@ -126,7 +126,7 @@ describe("ruling — ricochet destructeur au Seuil 4", () => {
     expect(posés).toContain("rose");
   });
 
-  it("rebondit sans rien casser en dessous du Seuil 4", () => {
+  it("s'arrête sans rien casser en dessous du Seuil 4", () => {
     const ctx = makeCtx(["bleu", "rose"]);
     projectInDirection("E", 3, 0, 1, 2, ctx);
 

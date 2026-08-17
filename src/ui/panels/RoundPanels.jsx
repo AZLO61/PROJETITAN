@@ -105,6 +105,13 @@ export default function RoundPanels({ vm }) {
      position à l'écran. La 3D n'en a pas : elle passe null, et ce seul
      affichage-là reste propre à la 2D. */
   const clicCase = (key, el = null) => {
+    // DIL/RAGE et Faut Pas Me Chauffer se tranchent dans leur bandeau dédié,
+    // jamais par un clic sur une case : sans cette garde, cliquer le plateau
+    // pendant qu'une décision de ce type attend (sur MOI ou sur un AUTRE
+    // Titan) pouvait changer la sélection ou déclencher un mode de carte
+    // avant que la décision ne soit tranchée — l'attaquant perdait alors la
+    // fenêtre pour récupérer son bloc au tour (demande de Nikola).
+    if (vm.decisionBloquante === "dil" || vm.decisionBloquante === "fpmc") return;
     if (currentRepli) { if (currentRepli.cases.includes(key)) choisirRepli(key); return; }
     if (ecroulement) { if (ecroulementCells.includes(key)) ecroulementPoserDebris(key); return; }
     if (jnpMode) { if (jnpPool.has(key)) jnpToggleCell(key); return; }

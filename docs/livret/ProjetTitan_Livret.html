@@ -73,7 +73,7 @@
     <div class="lex-item" data-def="Plusieurs Blocs de béton empilés sur une même case."><img src="Amas_de_béton_256.png" alt="Amas de béton"><span>Amas de béton</span></div>
     <div class="lex-item" data-def="Le personnage que tu incarnes : un colosse qui détruit BIG CITY."><img src="Titan_256.png" alt="Titan"><span>Titan</span></div>
     <div class="lex-item" data-def="Placé sous chaque bâtiment à sa construction. Sa valeur est fixe, même si le bâtiment perd des blocs ensuite."><img src="Socle_256.png" alt="Socle"><span>Socle</span></div>
-    <div class="lex-item" data-def="Un élément percutant un bâtiment ou un bord de plateau repart en sens inverse, gratuitement."><img src="Rebond_256.png" alt="Rebond"><span>Rebond</span></div>
+    <div class="lex-item" data-def="Un élément qui percute un bâtiment ou atteint un bord de plateau sans l'énergie du Seuil 4 s'arrête net, sur une case adjacente à la fois à celle où il était et à celle qu'il visait. Il ne repart pas en sens inverse."><img src="Rebond_256.png" alt="Arrêt faute de puissance"><span>Arrêt faute de puissance</span></div>
     <div class="lex-item" data-def="Un élément arrivant sur une case occupée pousse ce qui s'y trouve du nombre de cases égal à l'énergie restante. Un Titan pousse toujours un autre Titan, même avec 1 seule énergie restante."><img src="Projection_256.png" alt="Projection"><span>Projection</span></div>
     <div class="lex-item" data-def="Désigne le Titan qui commence la manche. Passe au joueur suivant à chaque manche."><img src="Jeton_détonateur_256.png" alt="Jeton Détonateur"><span>Détonateur</span></div>
     <div class="lex-item lex-item--badge" data-def="L'attaquant désigne 2 options ; la cible doit en perdre 1 et choisit laquelle."><span class="badge b-dil">DIL</span><span>Dilemme</span></div>
@@ -307,16 +307,16 @@
   </div>
   <div class="callout warn" style="margin-top:16px"><strong style="color:var(--o1)">Dégression d'énergie :</strong> tout élément en mouvement (<img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">/<img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle">) perd <strong style="color:var(--y1)">1 énergie par case parcourue</strong>. L'énergie restante au moment de l'impact déclenche les seuils applicables : <span class="badge b-dil">DIL</span> <span class="badge b-rage">RAGE</span> <img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"><strong>Le passif n'est pas concerné.</strong></div>
 
-  <h3 class="sub">↩️ Rebond &amp; projection</h3>
+  <h3 class="sub">↩️ Arrêt faute de puissance &amp; projection</h3>
   <div class="grid-2">
     <div class="panel">
-      <h4 class="kicker"><img src="Rebond_256.png" alt="Rebond" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rebond</h4>
-      <p>Tout élément percutant un <strong>bâtiment avec <img src="Energie_256.png" alt="Énergie" class="icon-img--sm" style="vertical-align:middle"></strong> ou le <strong>bord du plateau</strong> rebondit en sens inverse. <strong style="color:var(--y1)">Le rebond est gratuit</strong>. Revenir sur la case de départ coûte <strong style="color:var(--y1)">1 énergie</strong>.</p>
+      <h4 class="kicker"><img src="Rebond_256.png" alt="Arrêt faute de puissance" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Arrêt faute de puissance</h4>
+      <p>Tout élément percutant un <strong>bâtiment avec <img src="Energie_256.png" alt="Énergie" class="icon-img--sm" style="vertical-align:middle"></strong> ou atteignant le <strong>bord du plateau</strong> sans l'énergie du Seuil 4 s'arrête net. <strong style="color:var(--y1)">Il ne repart pas en sens inverse.</strong></p>
       <ul style="margin-top:10px;list-style:none;padding-left:0">
         <li style="padding:4px 0"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"> → l'élément <strong style="color:var(--y1)">sort du plateau</strong> et réapparaît de l'autre côté (bord opposé, ou point exactement opposé si la sortie est diagonale — voir encadré ci-dessous).</li>
-        <li style="padding:4px 0"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm"> → l'élément se pose sur la case <strong style="color:var(--y1)">adjacente</strong>, entre la case où il était et celle où il aurait dû aller.</li>
+        <li style="padding:4px 0"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm"> → l'élément se pose sur la case <strong style="color:var(--y1)">adjacente</strong>, à la fois à celle où il était et à celle où il aurait dû aller (ou sur place, au bord du plateau).</li>
       </ul>
-      <div class="callout">Si la case de retour ou de réapparition est occupée → l'élément se pose sur une case <strong style="color:var(--y1)">adjacente</strong> entre la case d'impact et la case de destination, comme d'habitude.</div>
+      <div class="callout">Si la case de réapparition (sortie de Faille) est occupée → l'élément se pose sur une case <strong style="color:var(--y1)">adjacente</strong> entre la case d'impact et la case de destination, comme d'habitude.</div>
     </div>
     <div class="panel">
       <h4 class="kicker"><img src="Projection_256.png" alt="Projection" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Projection — règle absolue</h4>
@@ -330,7 +330,7 @@
     </div>
     <div class="panel" style="border-color:rgba(255,46,99,.4)">
       <h4 class="kicker">Immunité initiateur</h4>
-      <p>La règle absolue de projection ne s'applique <strong style="color:var(--y1)">pas au titan initiateur</strong> Si <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">arrive sur sa case après un rebond :</p>
+      <p>La règle absolue de projection ne s'applique <strong style="color:var(--y1)">pas au titan initiateur</strong> Si <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">arrive sur sa case en cours de trajectoire :</p>
         <div style="display:flex;gap:18px;margin-top:8px;flex-wrap:wrap">
           <span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">+<img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">→<img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></span>
           <span style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">+<img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle">→<img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></span>
@@ -545,7 +545,7 @@
         <tr class="cm-note"><td colspan="3"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm" style="vertical-align:middle"> <strong>Énergie</strong> = cases occupées dans ton <img src="Périmètre_128.png" alt="Périmètre" class="icon-img--sm" style="vertical-align:middle">périmètre (max 8).</td></tr>
         <tr class="cm-cols"><th class="cm-elem">Élément</th><th class="cm-cond">Cond.</th><th>Effet</th></tr>
         <tr class="cm-row"><td class="cm-elem"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></td><td>Casse 1 bloc du haut · projeté · <strong style="color:#e07e16">+1 Destruction</strong></td></tr>
-        <tr class="cm-row"><td class="cm-elem"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><span class="badge b-auto">rebond</span></td><td>Direction sens inverse · bord gratuit</td></tr>
+        <tr class="cm-row"><td class="cm-elem"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><span class="badge b-auto">&lt; Seuil 4</span></td><td>Arrêt net · case adjacente</td></tr>
         <tr class="cm-row"><td class="cm-elem"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"></td><td>Projeté de (x) · énergie transmise</td></tr>
         <tr class="cm-row"><td class="cm-elem"><img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></td><td>Patatras · éjection haut→bas</td></tr>
         <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm"></td><td><span class="badge b-dil">DIL</span> · déplacé de (x) · énergie transmise · <strong style="color:var(--m1)">+1 Bagarre</strong></td></tr>
@@ -841,8 +841,8 @@
     </div></div>
 
     <div class="step"><div class="stp-n">6</div><div>
-      <h5>Un Titan peut-il être projeté par son propre Tout Casser après un rebond ?</h5>
-      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> Non. L'immunité initiateur s'applique même après un ou plusieurs rebonds. <strong>Précision V36 :</strong> l'élément s'arrête immédiatement sur la case du Titan initiateur, quelle que soit l'énergie restante (remplace l'ancien comportement « traverse si il reste de l'énergie »).</p>
+      <h5>Un Titan peut-il être projeté par son propre Tout Casser en fin de trajectoire ?</h5>
+      <p><span class="badge" style="background:rgba(0,230,118,.2);color:var(--g1)">✓ TRANCHÉ</span> Non. L'immunité initiateur s'applique quel que soit le chemin parcouru par l'élément (Faille comprise). <strong>Précision V36 :</strong> l'élément s'arrête immédiatement sur la case du Titan initiateur, quelle que soit l'énergie restante (remplace l'ancien comportement « traverse si il reste de l'énergie »).</p>
     </div></div>
 
     <div class="step"><div class="stp-n">7</div><div>

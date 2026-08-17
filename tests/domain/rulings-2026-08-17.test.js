@@ -609,8 +609,9 @@ describe("Repli d'un élément sans la puissance de passer", () => {
   it("la trajectoire expose le choix quand il y a plusieurs cases possibles", () => {
     // Bout en bout : un débris bloqué par un mur qu'il ne peut pas casser
     // rend la liste des cases où l'initiateur peut le poser.
-    // Couloir fermé des deux côtés : l'élément tape le mur devant, rebondit,
-    // puis tape celui derrière. Le rebond étant consommé, il s'arrête là.
+    // Couloir fermé des deux côtés : l'élément tape le mur devant et
+    // s'arrête net (plus de rebond depuis le 2026-08-18), sans jamais
+    // atteindre le second mur derrière.
     const mur = (cle) => ({ [cle]: { row: cle[0], col: Number(cle.slice(1)), blocks: ["bleu"], socle: 1, isTeleporter: false } });
     const board = { ...mur("E5"), ...mur("E3") };
     const res = projectInDirection("E", 4, 0, 1, 2, {
@@ -646,7 +647,9 @@ describe("Repli — collecte pour l'interface", () => {
     expect(replis).toHaveLength(1);
     expect(replis[0].cases.length).toBeGreaterThan(1);
     expect(replis[0].defaut).toBe("E4");
-    expect(replis[0].cible).toBe("E3");
+    // Plus de rebond depuis le 2026-08-18 : l'élément s'arrête sur le
+    // PREMIER mur rencontré (E5), il n'atteint jamais E3.
+    expect(replis[0].cible).toBe("E5");
     expect(replis[0].initiatorId).toBe(1);
   });
 
