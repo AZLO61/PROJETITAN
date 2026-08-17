@@ -791,6 +791,17 @@ export function useBoardGeneratorController() {
     if (activePlayerId == null) return;
     if (titanModes[activePlayerId] !== "ia") return;
     if (aiPlayingRef.current) return;
+    /* Une décision née d'un tour IA se règle AVANT le tour suivant.
+       Bug remonté par Nikola (test à la table, 2026-08-18) : « dès que
+       j'ai fait le dil c'est passé au joueur suivant automatiquement, je
+       n'ai pas pu ramasser le bloc tombé au sol. » `finishAiTurn` faisait
+       avancer `activePlayerId` dès que la carte de l'IA était jouée, sans
+       jamais attendre qu'un DIL/RAGE qu'elle venait de déclencher soit
+       tranché — si le Titan suivant était lui aussi une IA, cet effet
+       démarrait alors SON tour (mouvement, carte, récupération) pendant
+       que le joueur humain avait encore un DIL en attente. Même garde-fou
+       que la Phase suivante (cf. l'effet d'avancement de Phase). */
+    if (currentDecision || currentRepli || ecroulement) return;
 
     const titan = aiTitanStateRef.current.players.find((t) => t.id === activePlayerId);
     if (!titan) return;
@@ -983,7 +994,7 @@ export function useBoardGeneratorController() {
     timers.push(t1);
     // Pas de cleanup : les timers doivent s'exécuter jusqu'au bout même si le composant re-render
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setupDone, phase, activePlayerId, titanModes, aiTrigger]);
+  }, [setupDone, phase, activePlayerId, titanModes, aiTrigger, currentDecision, currentRepli, ecroulement]);
 
   // ── AUTO-VALIDER PHASES IA ──
   // FIX (bug hunt) : cet effect lisait `titanState.players` depuis le closure
