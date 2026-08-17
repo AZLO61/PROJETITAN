@@ -1,5 +1,63 @@
 # Changelog
 
+## Non publié — quatrième passe du 2026-08-18 (test à la table)
+
+Fonctionnalité :
+
+- **Boing Boing : chemin tracé case par case**, au lieu d'un clic unique sur
+  la destination qui laissait le moteur choisir sa propre trajectoire sans
+  jamais la montrer. Le joueur clique désormais chaque case adjacente de son
+  trajet ; la même règle de coût que le calcul automatique (0 entre deux
+  obstacles collés, 1 sinon) s'applique à chaque clic. Recliquer une case
+  déjà posée y revient. Un bâtiment encore debout se traverse en vol mais ne
+  peut pas être validé comme atterrissage.
+
+Corrections et clarifications de ce même test, certaines tranchées après
+question posée à Nikola :
+
+- **Le survol des cartes programmées ne dépend plus que d'une seule règle :**
+  son propre Titan, toujours ; les autres, jamais. Une première lecture
+  avait ajouté une exception pendant l'inter-tour (entre la carte jouée et
+  le clic sur « Titan suivant »), pensant fermer une fuite qui n'existe pas
+  réellement à ce moment (`activePlayerId` ne change qu'AU clic). Confirmé
+  par Nikola : la règle simple, sans exception, est la bonne.
+- **Le badge Énergie/Seuil 4 suit la carte réellement ouverte** (Tout Casser,
+  Tête en Avant ou Boing Boing) au lieu de rester câblé sur Tout Casser en
+  permanence — il ne suivait donc jamais les boutons +/- des deux autres
+  cartes.
+- **Le classement provisoire (en cours de partie) a été retiré** : le
+  tableau détaillé donne déjà les totaux, et sa ligne TOTAL porte désormais
+  elle-même une médaille pour le meilleur score. Le classement complet
+  (rang, médaille, départage du livret) ne reste qu'en fin de partie, où il
+  a un enjeu réel.
+- **Les panneaux DIL/RAGE, Faut Pas Me Chauffer et Vol Phase Repos affichent
+  l'icône du Titan et son nom choisi**, plutôt que « T1 »/« T3 » en toutes
+  lettres ou un ID nu à côté d'une icône déjà posée.
+- **Vérifié, sans changement de code nécessaire :** un débris qui pousse un
+  Titan dans un bâtiment sous le Seuil 4 le pose déjà correctement sur une
+  case adjacente au choix de l'initiateur — corrigé par le retrait des
+  rebonds plus tôt dans la session. Un script direct sur le moteur confirme
+  le comportement attendu.
+
+Trois retours restent sans code changé, faute d'avoir pu reproduire le bug
+en lisant le moteur — repro plus précise nécessaire au prochain test :
+
+- Un Seuil 4 qui se déclencherait avec l'énergie de départ d'une carte au
+  lieu de l'énergie réellement restante après plusieurs cases parcourues.
+  Tous les points de vérification trouvés (Tout Casser, Tête en Avant,
+  Boing Boing, chaînes de ricochet dans `projectInDirection`) dégressent
+  correctement l'énergie au fil du trajet.
+- Un DIL tranché, le bloc perdu tombé sur la case de l'attaquant, sans que
+  le panneau Ramasser ni « Titan suivant » ne s'affichent. `recupPool`
+  inclut bien la case du Titan dans son propre Périmètre, et le mécanisme
+  Graouhhh ajouté cette session (`advanceGraouhhhLoop`) ne se déclenche que
+  si la décision porte le champ `graouhhh`, absent sur un DIL classique.
+- Une distance de saut F1→A4 jugée excessive sur Boing Boing. Le mécanisme
+  des « obstacles collés = 1 seule case » (déjà validé par Nikola le
+  2026-08-17) peut légitimement produire un grand saut Chebyshev avec une
+  portée nominale de 3 s'il y a une chaîne d'obstacles contigus sur le
+  chemin — impossible à confirmer sans l'état du plateau à ce moment précis.
+
 ## Non publié — troisième passe du 2026-08-18 (test à la table)
 
 Règles modifiées (chacune verrouillée par un test) :
