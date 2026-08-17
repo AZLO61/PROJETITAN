@@ -2036,16 +2036,15 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
   return { log, decisions };
 }
 
-function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
-  // Carte 03 · Graouhhh (Force 2). Aucune Adrénaline dépensable.
-  // Rulings confirmés Nikola :
-  // - Distance de recul = (nombre de Titans touchés sur l'axe) + 1, uniforme
-  // - Résolution du plus loin au plus proche (le plus éloigné bouge d'abord)
-  // - 1 seul sens, depuis la case suivant le Titan initiateur jusqu'au bord
-  const { board, titans, looseBlocks, replis } = gameState;
+// Carte 03 · Graouhhh — scan de l'axe, SANS mutation ni décision : donne la
+// liste des Titans touchés (ordre proche → loin) et la distance de recul
+// commune. Extrait de resolveGraouhhh pour que le contrôleur puisse traiter
+// les Titans un par un (DIL tranché → déplacement → Titan suivant) au lieu
+// de tout déplacer d'un bloc avant d'afficher la moindre décision.
+function scanGraouhhhAxis(titanId, gameState, dr, dc) {
+  const { board, titans } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const titansByCell = indexerTitans(titans);
-
   const startRowIdx = rowIndex(titan.cell[0]);
   const startCol = Number(titan.cell.slice(1));
   const log = [];
@@ -2071,53 +2070,46 @@ function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
     }
   }
 
-  if (touched.length === 0) {
-    log.push("Aucun Titan touché sur cet axe.");
-    return { log, titansTouches: [] };
+  return { touched, reculDistance: touched.length + 1, log };
+}
+
+// Déplace UN Titan déjà désigné par le scan. Mute gameState (titans, board,
+// looseBlocks, replis). Appelée soit tout de suite (DIL impossible sur cette
+// cible), soit APRÈS que sa décision DIL a été tranchée par l'appelant — la
+// case de percussion (`caseAvant`) est donc lue par l'appelant AVANT cet
+// appel, jamais recalculée ici.
+function resolveGraouhhhMoveTitan(titanId, targetId, gameState, dr, dc, reculDistance, mancheNumber) {
+  const { titans, board, looseBlocks, replis } = gameState;
+  const occupant = titans.find((x) => x.id === targetId);
+  const caseAvant = occupant.cell;
+  const log = [];
+  const bagarreSet = new Set();
+  const landing = projectInDirection(caseAvant[0], Number(caseAvant.slice(1)), dr, dc, reculDistance, {
+    board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId, movingTitanId: targetId,
+  });
+  if (!landing.ejecte) occupant.cell = landing.row + landing.col;
+  // Ruling Nikola (2026-08-15) : pas de déplacement, pas de point de
+  // Bagarre. Un Titan touché mais coincé contre un mur ne compte pas.
+  if (occupant.cell !== caseAvant || landing.ejecte) bagarreSet.add(targetId);
+  const fatigue = resolveFatigue(titanId, targetId, mancheNumber, titans);
+  const dilOk = canDil(targetId, gameState);
+  log.push(
+    `Titan ${targetId} touché → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${dilOk ? "DIL en attente" : "DIL impossible (< 2 couleurs différentes en Repaire)"} · recule de ${reculDistance} case(s) → ${occupant.cell}` +
+      (landing.hasBounced ? " (après rebond)" : "")
+  );
+  return { log, bagarreIds: [...bagarreSet] };
+}
+
+// Bagarre + bonus d'Adrénaline, une fois TOUS les Titans touchés traités.
+function finalizeGraouhhh(titanId, gameState, bagarreIds, touchedCount) {
+  const titan = gameState.titans.find((t) => t.id === titanId);
+  const log = [];
+  const distinctBagarre = [...new Set(bagarreIds)];
+  if (distinctBagarre.length > 0) {
+    titan.bagarre += distinctBagarre.length;
+    log.push(`+${distinctBagarre.length} Bagarre (Titan ${titanId} → ${titan.bagarre}) — ${distinctBagarre.length} Titan(s) distinct(s) déplacé(s) (direct + chaîne, FAQ #12).`);
   }
-
-  const reculDistance = touched.length + 1;
-  const decisions = [];
-  const bagarreSet = new Set(); // FAQ #12 : Titans distincts déplacés (direct + chaîne)
-  const fatiguedProgrammed = []; // Bug remonté : voir resolveFatigue plus bas
-  for (let i = touched.length - 1; i >= 0; i--) {
-    const t = touched[i];
-    const occupant = titans.find((x) => x.id === t.id);
-    // movingTitanId : c'est ce Titan-là qu'on projette, il ne doit pas se
-    // voir lui-même comme un obstacle si sa trajectoire rebondit.
-    const caseAvant = occupant.cell;
-    /* ── LE DILEMME S'APPLIQUE AVANT LE RECUL ──
-       Ruling Nikola du 2026-08-18 : « avant de déplacer le Titan du DIL, on
-       applique le DIL, et ensuite on le déplace — comme ça le Titan
-       attaquant peut bien récupérer la ressource avec son passif. »
-
-       La demande est notée AVANT la projection, et elle emporte `caseAvant`,
-       la case où la cible a encaissé le coup. C'est là que le bloc perdu
-       tombe, donc dans le Périmètre de l'attaquant s'il touchait à côté —
-       et non à l'autre bout de l'axe, là où le recul aura envoyé la cible.
-       L'ordre du journal suit le même déroulé : d'abord ce que la cible
-       perd, ensuite où elle atterrit. */
-    const dilOk = canDil(t.id, gameState);
-    if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, t.id, "Graouhhh", caseAvant));
-    const landing = projectInDirection(t.row, t.col, dr, dc, reculDistance, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId, movingTitanId: t.id });
-    if (!landing.ejecte) occupant.cell = landing.row + landing.col;
-    // Ruling Nikola (2026-08-15) : pas de déplacement, pas de point de
-    // Bagarre. Un Titan touché mais coincé contre un mur ne compte pas.
-    if (occupant.cell !== caseAvant || landing.ejecte) bagarreSet.add(t.id);
-    const fatigue = resolveFatigue(titanId, t.id, mancheNumber, titans);
-    if (fatigue.ok && fatigue.fromProgrammed) fatiguedProgrammed.push(t.id);
-    log.push(
-      `Titan ${t.id} touché → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${dilOk ? "DIL en attente" : "DIL impossible (< 2 couleurs différentes en Repaire)"} · recule de ${reculDistance} case(s) → ${occupant.cell}` +
-        (landing.hasBounced ? " (après rebond)" : "")
-    );
-  }
-
-  if (bagarreSet.size > 0) {
-    titan.bagarre += bagarreSet.size;
-    log.push(`+${bagarreSet.size} Bagarre (Titan ${titanId} → ${titan.bagarre}) — ${bagarreSet.size} Titan(s) distinct(s) déplacé(s) (direct + chaîne, FAQ #12).`);
-  }
-
-  if (touched.length >= 2) {
+  if (touchedCount >= 2) {
     // FAQ #11 (livret V35, cas OUVERT). Ruling REVU le 2026-08-15 par Nikola :
     // le bonus devient CUMULATIF LINÉAIRE, +1 Adrénaline par Titan touché
     // au-delà du premier. 2 touchés → +1, 3 touchés → +2.
@@ -2127,12 +2119,96 @@ function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
     // 3 Titans avec une carte programmée une manche à l'avance est un coup
     // spectaculaire qui méritait d'être récompensé à hauteur de sa rareté.
     // Remplace le +1 fixe plafonné tranché le 2026-08-11.
-    const bonusAdrenaline = touched.length - 1;
+    const bonusAdrenaline = touchedCount - 1;
     titan.adrenaline = (titan.adrenaline || 0) + bonusAdrenaline;
-    log.push(`Bonus : ${touched.length} Titans touchés (≥2) → +${bonusAdrenaline} Adrénaline (cumulatif, +1 par Titan au-delà du premier) — Titan ${titanId} stock ${titan.adrenaline}.`);
+    log.push(`Bonus : ${touchedCount} Titans touchés (≥2) → +${bonusAdrenaline} Adrénaline (cumulatif, +1 par Titan au-delà du premier) — Titan ${titanId} stock ${titan.adrenaline}.`);
+  }
+  return { log };
+}
+
+/* Reprend Graouhhh à partir du Titan en tête de `remaining`, après que la
+   décision DIL du précédent (s'il y en avait une) a été tranchée. Mute
+   gameState. Retourne soit `{ done:false, decision, continuation }` — une
+   décision à afficher, avec de quoi reprendre une fois tranchée — soit
+   `{ done:true }` une fois tous les Titans traités (Bagarre et bonus
+   d'Adrénaline déjà appliqués).
+
+   Ruling Nikola (test à la table, 2026-08-18) : « on fait dans l'ordre
+   DIL/RAGE puis déplacement, et Titan suivant si il y en a un autre —
+   impossible de passer au Titan suivant tant que ce n'est pas résolu. »
+   Avant ce ruling, resolveGraouhhh déplaçait TOUS les Titans touchés d'un
+   bloc avant que la moindre décision DIL ne soit affichée : l'attaquant
+   voyait le résultat final avant même d'avoir choisi quoi que ce soit. */
+function advanceGraouhhh(gameState, payload) {
+  const { titanId, dr, dc, reculDistance, mancheNumber, touchedCount, pendingMoveId } = payload;
+  let remaining = payload.remaining;
+  let bagarreIds = payload.bagarreIds;
+  const log = [];
+
+  // Le Titan dont la décision vient d'être tranchée (par l'appel précédent)
+  // n'a pas encore bougé : renvoyer la décision suffisait à la trancher,
+  // mais pas à déplacer la cible. C'est ici, et seulement ici, qu'on le fait
+  // — avant de s'occuper du suivant.
+  if (pendingMoveId != null) {
+    const step = resolveGraouhhhMoveTitan(titanId, pendingMoveId, gameState, dr, dc, reculDistance, mancheNumber);
+    log.push(...step.log);
+    bagarreIds = [...bagarreIds, ...step.bagarreIds];
   }
 
-  return { log, titansTouches: touched.map((t) => t.id), decisions, fatiguedProgrammed };
+  while (remaining.length > 0) {
+    const targetId = remaining[0];
+    const rest = remaining.slice(1);
+    const dilOk = canDil(targetId, gameState);
+    if (dilOk) {
+      const caseAvant = gameState.titans.find((x) => x.id === targetId).cell;
+      return {
+        log,
+        done: false,
+        decision: makeDecisionRequest("DIL", titanId, targetId, "Graouhhh", caseAvant),
+        continuation: { titanId, dr, dc, reculDistance, mancheNumber, remaining: rest, bagarreIds, touchedCount, pendingMoveId: targetId },
+      };
+    }
+    const step = resolveGraouhhhMoveTitan(titanId, targetId, gameState, dr, dc, reculDistance, mancheNumber);
+    log.push(...step.log);
+    bagarreIds = [...bagarreIds, ...step.bagarreIds];
+    remaining = rest;
+  }
+
+  const fin = finalizeGraouhhh(titanId, gameState, bagarreIds, touchedCount);
+  log.push(...fin.log);
+  return { log, done: true };
+}
+
+// Wrapper synchrone conservé pour l'IA en simulation et les tests existants
+// (283 tests qui appellent resolveGraouhhh en attendant un résultat complet
+// et déjà appliqué). Enchaîne scanGraouhhhAxis → resolveGraouhhhMoveTitan →
+// finalizeGraouhhh sans jamais attendre de décision : comportement
+// observable identique à l'ancienne version monolithique.
+function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
+  const scan = scanGraouhhhAxis(titanId, gameState, dr, dc);
+  const log = [...scan.log];
+
+  if (scan.touched.length === 0) {
+    log.push("Aucun Titan touché sur cet axe.");
+    return { log, titansTouches: [] };
+  }
+
+  const decisions = [];
+  let bagarreIds = [];
+  for (let i = scan.touched.length - 1; i >= 0; i--) {
+    const t = scan.touched[i];
+    const caseAvant = gameState.titans.find((x) => x.id === t.id).cell;
+    const dilOk = canDil(t.id, gameState);
+    if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, t.id, "Graouhhh", caseAvant));
+    const step = resolveGraouhhhMoveTitan(titanId, t.id, gameState, dr, dc, scan.reculDistance, mancheNumber);
+    log.push(...step.log);
+    bagarreIds.push(...step.bagarreIds);
+  }
+
+  const fin = finalizeGraouhhh(titanId, gameState, bagarreIds, scan.touched.length);
+  log.push(...fin.log);
+
+  return { log, titansTouches: scan.touched.map((t) => t.id), decisions };
 }
 
 /* ============================================================
@@ -3806,6 +3882,8 @@ export {
   PORTEE_TETE_EN_AVANT,
   resolveTeteEnAvant,
   resolveGraouhhh,
+  scanGraouhhhAxis,
+  advanceGraouhhh,
   isLanterneRouge,
   getJeNePartagePasPool,
   resolveJeNePartagePas,

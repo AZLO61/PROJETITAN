@@ -529,7 +529,6 @@ export default function DecisionPanels({ vm }) {
                       </span>
                     )}
                   </span>
-                  <span style={{ color: "#FFD93D", fontWeight: 700 }}>{ligne.total}</span>
                 </div>
               ))}
               <div style={{ color: "rgba(255,255,255,.45)", fontSize: ".66rem", marginTop: 6 }}>

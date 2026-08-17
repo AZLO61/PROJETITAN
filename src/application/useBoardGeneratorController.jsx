@@ -16,7 +16,7 @@ const {
   rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, releaseSocle, projectInDirection, estSurLePlateau, indexerTitans, rentrerEnJeu,
   resolveToutCasserBatiments, resolveToutCasserBlocs,
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
-  resolveGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
+  resolveGraouhhh, scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
   choisirRepliIA, appliquerRepli, appliquerReplElement,
   canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
@@ -1228,14 +1228,14 @@ export function useBoardGeneratorController() {
   }, []);
 
   const enqueueDecisions = useCallback((rawDecisions) => {
-    if (!rawDecisions || rawDecisions.length === 0) return;
+    if (!rawDecisions || rawDecisions.length === 0) return [];
     // Utilise les refs live pour les modes et players (évite stale closure)
     const curModes = aiTitanModesRef.current;
     const curPlayers = aiTitanStateRef.current.players;
     const humanDecisions = autoResolveIaDecisions(rawDecisions, curModes, curPlayers);
     if (humanDecisions.length === 0) {
       setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-      return;
+      return humanDecisions;
     }
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setDecisionQueue((prev) => [
@@ -1270,6 +1270,7 @@ export function useBoardGeneratorController() {
         };
       }),
     ]);
+    return humanDecisions;
   }, [autoResolveIaDecisions]);
 
   /* ── FILE DES REPLIS ──
@@ -1314,6 +1315,35 @@ export function useBoardGeneratorController() {
     if (aTrancher.length > 0) setRepliQueue((prev) => [...prev, ...aTrancher]);
   }, []);
 
+  /* ── GRAOUHHH : DIL PUIS DÉPLACEMENT, TITAN PAR TITAN ──
+     Ruling Nikola (test à la table, 2026-08-18) : « on fait dans l'ordre
+     DIL/RAGE puis déplacement, et Titan suivant si il y en a un autre —
+     impossible de passer au Titan suivant tant que ce n'est pas résolu. »
+
+     `advanceGraouhhh` (domaine) traite les Titans touchés un par un, du
+     plus loin au plus proche : pour chacun, soit il n'y a pas de DIL
+     possible et il est déplacé tout de suite, soit une décision DIL est
+     rendue et il faut attendre qu'elle soit tranchée avant de continuer.
+
+     Boucle ici plutôt que dans le domaine : un défenseur IA se résout
+     instantanément (cf. autoResolveIaDecisions dans enqueueDecisions), donc
+     plusieurs Titans peuvent s'enchaîner d'un coup sans jamais passer par la
+     file — seul un vrai défenseur humain interrompt la boucle. */
+  const advanceGraouhhhLoop = useCallback((continuation) => {
+    const gameState = { board: state.board, titans: titanState.players, looseBlocks, replis: [] };
+    let cont = continuation;
+    for (;;) {
+      const result = advanceGraouhhh(gameState, cont);
+      if (result.log.length > 0) setActionLog((prev) => [...prev, ...result.log]);
+      if (result.done) break;
+      const humanDecisions = enqueueDecisions([{ ...result.decision, graouhhh: result.continuation }]);
+      if (humanDecisions && humanDecisions.length > 0) break;
+      cont = result.continuation;
+    }
+    enqueueReplis(gameState.replis);
+    setLooseBlocks((prev) => ({ ...prev }));
+    setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+  }, [state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis]);
 
   const dilAttackerPick = useCallback((color) => {
     setDecisionQueue((prev) => {
@@ -1383,6 +1413,10 @@ export function useBoardGeneratorController() {
         setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} (IA) préfère donner 1 Adrénaline à Titan ${cur.attackerId} plutôt que de perdre ${defChoice.color} (${defChoice.defVal} pts en jeu).`]);
         setTitanState((p) => ({ ...p, players: [...p.players] }));
         setDecisionQueue((prev) => prev.slice(1));
+        // Graouhhh : ce Titan est tranché, on enchaîne sur le suivant de
+        // l'axe (cf. advanceGraouhhhLoop) plutôt que d'attendre un clic qui
+        // ne viendra jamais côté défenseur IA.
+        if (cur.graouhhh) advanceGraouhhhLoop(cur.graouhhh);
         return;
       }
 
@@ -1392,7 +1426,8 @@ export function useBoardGeneratorController() {
       setTitanState((p) => ({ ...p, players: [...p.players] }));
     }
     setDecisionQueue((prev) => prev.slice(1));
-  }, [decisionQueue, titanState.players, acheminerBlocPerdu, captureSnapshot]);
+    if (cur.graouhhh) advanceGraouhhhLoop(cur.graouhhh);
+  }, [decisionQueue, titanState.players, acheminerBlocPerdu, captureSnapshot, advanceGraouhhhLoop]);
 
   const resolveDilDefenderPick = useCallback(
     (color) => {
@@ -1406,8 +1441,9 @@ export function useBoardGeneratorController() {
       setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} perd ${quoi}${suffixe}`]);
       setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
       setDecisionQueue((prev) => prev.slice(1));
+      if (cur.graouhhh) advanceGraouhhhLoop(cur.graouhhh);
     },
-    [decisionQueue, titanState.players, acheminerBlocPerdu, captureSnapshot]
+    [decisionQueue, titanState.players, acheminerBlocPerdu, captureSnapshot, advanceGraouhhhLoop]
   );
 
   const resolveDilCancelWithAdrenaline = useCallback(() => {
@@ -1425,8 +1461,9 @@ export function useBoardGeneratorController() {
     if (attaquant) attaquant.adrenaline = (attaquant.adrenaline || 0) + 1;
     setActionLog((prevLog) => [...prevLog, `DIL annulé par Titan ${cur.defenderId} : 1 Adrénaline donnée à Titan ${cur.attackerId}.`]);
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+    if (cur.graouhhh) advanceGraouhhhLoop(cur.graouhhh);
     setDecisionQueue((prev) => prev.slice(1));
-  }, [decisionQueue, titanState.players, captureSnapshot]);
+  }, [decisionQueue, titanState.players, captureSnapshot, advanceGraouhhhLoop]);
 
   const resolveRagePick = useCallback(
     (color) => {
@@ -1824,18 +1861,24 @@ export function useBoardGeneratorController() {
   const jouerGraouhhh = useCallback(() => {
     if (!selectedTitanId || !canPlayCard("graouhhh")) return;
     captureSnapshot();
-    const replis = [];
-    const result = resolveGraouhhh(selectedTitanId, direction.dr, direction.dc, mancheNumber, {
-      board: state.board, titans: titanState.players, looseBlocks, replis,
-    });
-    setActionLog((prev) => [...prev, ...result.log]);
-    enqueueDecisions(result.decisions);
-    enqueueReplis(replis);
+    // Titan par Titan (cf. advanceGraouhhhLoop) : seul le scan de l'axe se
+    // fait d'un bloc, aucun Titan n'est déplacé avant que sa propre décision
+    // DIL soit tranchée.
+    const scan = scanGraouhhhAxis(selectedTitanId, { board: state.board, titans: titanState.players }, direction.dr, direction.dc);
+    setActionLog((prev) => [...prev, ...scan.log]);
+    if (scan.touched.length === 0) {
+      setActionLog((prev) => [...prev, "Aucun Titan touché sur cet axe."]);
+    } else {
+      advanceGraouhhhLoop({
+        titanId: selectedTitanId, dr: direction.dr, dc: direction.dc,
+        reculDistance: scan.reculDistance, mancheNumber,
+        remaining: scan.touched.slice().reverse().map((t) => t.id),
+        bagarreIds: [], touchedCount: scan.touched.length,
+      });
+    }
     markCardPlayed(selectedTitanId, "graouhhh");
     setGraouMode(false);
-    setLooseBlocks((prev) => ({ ...prev }));
-    setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, direction, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, direction, state.board, titanState.players, advanceGraouhhhLoop, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
 
   /* PORTÉE AFFICHÉE = PORTÉE RÉELLE.
      Deux écarts corrigés ici, tous deux remontés par Nikola le 2026-08-17.

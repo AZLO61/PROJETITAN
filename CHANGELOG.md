@@ -12,6 +12,20 @@ Règles modifiées (chacune verrouillée par un test) :
   à jour ; le tutoriel du livret décrit encore l'ancienne trajectoire par
   rebond et reste à reprendre, le remplacer à la main risquait d'introduire de
   nouvelles erreurs sur un exemple déjà en partie périmé.
+- **Graouhhh : DIL tranché puis déplacement, Titan par Titan.** L'ancien
+  résolveur déplaçait TOUS les Titans touchés d'un bloc avant d'afficher la
+  moindre décision DIL — l'attaquant voyait le résultat final avant même
+  d'avoir choisi quoi que ce soit. Le moteur traite désormais chaque Titan
+  touché individuellement (toujours du plus loin au plus proche) : sa
+  décision DIL est tranchée, PUIS il se déplace, avant de passer au suivant.
+  Impossible de passer au Titan suivant tant que ce n'est pas résolu — la
+  file de décisions s'en charge. `resolveGraouhhh` reste inchangée en
+  apparence (283 tests existants verrouillent son résultat final), elle
+  n'est plus qu'un enchaînement synchrone des mêmes briques ; le contrôleur,
+  lui, les rejoue une par une via `advanceGraouhhh`. Reste hors scope : le
+  tour d'une IA qui joue elle-même Graouhhh applique encore tous les
+  déplacements d'un coup (chemin séparé, plus gros chantier, non demandé
+  cette session).
 
 Corrections trouvées lors de la relecture du test à la table :
 
@@ -23,6 +37,11 @@ Corrections trouvées lors de la relecture du test à la table :
 - **L'aperçu d'Énergie de Tout Casser ne suivait pas le bouton "+".**
   L'Adrénaline ajoutée était bien comptée à la résolution réelle de la carte,
   mais pas dans le badge Énergie/Seuil 4 affiché avant de valider.
+- **Classement provisoire/final : le total n'apparaît plus deux fois.** Le
+  tableau détaillé donne déjà les totaux, colonne par colonne (ligne TOTAL) ;
+  le bloc Classement juste en dessous répétait la même valeur à côté de
+  chaque médaille. Il ne garde plus que le rang et le nom, sa vraie
+  valeur ajoutée étant le départage, pas le total déjà visible au-dessus.
 
 ## Non publié — seconde passe du 2026-08-18 (test à la table)
 
