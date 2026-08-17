@@ -3593,12 +3593,18 @@ function computeFinalScore(players, vertAssignments, rainbowWinnerId) {
       if (a.type === "color") {
         const ownsBase = baseCounts[t.id][a.target] >= 1; // condition : ≥1 bloc RÉEL de cette couleur
         if (!ownsBase) return; // Vert ignoré si condition non remplie
-        if (a.target === "orange") {
-          adjCounts[t.id].orange = Math.min(adjCounts[t.id].orange + 1, BAREME_ORANGE_PAIRES.length * 2);
-        } else {
-          const scale = BAREME[a.target];
-          if (scale) adjCounts[t.id][a.target] = Math.min(adjCounts[t.id][a.target] + 1, scale.length);
-        }
+        /* AUCUN PLAFOND ICI — corrigé le 2026-08-18.
+           Le compte était borné à la longueur du barème (9 Bleu, 8 Rose,
+           5 Rouge, 4 paires d'Orange). Sur un Repaire déjà au maximum, le
+           `Math.min` ne bornait pas l'ajout : il FAISAIT BAISSER le compte.
+           Dix Bleu plus un Vert donnaient 9, soit un bloc de moins qu'avant
+           d'ajouter quoi que ce soit. Le score final n'en souffrait pas —
+           `scoreBareme` plafonne déjà de son côté — mais le tableau de
+           décompte affichait un compte faux, et le bonus Rose, qui se joue
+           au NOMBRE, se calculait sur ce compte rogné : un Titan à 9 Rose
+           pouvait perdre les 10 points au profit d'un adversaire à 8.
+           Le plafonnement est l'affaire du barème, pas du comptage. */
+        adjCounts[t.id][a.target] += 1;
       } else if (a.type === "adn") {
         adjADN[t.id][a.target] = (adjADN[t.id][a.target] || 0) + 1;
       }

@@ -113,6 +113,32 @@ export default function DecisionPanels({ vm }) {
     );
   };
 
+  /* Une Piste ADN : « où j'en suis → ce que ça rapporte ». La position est
+     celle qui SERT AU CALCUL, Vert placé compris, et le Vert est signalé —
+     c'est le seul endroit où un Vert envoyé sur une piste devient visible. */
+  const cellulePiste = (t, piste, pts) => {
+    const valeur = finalScoreResult.adjADN[t.id][piste];
+    const base = t[piste] || 0;
+    const boostéParVert = valeur > base;
+    return (
+      <span
+        title={boostéParVert
+          ? `Piste à ${base} + ${valeur - base} Vert placé ici → ${pts} pts de classement`
+          : `Piste à ${valeur} → ${pts} pts de classement`}
+        style={{ display: "inline-flex", alignItems: "baseline", gap: 4, cursor: "help" }}
+      >
+        <strong style={{
+          color: valeur === 0 ? "rgba(255,255,255,.3)" : boostéParVert ? "#7ef2a8" : "#fffaee",
+          fontVariantNumeric: "tabular-nums",
+        }}>
+          {valeur}
+        </strong>
+        <span style={{ color: "rgba(255,255,255,.35)", fontSize: ".9em" }}>→</span>
+        <span style={{ color: pts > 0 ? "#FFD93D" : "rgba(255,255,255,.3)", fontVariantNumeric: "tabular-nums" }}>{pts}</span>
+      </span>
+    );
+  };
+
   /* Socles : « combien de pièces → combien de points ». Le nombre décide du
      trophée Collectionneur, la valeur décide du score, et les deux se lisent
      donc sur la même ligne. */
@@ -451,8 +477,12 @@ export default function DecisionPanels({ vm }) {
                     (t) => celluleSocles(t)],
                     ["🗿 Collectionneur", (t) => finalScoreResult.totals[t.id].collectionneurBonus || "—"],
                     ["🌈 Arc-en-ciel", (t) => rainbowWinnerId === t.id ? 5 : "—"],
-                    ["💪 Bagarre", (t) => finalScoreResult.totals[t.id].bagarrePts],
-                    ["💥 Destruction", (t) => finalScoreResult.totals[t.id].destructionPts],
+                    // Les Pistes ADN ne donnaient que des POINTS de podium :
+                    // impossible de vérifier le classement à l'œil, et un
+                    // Vert placé sur une piste devenait invisible. On montre
+                    // la position sur la piste, puis ce qu'elle rapporte.
+                    ["💪 Bagarre", (t) => cellulePiste(t, "bagarre", finalScoreResult.totals[t.id].bagarrePts)],
+                    ["💥 Destruction", (t) => cellulePiste(t, "destruction", finalScoreResult.totals[t.id].destructionPts)],
                     ["💉 Adrénaline×3", (t) => finalScoreResult.totals[t.id].adrenalinePts],
                   ].map(([label, fn], rowIdx) => (
                     <tr key={rowIdx} style={{ borderBottom: "1px solid rgba(255,255,255,.06)" }}>

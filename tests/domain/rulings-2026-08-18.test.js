@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   appliquerReplElement,
+  computeFinalScore,
   getCasesRepliDebris,
   projectInDirection,
   rentrerEnJeu,
@@ -12,13 +13,16 @@ import { setSeed } from "../../src/domain/rng.js";
    Un test par règle modifiée, comme l'impose le README : ce sont eux qui
    empêchent la prochaine passe de refaire le trajet inverse.
 
-   Quatre sujets :
-   · le MIROIR — par où revient un Titan poussé hors du ring ;
+   Les sujets :
+   · la SORTIE DU RING — par où revient un Titan poussé hors du plateau ;
+   · le TAS DE DÉBRIS — deux blocs sur une case s'empilent, ils ne se
+     poussent pas ;
    · la POUSSÉE EN CHAÎNE — un Titan qui en rencontre un autre le pousse,
      quelle que soit l'énergie qu'il lui reste ;
    · le REPLI OFFENSIF — viser la case d'un adversaire pour le déloger ;
    · l'ORDRE DIL / DÉPLACEMENT — le bloc perdu tombe là où le coup a été
-     encaissé, pas là où la cible finit sa course. */
+     encaissé, pas là où la cible finit sa course ;
+   · le COMPTE DES VERTS au décompte final. */
 
 const t = (id, cell, extra = {}) => ({
   id, cell, repaire: [], socles: [], adrenaline: 0,
@@ -180,6 +184,34 @@ describe("Repli offensif : déloger un adversaire pour marquer sa Bagarre", () =
     const board = bat("B9", 2);
     const cases = getCasesRepliDebris("B9", "C9", 1, 0, { board, looseBlocks: {}, titans: [] });
     expect(cases).not.toContain("B9");
+  });
+});
+
+describe("Décompte : un Vert n'enlève jamais de blocs", () => {
+  it("un barème déjà au maximum ne perd pas de blocs quand un Vert s'y ajoute", () => {
+    /* Le compte ajusté était borné à la longueur du barème. Sur un Repaire
+       au-delà du maximum, ce `Math.min` ne bornait pas l'ajout : il faisait
+       BAISSER le compte. Dix Bleu plus un Vert affichaient 9. */
+    const dix = Array(10).fill("bleu");
+    const joueurs = [t(1, "E5", { repaire: [...dix, "vert"] }), t(2, "A1")];
+    const res = computeFinalScore(joueurs, { 1: [{ type: "color", target: "bleu" }] }, null);
+    expect(res.adjCounts[1].bleu).toBe(11);
+    // Le barème, lui, plafonne bien : 9 blocs ou plus valent 30 points.
+    expect(res.baremeScores[1].bleu).toBe(30);
+  });
+
+  it("le bonus Rose se joue sur le compte réel, pas sur un compte rogné", () => {
+    // T1 a 9 Rose (barème long de 8) plus un Vert placé en Rose, T2 en a 9.
+    // Avec l'ancien plafond, T1 tombait à 8 et perdait les 10 points.
+    const joueurs = [
+      t(1, "E5", { repaire: [...Array(9).fill("rose"), "vert"] }),
+      t(2, "A1", { repaire: Array(9).fill("rose") }),
+    ];
+    const res = computeFinalScore(joueurs, { 1: [{ type: "color", target: "rose" }] }, null);
+    expect(res.adjCounts[1].rose).toBe(10);
+    expect(res.roseWinners).toEqual([1]);
+    expect(res.totals[1].roseBonus).toBe(10);
+    expect(res.totals[2].roseBonus).toBe(0);
   });
 });
 
