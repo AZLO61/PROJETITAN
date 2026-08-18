@@ -2761,6 +2761,19 @@ function canRage(defenderId, gameState) {
   // alignement erroné sur la contrainte de DIL.
   // FAQ #5 (conservée) : l'Adrénaline de la cible compte dans le total et
   // devient elle-même une ressource ciblable par RAGE.
+  //
+  /* DEUX ÉCARTS ASSUMÉS AVEC LE DILEMME — tranchés par Nikola le 2026-08-18,
+     après que la revue les ait signalés comme des incohérences possibles :
+
+     1. LES SOCLES NE SONT PAS CIBLABLES PAR UNE RAGE. Le Dilemme a été
+        étendu au Socle le 17 août (option anonyme, tirée au sort) ; la RAGE
+        ne l'est pas, et ne le sera pas. C'est pour cela que `socles` ne
+        compte PAS dans le total ci-dessous — ce n'est pas un oubli.
+     2. LE VERT EST CIBLABLE PAR UNE RAGE, alors que `getDilOptions` le
+        protège. La RAGE est plus brutale, c'est ce qui la distingue.
+
+     Le livret disait « n'importe quel élément de l'adversaire, sans aucune
+     restriction » : formulation corrigée aux quatre endroits le 18 août. */
   return t.repaire.length + (t.adrenaline || 0) >= 1;
 }
 
