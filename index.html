@@ -7,7 +7,15 @@
     <!-- Le nom du jeu, pas « Titan » tout court : c'est ce qui s'affiche dans
          l'onglet, dans les favoris et sur l'écran d'accueil d'une tablette. -->
     <title>Projet Titan</title>
+    <!-- Trois déclarations, pas une. Le SVG seul ne suffisait pas : Nikola
+         ne voyait toujours pas l'icône après vidage de cache sur deux
+         navigateurs, et plusieurs d'entre eux réclament un `.ico` classique
+         (certains le demandent même d'office, avant de lire cette balise).
+         L'ICO embarque les tailles 16/32/48, le PNG couvre l'écran d'accueil
+         d'une tablette — utile le jour de la démo. -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#5421A0" />
   </head>
   <body>

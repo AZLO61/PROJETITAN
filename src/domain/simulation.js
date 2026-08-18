@@ -62,6 +62,7 @@ import {
   checkEndGameTriggers,
   classementFinal,
   computeFinalScore,
+  ensureProgrammableHand,
   generateBoard,
   manchesMax,
   nextDetonateur,
@@ -186,6 +187,15 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
     const ordreManche = [...ordreJeu.slice(depart), ...ordreJeu.slice(0, depart)];
 
     // ── PHASE PROGRAMMATION ──
+    /* Le filet anti-blocage doit passer AVANT la planification, exactement
+       comme dans le contrôleur (effet sur `phase === "programmation"`).
+       Il manquait ici : sur 600 parties de diagnostic, 49 signalaient une
+       « manche sautée, main insuffisante » que le vrai jeu ne produit plus
+       depuis que `ensureProgrammableHand` rappelle des cartes de la Zone
+       Repos. Le simulateur mesurait donc l'équilibrage d'un jeu plus dur
+       que celui qu'on joue — et c'est sur ces chiffres qu'on arbitre. */
+    for (const t of etat.titans) ensureProgrammableHand(t);
+
     for (const id of ordreManche) {
       const cartes = planProgrammation(id, etat, profilsUtilises[id], manche);
       if (cartes.length === ROUNDS_PAR_MANCHE) {

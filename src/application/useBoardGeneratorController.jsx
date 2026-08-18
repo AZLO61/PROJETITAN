@@ -576,8 +576,32 @@ export function useBoardGeneratorController() {
      l'instantané, y compris les décisions en suspens. Seuls restent dehors
      les états d'INTERFACE (mode carte ouvert, compteur d'Adrénaline engagé,
      animation), remis à plat par `undoTick`. */
+  /* ⚠️ LE CLONE SE FAIT MAINTENANT, PAS DANS L'UPDATER ──
+     Bug remonté par Nikola le 2026-08-18 : « les blocs qui ont pris le warp
+     ne sont pas revenus à leur case initiale, ça fausse la partie. »
+
+     L'instantané entier était construit À L'INTÉRIEUR de `setUndoStack(prev
+     => ...)`. Or React n'exécute un updater fonctionnel qu'au traitement de
+     sa file, donc APRÈS le retour de la fonction appelante — et le domaine,
+     lui, mute l'état EN PLACE (`bldg.blocks.pop()`, `looseBlocks[k].push()`,
+     `titan.destruction += 1`). Séquence réelle d'un Tout Casser :
+
+       1. captureSnapshot()      → programme un updater, ne clone rien
+       2. resolveToutCasser(...) → casse le plateau en place
+       3. setState(prev => ...)  → déclenche le rendu
+       4. React exécute (1)      → structuredClone d'un plateau DÉJÀ CASSÉ
+
+     L'instantané enregistrait donc l'état d'APRÈS l'action. « Annuler »
+     dépilait bien, restaurait bien, mais restaurait l'état détruit : le
+     bouton semblait ne rien faire. Seules les actions qui clonent avant de
+     modifier (défausse, programmation) échappaient au piège, ce qui
+     explique que `annuler.test.jsx` restait vert.
+
+     Le clone est désormais évalué de façon SYNCHRONE, à l'appel, avant que
+     le moindre résolveur n'ait pu toucher à l'état. Ne jamais redéplacer
+     ce calcul dans l'updater. */
   const captureSnapshot = useCallback(() => {
-    setUndoStack((prev) => [...prev, {
+    const snapshot = {
       state: structuredClone(state),
       titanState: structuredClone(titanState),
       looseBlocks: structuredClone(looseBlocks),
@@ -616,7 +640,8 @@ export function useBoardGeneratorController() {
       // désynchronisant l'avancement de round au coup suivant.
       waitingNextTitan,
       cardsPlayedCount: { ...cardsPlayedCountRef.current },
-    }]);
+    };
+    setUndoStack((prev) => [...prev, snapshot]);
   }, [
     state, titanState, looseBlocks, activePlayerId, phase, passifUsed, actionLog, waitingNextTitan,
     decisionQueue, repliQueue, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcNTargets,
@@ -1671,9 +1696,21 @@ export function useBoardGeneratorController() {
       // cliquée (activePlayerId ne change qu'à ce moment-là). TODO : quand
       // "Toujours plus"/"Gourmandise" seront codés, ajouter l'exception ici.
       if (waitingNextTitan) return false;
+      /* UNE DÉCISION NON TRANCHÉE GÈLE AUSSI LES CARTES.
+         Le clic sur le PLATEAU était déjà bloqué pendant un DIL/RAGE, un
+         repli ou une répartition d'Amas (cf. `decisionEnAttente` dans
+         BoardPanel) — mais rien n'empêchait de jouer une CARTE par-dessus.
+         La carte se résolvait alors sur un plateau que la décision en cours
+         allait encore modifier : le bloc perdu en DIL tombe sur la case
+         d'impact d'AVANT, l'Amas se répartit après coup. Deux actions se
+         marchaient dessus, et l'ordre du résultat dépendait de la vitesse
+         de clic. Même garde-fou, mêmes sources que le plateau. */
+      if (currentDecision || currentRepli || ecroulement) return false;
+      if (fpmcAttackerId && (fpmcPendingIds.length > 0 || fpmcCurrent)) return false;
       return true;
     },
-    [phase, selectedTitan, activePlayerId, waitingNextTitan]
+    [phase, selectedTitan, activePlayerId, waitingNextTitan,
+     currentDecision, currentRepli, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcCurrent]
   );
 
   const getPlayBlockReason = useCallback(
@@ -1683,9 +1720,16 @@ export function useBoardGeneratorController() {
       if (selectedTitan.id !== activePlayerId) return `Pas le tour de T${selectedTitan.id}`;
       if (!selectedTitan.programmed.includes(cardId)) return `${CARD_LABEL[cardId]} non programmée.`;
       if (waitingNextTitan) return `Confirme "Titan suivant" avant de continuer.`;
+      // Dire CE QU'ON ATTEND, pas seulement que c'est bloqué : sans ça la
+      // carte devient grise sans raison visible au milieu d'une partie.
+      if (currentDecision) return `Tranche d'abord le ${currentDecision.type} en attente.`;
+      if (currentRepli) return `Termine d'abord le repli en attente.`;
+      if (ecroulement) return `Termine d'abord la répartition de l'Amas.`;
+      if (fpmcAttackerId && (fpmcPendingIds.length > 0 || fpmcCurrent)) return `Termine d'abord Faut Pas Me Chauffer.`;
       return "";
     },
-    [phase, selectedTitan, activePlayerId, waitingNextTitan]
+    [phase, selectedTitan, activePlayerId, waitingNextTitan,
+     currentDecision, currentRepli, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcCurrent]
   );
 
   // Logique d'avancement de round (Phase Action) — commune à "jouer une
