@@ -27,16 +27,22 @@ export default function TitanResourceBand({
   titanModes = {}, titanProfiles = {}, profilsReveles = {}, revelerProfil, profileLabel,
   waitingNextTitan = false, titansEnAttente = [],
 }) {
-  /* SURVOL : UNIQUEMENT SUR SON PROPRE TITAN, TOUJOURS.
-     Une première lecture du retour de Nikola avait ajouté un blocage
-     supplémentaire pendant l'inter-tour (entre la carte jouée et le clic sur
-     « ▶ Titan suivant ») : `activePlayerId` reste sur le joueur qui vient de
-     jouer tant que ce bouton n'est pas cliqué, donc pendant qu'on lui laisse
-     le temps de relire ses propres cartes — pas encore pendant que l'appareil
-     change de mains, ce qui n'arrive qu'AU clic. Reprécisé par Nikola le
-     2026-08-17 : la seule règle voulue est « mon Titan à moi, oui ; les
-     autres Titans, non » — sans exception pour cette fenêtre-là. */
-  const estSonTour = (id) => activePlayerId === id;
+  /* SURVOL : LA SÉLECTION DÉCIDE, PAS LE TOUR EN COURS.
+     Remonté SIX fois par Nikola (dernier repère : 2026-08-18) : « je veux
+     que si j'hover mes rectangles pleins jaunes de MON TITAN, même si c'est
+     pas mon tour, je puisse savoir il me reste quoi à jouer. »
+
+     Deux lectures précédentes s'étaient trompées dans la même direction :
+     la première bloquait le survol pendant l'inter-tour (entre la carte
+     jouée et le clic sur « Titan suivant ») ; la seconde l'avait rouvert
+     pour cette fenêtre-là, mais restait câblée sur `activePlayerId` — donc
+     toujours fermée dès qu'un AUTRE Titan devient actif, exactement le cas
+     que Nikola décrit désormais sans ambiguïté : « même si c'est pas mon
+     tour ». Le vrai signal de confiance n'est pas le tour officiel, c'est la
+     SÉLECTION : c'est déjà comme ça que la Phase Programmation traite le
+     secret (« le Titan sélectionné est celui qui programme, ses cartes lui
+     appartiennent »). On applique la même règle en Phase Action. */
+  const estSonTour = (id) => selectedTitanId === id;
   const enAttenteIds = new Set((titansEnAttente || []).map((x) => x.id));
   const colorCount = (titan) => {
     const c = { bleu: 0, rose: 0, orange: 0, rouge: 0, vert: 0 };

@@ -274,8 +274,12 @@ export default function BoardPanel({ vm }) {
               style={{ cursor: "help" }}
             >
               <span style={{ fontSize: ".7rem", color: "rgba(255,255,255,.55)" }}>Énergie </span>
+              {/* Retour de Nikola (répété) : le chiffre lui-même reste en
+                  jaune, y compris au Seuil 4 — l'avertissement rouge vit
+                  déjà dans le badge "Seuil 4" juste à côté, pas besoin de
+                  répéter la couleur sur les deux. */}
               <strong style={{
-                fontSize: "1.05rem", color: energie >= 4 ? "#FF2E63" : "#FFD93D",
+                fontSize: "1.05rem", color: "#FFD93D",
                 fontVariantNumeric: "tabular-nums",
               }}>
                 {energie}

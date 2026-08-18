@@ -1223,7 +1223,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         remaining = 0;
         break;
       }
-      /* ── UN TITAN QUI EN RENCONTRE UN AUTRE LE POUSSE ──
+      /* ── UN ÉLÉMENT QUI EN RENCONTRE UN TITAN LE POUSSE, TITAN OU DÉBRIS ──
          Ruling Nikola du 2026-08-18, énoncé sur Graouhhh : « si un Titan
          poussé rencontre un Titan, il le pousse ».
 
@@ -1234,20 +1234,13 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
          contre son voisin au lieu de le décaler, et la Bagarre de chaîne ne
          partait jamais.
 
-         Un TITAN en mouvement pousse donc toujours, d'au moins 1 case. Un
-         DÉBRIS garde la règle d'origine : sous 2 d'énergie il se pose sur la
-         case adjacente, il n'a pas la masse pour bouger un Titan. */
-      const elementEstUnTitan = ctx.movingTitanId != null;
-      const energieTransmise = elementEstUnTitan
-        ? Math.max(1, remainingAfterArrival)
-        : remainingAfterArrival;
-      if (!elementEstUnTitan && remainingAfterArrival <= 1) {
-        log.push(
-          `${nextKey} : Titan ${occupantTitanId} déjà présent — poussée impossible (énergie restante ${remainingAfterArrival}) → arrêt en ${rowFromIndex(r)}${c}.`
-        );
-        noterRepli(rowFromIndex(r) + c, nextKey);
-        break; // reste sur la case actuelle (r, c) — case adjacente
-      }
+         Reprécisé par Nikola le 2026-08-18 : « qu'importe le seuil, le
+         Titan se déplace SI POSSIBLE avec l'énergie restante que l'élément
+         lui a transmise. » Un DÉBRIS gardait jusqu'ici une règle à part
+         (poussée impossible sous 2 d'énergie, « il n'a pas la masse ») —
+         ce n'est plus le cas : Titan et débris poussent tous deux d'au
+         moins 1 case dès qu'il reste une énergie à transmettre. */
+      const energieTransmise = Math.max(1, remainingAfterArrival);
       /* ── UN TITAN DÉJÀ EN VOL NE SE FAIT PAS POUSSER UNE SECONDE FOIS ──
          Défaut trouvé en campagne (30 parties, graines 3020 et 3029) le jour
          où la poussée est devenue systématique : deux Titans se retrouvaient
@@ -3351,6 +3344,39 @@ function sendCardToOwnRepos(titan, cardId, mancheNumber, faceUp) {
 }
 
 /* ============================================================
+   MAIN TROP CIBLÉE — secours à la Programmation
+   ============================================================
+   Retour de Nikola (test à la table, 2026-08-18) : « j'ai été extrêmement
+   ciblé, j'ai que 2 cartes, c'est pas possible de jouer. » `programCards`
+   exige exactement 3 cartes EN MAIN ; un Titan fatigué à répétition peut
+   se retrouver avec une main de moins de 3, ce qui bloque durablement sa
+   Programmation — aucune carte, même en main, ne peut alors satisfaire la
+   règle. Rare (il faut plusieurs Fatigues avant que ce Titan ait pu
+   reprogrammer), mais un blocage total mérite un filet de sécurité plutôt
+   qu'une partie qui ne peut plus avancer.
+
+   Mécanique demandée : mélanger les cartes qui LUI ont été retirées
+   (sa propre Zone Repos, quel que soit l'attaquant — le vol/la Fatigue ne
+   transfère jamais la carte, cf. sendCardToOwnRepos) et en reprendre au
+   hasard jusqu'à revenir à 3 cartes disponibles avec celles déjà en main.
+   Elles réintègrent la main directement, en avance sur leur
+   `returnAtManche` normal — c'est le prix du secours. */
+function ensureProgrammableHand(titan) {
+  const log = [];
+  while (titan.hand.length < 3 && titan.repos.length > 0) {
+    const entry = pick(titan.repos);
+    const idx = titan.repos.indexOf(entry);
+    titan.repos.splice(idx, 1);
+    titan.hand.push(entry.cardId);
+    log.push(
+      `Titan ${titan.id} : main trop ciblée (${titan.hand.length - 1} carte(s) avant secours) — ` +
+      `${CARD_LABEL[entry.cardId]} reprise par anticipation depuis la Zone Repos, en avance sur son retour normal.`
+    );
+  }
+  return { log };
+}
+
+/* ============================================================
    VOL EN PHASE REPOS — refonte complète (session)
    ============================================================
    Ruling confirmé Nikola : la Phase Repos ne démarre qu'une fois que
@@ -3937,6 +3963,7 @@ export {
   getRecuperationPool,
   resolveRecuperation,
   programCards,
+  ensureProgrammableHand,
   discardCardHidden,
   getNonPlayedPool,
   sendCardToOwnRepos,

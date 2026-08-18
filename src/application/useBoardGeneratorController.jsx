@@ -20,7 +20,7 @@ const {
   choisirRepliIA, appliquerRepli, appliquerReplElement,
   canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
-  getRecuperationPool, resolveRecuperation, retirerPileVide, programCards, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
+  getRecuperationPool, resolveRecuperation, retirerPileVide, programCards, ensureProgrammableHand, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
   resolveFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, resolveFautPasMeChauffer, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS,
   scoreBareme, PODIUM_POINTS, rankWithTies, countRepaireColors, computeFinalScore, classementFinal,
   pick,
@@ -380,6 +380,28 @@ export function useBoardGeneratorController() {
     setPhaseValidated({});
   }, [phaseValidated, titanState.ordreJeu, titanState.detonateur, phase, advanceManche, eventsEnabled, gameOver,
       currentDecision, currentRepli, ecroulement]);
+
+  /* ── MAIN TROP CIBLÉE : SECOURS À L'ENTRÉE EN PROGRAMMATION ──
+     Retour de Nikola (test à la table, 2026-08-18) : « j'ai été extrêmement
+     ciblé, j'ai que 2 cartes, c'est pas possible de jouer. » `programCards`
+     exige exactement 3 cartes en main ; une main trop réduite par des
+     Fatigues répétées bloquait durablement la Programmation de ce Titan.
+     Effet séparé de la transition de phase ci-dessus (peu importe le
+     chemin qui mène à "programmation" — mi-Manche ou nouvelle Manche —
+     il suffit que la phase le devienne) pour rester simple et robuste. */
+  useEffect(() => {
+    if (phase !== "programmation") return;
+    const logs = [];
+    titanState.players.forEach((t) => {
+      const res = ensureProgrammableHand(t);
+      logs.push(...res.log);
+    });
+    if (logs.length > 0) {
+      setActionLog((prev) => [...prev, ...logs]);
+      setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   // Rainbow tracking
   // Bug remonté : "5 couleurs" attendu, mais le vert était explicitement
