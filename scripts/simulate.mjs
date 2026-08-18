@@ -18,7 +18,8 @@
        une IA, ou rechargé plus tard pour comparer deux campagnes.
 ============================================================ */
 
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { lancerCampagne } from "../src/domain/simulation.js";
 import { FORCES, TEMPERAMENTS, makeProfile } from "../src/domain/aiEvaluation.js";
 import { CARD_LABEL } from "../src/domain/gameRules.js";
@@ -176,6 +177,13 @@ if (opts.json) {
       cartesJouees: r.cartesJouees,
     })),
   };
+  /* Le dossier de destination est créé ici, et pas seulement par
+     SIMULATEUR.bat. Sans ça, `npm run simulate -- --json simulations/x.json`
+     lancé à la main joue TOUTE la campagne puis meurt sur un ENOENT au
+     moment d'écrire : sur 500 parties, c'est un quart d'heure de calcul
+     perdu à la dernière ligne, avec une pile d'appels Node pour seule
+     explication. */
+  await mkdir(dirname(opts.json), { recursive: true });
   await writeFile(opts.json, JSON.stringify(rapport, null, 2), "utf8");
   if (!opts.silencieux) console.log(`  Rapport JSON écrit dans ${opts.json}\n`);
 }
