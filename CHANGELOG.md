@@ -1,5 +1,41 @@
 # Changelog
 
+## Non publié — septième passe du 2026-08-18 (Nikola demande de ne rien supposer)
+
+- **Boing Boing, vraie règle enfin trouvée :** chaque obstacle se saute
+  gratuitement, seule la case d'atterrissage (libre) coûte 1 — remplace la
+  règle des "éléments collés" du 17 août, qui empêchait justement le
+  saute-mouton sur un obstacle isolé. Trouvé après avoir signalé à Nikola
+  la contradiction entre les deux règles ; il a tranché avec un exemple
+  recalculé.
+- **Sortie de plateau en diagonale : re-vérifiée avec de nouveaux exemples,
+  toujours correcte.** Aucun changement de code, cette fois confirmé sans
+  ambiguïté.
+- **Débris qui pousse un Titan dans un bâtiment sous le Seuil 4 : vérifié
+  par script direct, déjà correct** (corrigé par le retrait des rebonds
+  plus tôt dans la session).
+
+Trois points restent sans diagnostic confirmé, faute d'avoir pu reproduire
+le mécanisme exact en lisant le code seul — repro plus précise demandée à
+Nikola :
+
+- **Favicon toujours absent après vidage de cache sur 2 navigateurs.** Le
+  code est pourtant vérifié correct (dev ET build, avec le bon préfixe
+  `/PROJETITAN/`) — reste à savoir sur quelle URL exactement Nikola teste
+  (`JOUER-A-TITAN.bat` local, ou le site en ligne, qui ne peut de toute
+  façon recevoir aucun de ces correctifs tant que le dépôt n'a pas de
+  remote).
+- **Annuler ne restaurerait pas les débris en 2D/3D.** Le mécanisme de
+  snapshot capture et restaure pourtant explicitement `looseBlocks`, et la
+  signature 3D en dépend bien. Piste probable non confirmée : plusieurs
+  `captureSnapshot()` s'empilent parfois pour une seule action visible
+  (un pour la carte, un de plus par décision DIL/RAGE résolue) — un seul
+  clic sur "Annuler" ne défait alors que le dernier maillon.
+- **Une carte encore programmée (1 restante) mais la phase saute quand
+  même en Programmation.** `cardsPlayedCountRef` (compteur de rounds) est
+  pourtant bien restauré par Annuler, contrairement à l'hypothèse initiale
+  d'une désynchronisation par undo incomplet.
+
 ## Non publié — sixième passe du 2026-08-18 (nouveau test à la table)
 
 - **Survol des cartes programmées : enfin la bonne règle.** Deux lectures
