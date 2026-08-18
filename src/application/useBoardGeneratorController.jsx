@@ -16,7 +16,7 @@ const {
   rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, releaseSocle, projectInDirection, estSurLePlateau, indexerTitans, rentrerEnJeu,
   resolveToutCasserBatiments, resolveToutCasserBlocs,
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
-  resolveGraouhhh, scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, boingBoingStepCost, resolveBoingBoing,
+  scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, boingBoingStepCost, resolveBoingBoing,
   choisirRepliIA, appliquerRepli, appliquerReplElement,
   canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
@@ -989,9 +989,35 @@ export function useBoardGeneratorController() {
           newLog = res.log; newDecisions = res.decisions || []; // défensif (fix session) : certains résolveurs (ex. resolveJeNePartagePas) ne retournent jamais "decisions", d'autres l'omettent sur leurs early-returns "applied:false" — sans ce garde, newDecisions.some(...) plus bas plante avec "Cannot read properties of undefined (reading 'some')"
           setState((p) => ({ ...p })); setLooseBlocks((p) => ({ ...p }));
         } else if (cardId === "graouhhh") {
+          /* MÊME CHEMIN QUE LE JOUEUR HUMAIN, Titan par Titan.
+             L'IA passait par le wrapper monolithique `resolveGraouhhh`, qui
+             déplace TOUS les Titans de l'axe d'un coup puis rend les
+             décisions en bloc. Un joueur humain visé par cette carte voyait
+             donc ses Titans bouger AVANT qu'on lui demande de trancher son
+             Dilemme — l'inverse de l'ordre que Nikola a fixé le 18 août
+             (« DIL/RAGE puis déplacement, et Titan suivant si il y en a un
+             autre »). L'état final était le bon (l'ordre de traitement est
+             identique des deux côtés, du plus loin au plus proche), mais la
+             table lisait la scène à l'envers.
+
+             `advanceGraouhhhLoop` enchaîne toute seule tant que les
+             défenseurs sont des IA, et ne rend la main que sur un vrai
+             défenseur humain — le cas où l'ordre compte. Elle enfile
+             elle-même ses décisions, d'où `newDecisions` laissé vide ici. */
           const d = dir || { dr: -1, dc: 0 };
-          const res = resolveGraouhhh(playerId, d.dr, d.dc, mancheNumber, jeu2);
-          newLog = res.log; newDecisions = res.decisions || []; // défensif (fix session) : certains résolveurs (ex. resolveJeNePartagePas) ne retournent jamais "decisions", d'autres l'omettent sur leurs early-returns "applied:false" — sans ce garde, newDecisions.some(...) plus bas plante avec "Cannot read properties of undefined (reading 'some')"
+          const scan = scanGraouhhhAxis(playerId, jeu2, d.dr, d.dc);
+          newLog = [...scan.log];
+          newDecisions = [];
+          if (scan.touched.length === 0) {
+            newLog.push("Aucun Titan touché sur cet axe.");
+          } else {
+            advanceGraouhhhLoop({
+              titanId: playerId, dr: d.dr, dc: d.dc,
+              reculDistance: scan.reculDistance, mancheNumber,
+              remaining: scan.touched.slice().reverse().map((t) => t.id),
+              bagarreIds: [], touchedCount: scan.touched.length,
+            });
+          }
           setLooseBlocks((p) => ({ ...p }));
         } else if (cardId === "boing_boing") {
           if (dest) {
@@ -1468,8 +1494,21 @@ export function useBoardGeneratorController() {
      instantanément (cf. autoResolveIaDecisions dans enqueueDecisions), donc
      plusieurs Titans peuvent s'enchaîner d'un coup sans jamais passer par la
      file — seul un vrai défenseur humain interrompt la boucle. */
+  /* Lit les MIROIRS (`aiStateRef` & co.) et non la closure, pour deux
+     raisons. D'abord la robustesse : la boucle IA appelle cette fonction
+     depuis un timer de 2 s, avec une closure capturée bien avant. Ensuite
+     la stabilité : sans `state`/`titanState`/`looseBlocks` en dépendances,
+     ce callback ne change plus d'identité à chaque rendu, et l'effet IA
+     peut le capturer une fois pour toutes sans risque de version périmée.
+     Pour le joueur humain, rien ne change : `jouerGraouhhh` appelle la
+     boucle dans le même tick, quand les miroirs sont exacts. */
   const advanceGraouhhhLoop = useCallback((continuation) => {
-    const gameState = { board: state.board, titans: titanState.players, looseBlocks, replis: [] };
+    const gameState = {
+      board: aiStateRef.current.board,
+      titans: aiTitanStateRef.current.players,
+      looseBlocks: aiLooseBlocksRef.current,
+      replis: [],
+    };
     let cont = continuation;
     for (;;) {
       const result = advanceGraouhhh(gameState, cont);
@@ -1480,9 +1519,10 @@ export function useBoardGeneratorController() {
       cont = result.continuation;
     }
     enqueueReplis(gameState.replis);
+    setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis]);
+  }, [enqueueDecisions, enqueueReplis]);
 
   const dilAttackerPick = useCallback((color) => {
     setDecisionQueue((prev) => {
