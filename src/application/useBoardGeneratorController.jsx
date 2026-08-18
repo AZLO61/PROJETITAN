@@ -351,6 +351,48 @@ export function useBoardGeneratorController() {
     const ids = titanState.ordreJeu;
     const allValidated = ids.every((id) => phaseValidated[id]);
     if (!allValidated) return;
+
+    /* ── ON NE FERME PAS LA PHASE ACTION SUR UNE CARTE NON JOUÉE ──
+       Retour Nikola (2026-08-18) : « il me restait une carte à jouer, mais
+       la phase est passée au round suivant… je devais choisir trois
+       nouvelles cartes alors qu'il m'en restait une, plus visible ni
+       jouable. » État contradictoire, et partie faussée.
+
+       `advanceActionRound` valide la phase pour TOUT LE MONDE dès que son
+       compteur de rounds atteint 3, sans jamais regarder si les cartes ont
+       réellement été jouées. Tant que compteur et réalité coïncident, tout
+       va bien ; le moindre écart (un `advanceActionRound` de trop, cf. le
+       correctif de `markCardPlayed`) enterrait une carte encore programmée
+       et ouvrait la Programmation par-dessus.
+
+       Plutôt que de faire confiance au compteur, on tranche ici sur le seul
+       fait qui ne ment pas : reste-t-il des cartes programmées ? Si oui, la
+       phase ne se ferme pas. On recale le compteur sur la vérité (3 cartes
+       programmées par Titan en début de Phase Action) et on rend la main au
+       Titan en retard. Le journal le dit, pour qu'un écart se voie au lieu
+       de se rattraper en silence. */
+    if (phase === "action") {
+      const enRetard = ids.filter((id) => {
+        const t = titanState.players.find((p) => p.id === id);
+        return (t?.programmed.length || 0) > 0;
+      });
+      if (enRetard.length > 0) {
+        const recale = { ...cardsPlayedCountRef.current };
+        ids.forEach((id) => {
+          const t = titanState.players.find((p) => p.id === id);
+          if (t) recale[id] = 3 - t.programmed.length;
+        });
+        cardsPlayedCountRef.current = recale;
+        setPhaseValidated({});
+        setWaitingNextTitan(false);
+        setActivePlayerId(enRetard[0]);
+        setActionLog((prev) => [...prev,
+          `⚠️ Phase Action : ${enRetard.map((id) => `T${id}`).join(", ")} a encore une carte programmée — ` +
+          `la Programmation ne démarre pas, la main revient à T${enRetard[0]}.`]);
+        return;
+      }
+    }
+
     if (phase === "repos") {
       // advanceManche renvoie false quand elle a détecté la fin de partie.
       // La phase ne doit alors PAS repartir en Programmation : c'est ce qui
@@ -378,8 +420,8 @@ export function useBoardGeneratorController() {
       setPhase(nextPhase);
     }
     setPhaseValidated({});
-  }, [phaseValidated, titanState.ordreJeu, titanState.detonateur, phase, advanceManche, eventsEnabled, gameOver,
-      currentDecision, currentRepli, ecroulement]);
+  }, [phaseValidated, titanState.ordreJeu, titanState.detonateur, titanState.players, phase, advanceManche,
+      eventsEnabled, gameOver, currentDecision, currentRepli, ecroulement]);
 
   /* ── MAIN TROP CIBLÉE : SECOURS À L'ENTRÉE EN PROGRAMMATION ──
      Retour de Nikola (test à la table, 2026-08-18) : « j'ai été extrêmement
@@ -1795,7 +1837,13 @@ export function useBoardGeneratorController() {
          réellement jouées » de « combien de fois cette fonction a été
          appelée pour lui ». Le round ne doit avancer QUE si cet appel a
          réellement déplacé une carte. */
-      const titanAvant = titanState.players.find((t) => t.id === titanId);
+      /* On lit le MIROIR (`aiTitanStateRef`, tenu à jour après chaque rendu)
+         et non la closure : la boucle IA enchaîne ses étapes sur des timers
+         de 2 s et rappelle donc un `markCardPlayed` capturé six secondes
+         plus tôt. Sur la closure, un `programmed` périmé aurait pu faire
+         sauter l'avancement du round et bloquer le tour de l'IA. */
+      const source = aiTitanStateRef.current?.players || titanState.players;
+      const titanAvant = source.find((t) => t.id === titanId);
       const carteReellementProgrammee = Boolean(titanAvant?.programmed.includes(cardId));
 
       // 1. Déplacer la carte programmed → playedThisManche
@@ -1832,7 +1880,8 @@ export function useBoardGeneratorController() {
       // était renseigné DANS le updater de setTitanState, donc encore vide
       // juste après l'appel (le updater ne s'exécute pas synchronement) —
       // le vérifier ici, avant tout `setState`, sur l'état déjà connu.
-      const titanAvant = titanState.players.find((t) => t.id === titanId);
+      const source = aiTitanStateRef.current?.players || titanState.players;
+      const titanAvant = source.find((t) => t.id === titanId);
       const carteReellementProgrammee = Boolean(titanAvant?.programmed.includes(cardId));
       let logMsg = "";
       setTitanState((prev) => {
