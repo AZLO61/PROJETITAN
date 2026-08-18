@@ -33,11 +33,20 @@ async function partieAvecTroisTitansEnLigne() {
 
   const [t1, t2, t3] = vmCourant.titanState.players;
   act(() => {
-    // Ligne B : jamais une case de bâtiment, quel que soit le plateau
-    // généré aléatoirement pour ce test — l'axe est donc garanti dégagé.
+    /* On DÉGAGE la ligne B et on écarte le 4e Titan, au lieu de compter
+       sur le tirage. Le commentaire d'origine affirmait que la ligne B ne
+       porte « jamais » de bâtiment : c'est faux, le plateau est aléatoire.
+       Le test passait isolé mais échouait environ une fois sur trois en
+       suite complète — l'état du RNG partagé n'y est pas le même, donc le
+       plateau non plus, et un bâtiment en B5 (ou le 4e Titan tombé sur
+       l'axe) changeait la liste des Titans touchés. Diagnostiqué le
+       2026-08-18 en bouclant la suite jusqu'à capturer l'échec. */
+    for (let c = 1; c <= 9; c++) delete vmCourant.state.board[`B${c}`];
+    vmCourant.setState((prev) => ({ ...prev }));
+    if (vmCourant.titanState.players[3]) vmCourant.titanState.players[3].cell = "I9";
     t1.cell = "B2"; t1.programmed = ["graouhhh"];
-    t2.cell = "B4"; t2.repaire = ["bleu", "rose"];
-    t3.cell = "B6"; t3.repaire = ["bleu", "rose"];
+    t2.cell = "B4"; t2.repaire = ["bleu", "rose"]; t2.socles = [];
+    t3.cell = "B6"; t3.repaire = ["bleu", "rose"]; t3.socles = [];
     vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
     vmCourant.setPhase("action");
     vmCourant.setActivePlayerId(t1.id);

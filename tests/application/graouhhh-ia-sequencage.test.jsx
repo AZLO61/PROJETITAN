@@ -20,6 +20,7 @@ import { isValidElement } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useBoardGeneratorController } from "../../src/application/useBoardGeneratorController.jsx";
+import { FORCES, TEMPERAMENTS, makeProfile } from "../../src/domain/aiEvaluation.js";
 
 let vmCourant = null;
 function Harnais() {
@@ -52,9 +53,20 @@ describe("Graouhhh joué par une IA", () => {
          selon le tirage, ce qui est pire qu'un test absent. */
       for (let c = 1; c <= 9; c++) delete vmCourant.state.board[`B${c}`];
       vmCourant.setState((prev) => ({ ...prev }));
+      /* Profil FIXÉ. Il est tiré au hasard au lancement, et c'est lui qui
+         pèse le choix de direction de `planCardPlay` : selon le tirage,
+         l'IA visait parfois un axe vide et le test échouait sans qu'aucun
+         code ne soit en cause. Vu une fois sur trois en suite complète —
+         un test qui ment une fois sur trois est pire que pas de test. */
+      vmCourant.setTitanProfiles((prev) => ({
+        ...prev, [t1.id]: makeProfile(FORCES.EXPERT, TEMPERAMENTS.OPPORTUNISTE),
+      }));
       t1.cell = "B2"; t1.programmed = ["graouhhh"]; t1.hand = [];
       t2.cell = "B4"; t2.repaire = ["bleu", "rose"];
       t3.cell = "B6"; t3.repaire = ["bleu", "rose"];
+      // Le 4e Titan est écarté du plateau : sa position aléatoire pouvait
+      // offrir à l'IA un axe plus tentant que celui qu'on a préparé.
+      if (vmCourant.titanState.players[3]) vmCourant.titanState.players[3].cell = "I9";
       vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
       // Mouvement passif et Ramassage déjà consommés : sans ça l'IA se
       // déplace d'abord, l'axe de tir n'est plus celui qu'on a préparé, et
