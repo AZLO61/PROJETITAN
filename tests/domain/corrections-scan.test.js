@@ -404,8 +404,9 @@ describe("Boing Boing sur un Amas — répartition au choix", () => {
     expect(res.applied).toBe(true);
     expect(res.ecroulement.blocs).toHaveLength(3);
     expect(res.ecroulement.cellKey).toBe("E6");
-    // Saut de 1 case sur une portée de 3 : il reste 2 d'énergie.
-    expect(res.ecroulement.energie).toBe(2);
+    // E6 est un Amas, donc un obstacle : il se saute gratuitement (retour
+    // Nikola du 2026-08-18) — il reste l'intégralité des 3 d'énergie.
+    expect(res.ecroulement.energie).toBe(3);
     expect(etat.titans[0].cell).toBe("E6");
   });
 

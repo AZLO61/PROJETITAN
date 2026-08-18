@@ -105,7 +105,7 @@ export const CARTES = [
     force: 2,
     icon: "🦘",
     couleur: "#FFD93D",
-    resume: "Destination au choix, 3 cases max, tous azimuts, obstacles ignorés. Éléments collés = 1 seule case.",
+    resume: "Destination au choix, 3 cases max, tous azimuts. Chaque obstacle se saute gratuitement (saute-mouton) : seules les cases libres comptent dans les 3.",
     effets: [
       "Bloc libre à l'arrivée : ramassé.",
       "Bâtiment (Seuil 4) : Écroulement, les blocs sont distribués sur les cases adjacentes.",

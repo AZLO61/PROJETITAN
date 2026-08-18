@@ -5,10 +5,11 @@
    plusieurs clics sur les différentes cases mon chemin, pour que ce soit
    clair pour tout le monde. » Un seul clic sur la destination laissait le
    moteur choisir sa propre trajectoire (la plus courte) sans jamais la
-   montrer. Ce test verrouille le tracé manuel : coût 0 entre deux
-   obstacles du même groupe collé, coût 1 sinon, recliquer une case du
-   chemin y revient, et on ne peut pas VALIDER un atterrissage sur un
-   bâtiment encore debout — seulement le traverser en vol.
+   montrer. Ce test verrouille le tracé manuel : coût 0 sur une case
+   obstacle (on saute par-dessus, saute-mouton, reprécisé le 18 août), coût
+   1 sur une case libre, recliquer une case du chemin y revient, et on ne
+   peut pas VALIDER un atterrissage sur un bâtiment encore debout —
+   seulement le traverser en vol.
 ============================================================ */
 import { afterEach, describe, expect, it } from "vitest";
 import { isValidElement } from "react";
@@ -57,7 +58,7 @@ async function partieAvecUnGroupeColle() {
 describe("Boing Boing : chemin tracé case par case", () => {
   afterEach(() => { cleanup(); vmCourant = null; });
 
-  it("applique le coût 0 entre deux obstacles collés, 1 sinon, et refuse un clic non adjacent", async () => {
+  it("applique le coût 0 sur un obstacle, 1 sur une case libre, et refuse un clic non adjacent", async () => {
     await partieAvecUnGroupeColle();
 
     // E9 n'est adjacente à rien du chemin (encore vide, donc à la case du
@@ -65,17 +66,17 @@ describe("Boing Boing : chemin tracé case par case", () => {
     act(() => { vmCourant.bbPathClick("E9"); });
     expect(vmCourant.bbPath).toEqual([]);
 
-    act(() => { vmCourant.bbPathClick("E5"); }); // 1er pas : E4 (origine) -> E5, coût 1
+    act(() => { vmCourant.bbPathClick("E5"); }); // E5 est un obstacle : coût 0, même en 1er pas
     expect(vmCourant.bbPath).toEqual(["E5"]);
-    expect(vmCourant.bbBudgetUsed).toBe(1);
+    expect(vmCourant.bbBudgetUsed).toBe(0);
 
-    act(() => { vmCourant.bbPathClick("E6"); }); // E5 et E6 collés : coût 0
+    act(() => { vmCourant.bbPathClick("E6"); }); // E6 aussi un obstacle : coût 0
     expect(vmCourant.bbPath).toEqual(["E5", "E6"]);
-    expect(vmCourant.bbBudgetUsed).toBe(1);
+    expect(vmCourant.bbBudgetUsed).toBe(0);
 
-    act(() => { vmCourant.bbPathClick("E7"); }); // E6 collé, E7 vide : coût 1
+    act(() => { vmCourant.bbPathClick("E7"); }); // E7 libre : coût 1
     expect(vmCourant.bbPath).toEqual(["E5", "E6", "E7"]);
-    expect(vmCourant.bbBudgetUsed).toBe(2);
+    expect(vmCourant.bbBudgetUsed).toBe(1);
     expect(vmCourant.bbDest).toBe("E7");
   });
 

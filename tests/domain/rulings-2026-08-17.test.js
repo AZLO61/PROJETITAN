@@ -48,16 +48,18 @@ const bat = (cle, etages = 2) => ({
 const plateau = (...batiments) => Object.assign({}, ...batiments);
 
 describe("Boing Boing — « Éléments collés = 1 seule case » (livret V36.2)", () => {
-  it("un mur de trois bâtiments accolés ne coûte qu'une seule case de saut", () => {
-    // Titan en A1. A2·A3·A4 sont trois bâtiments COLLÉS : ils comptent pour
-    // 1 case à eux trois. A5 est donc à distance 2 et A6 à distance 3, alors
-    // qu'une distance de Chebyshev les mettait à 4 et 5 — hors de portée.
+  it("un mur de trois bâtiments accolés se saute intégralement pour 0", () => {
+    // Titan en A1. Reprécisé par Nikola le 2026-08-18 : chaque obstacle
+    // devant lui se saute gratuitement, quel que soit leur nombre — seule la
+    // case d'ATTERRISSAGE (libre) coûte 1. A2·A3·A4 (bâtiments) coûtent donc
+    // 0 à eux trois, A5 (la première case libre) coûte 1, A6 coûte 2 — alors
+    // qu'une distance de Chebyshev les mettait à 4 et 5, hors de portée.
     const board = plateau(bat("A2"), bat("A3"), bat("A4"));
     const titans = [t(1, "A1")];
     const reach = getBoingBoingReach("A1", PORTEE_BOING_BOING, { board, looseBlocks: {}, titans });
 
-    expect(reach.get("A5")).toBe(2);
-    expect(reach.get("A6")).toBe(3);
+    expect(reach.get("A5")).toBe(1);
+    expect(reach.get("A6")).toBe(2);
   });
 
   it("sans obstacle, la portée reste celle de Chebyshev", () => {
@@ -72,30 +74,33 @@ describe("Boing Boing — « Éléments collés = 1 seule case » (livret V36.2)
     expect(reach.has("E9")).toBe(false); // distance 4, hors de portée
   });
 
-  it("le groupe collé mélange bâtiments, débris au sol et Titans", () => {
-    // Arbitrage Nikola du 2026-08-17 : « tout obstacle bloquant ». Le groupe
-    // A2[bâtiment] · A3[débris] · A4[Titan] compte pour 1 seule case.
+  it("bâtiment, débris et Titan se sautent tous gratuitement, mélangés", () => {
+    // Arbitrage Nikola du 2026-08-17 (« tout obstacle bloquant »), coût
+    // reprécisé le 18 : A2[bâtiment] · A3[débris] · A4[Titan] se sautent
+    // pour 0 chacun, quel que soit leur type. A5 (libre) coûte 1, A6 coûte 2.
     const board = plateau(bat("A2"));
     const titans = [t(1, "A1"), t(2, "A4")];
     const reach = getBoingBoingReach("A1", PORTEE_BOING_BOING, {
       board, looseBlocks: { A3: ["rose"] }, titans,
     });
 
-    expect(reach.get("A5")).toBe(2);
-    expect(reach.get("A6")).toBe(3);
+    expect(reach.get("A5")).toBe(1);
+    expect(reach.get("A6")).toBe(2);
   });
 
-  it("deux obstacles SÉPARÉS par une case libre coûtent bien deux cases", () => {
-    // La règle dit « collés ». Un obstacle isolé ne fusionne avec rien et
-    // garde son coût plein : c'est ce qui empêche la règle de transformer
-    // n'importe quel plateau encombré en portée illimitée.
+  it("deux obstacles séparés par une case libre se sautent aussi gratuitement", () => {
+    // Retour de Nikola le 2026-08-18 : ce n'est plus le regroupement qui
+    // compte, c'est le type de la case elle-même — un obstacle isolé se
+    // saute exactement comme un groupe. A2 (obstacle) coûte 0, A3 (libre)
+    // coûte 1, A4 (obstacle) coûte 0 de plus, A5 (libre) coûte 1 de plus :
+    // 2 au total, désormais dans la portée de 3.
     const board = plateau(bat("A2"), bat("A4"));
     const titans = [t(1, "A1")];
     const reach = getBoingBoingReach("A1", PORTEE_BOING_BOING, { board, looseBlocks: {}, titans });
 
-    // A2 coûte 1, A3 (libre) coûte 1, A4 coûte 1 → A5 est à 4, hors portée.
-    expect(reach.get("A3")).toBe(2);
-    expect(reach.has("A5")).toBe(false);
+    expect(reach.get("A3")).toBe(1);
+    expect(reach.get("A5")).toBe(2);
+    expect(reach.has("A5")).toBe(true);
   });
 
   it("un bâtiment encore debout n'est jamais une destination", () => {
@@ -335,14 +340,18 @@ describe("Boing Boing — RAGE au Seuil 4 (ruling Nikola du 2026-08-17)", () => 
   });
 
   it("le coût en Adrénaline monte avec la distance sautée", () => {
-    // Distance 2 avec 1 seule Adrénaline : énergie 4 − 1 = 3, pas de Seuil 4.
-    const titans = [t(1, "E4", { adrenaline: 2 }), cible("E6")];
-    const res = resolveBoingBoing(1, "E6", 1, 1, { board: {}, looseBlocks: {}, titans });
+    // La case visée par la carte compte comme un obstacle qui se saute
+    // gratuitement (retour Nikola du 2026-08-18) : atterrir SUR le Titan
+    // cible ne coûte donc rien en soi, seules les cases LIBRES traversées
+    // avant coûtent 1 chacune. E4→E7 (2 cases libres, E5 et E6, avant le
+    // Titan) coûte 2 : distance encore hors de portée du Seuil 4 avec 1
+    // seule Adrénaline (énergie 3+1−1 = 3), atteinte avec 2 (3+2−1 = 4).
+    const titans = [t(1, "E4", { adrenaline: 2 }), cible("E7")];
+    const res = resolveBoingBoing(1, "E7", 1, 1, { board: {}, looseBlocks: {}, titans });
     expect((res.decisions || [])[0].type).toBe("DIL");
 
-    // Avec 2 Adrénalines : énergie 5 − 1 = 4, le Seuil 4 passe.
-    const titans2 = [t(1, "E4", { adrenaline: 2 }), cible("E6")];
-    const res2 = resolveBoingBoing(1, "E6", 2, 1, { board: {}, looseBlocks: {}, titans: titans2 });
+    const titans2 = [t(1, "E4", { adrenaline: 2 }), cible("E7")];
+    const res2 = resolveBoingBoing(1, "E7", 2, 1, { board: {}, looseBlocks: {}, titans: titans2 });
     expect((res2.decisions || [])[0].type).toBe("RAGE");
   });
 

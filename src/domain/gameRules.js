@@ -2354,22 +2354,24 @@ function chebyshevDistance(r1, c1, r2, c2) {
 
    PÉRIMÈTRE DE LA RÈGLE (arbitrage Nikola du 2026-08-17) : « tout obstacle
    bloquant » — bâtiment encore debout, débris/amas/socle au sol, ET Titan.
-   Un groupe de cases-obstacles adjacentes (voisinage de Moore, comme le
-   reste du jeu) compte pour 1 seule case, quelle que soit sa longueur.
 
-   MODÈLE DE COÛT. Parcours 0-1 BFS sur les 8 directions ; entrer sur une
-   case coûte :
-     · 0 si cette case ET la précédente sont toutes deux des obstacles
-       (on est encore dans le même groupe collé) ;
-     · 1 sinon.
-   La case de départ n'est jamais traitée comme un obstacle, même si le
-   Titan sauteur s'y trouve — sans quoi son propre pion collerait au
-   premier mur voisin et offrirait un saut gratuit.
+   MODÈLE DE COÛT, reprécisé par Nikola le 2026-08-18 (« chaque obstacle
+   devant moi me permet de sauter par-dessus lui gratuitement, c'est la case
+   où j'atterris qui coûte 1 ») : entrer sur une case coûte 0 si CETTE case
+   est un obstacle (on saute par-dessus, comme au saute-mouton, quel que
+   soit le nombre d'obstacles enchaînés — y compris le tout premier depuis
+   la case de départ), et 1 si elle est libre (c'est une case où l'on
+   pourrait réellement se poser). Remplace l'ancienne règle du 17 août, où
+   seul un groupe de 2 obstacles consécutifs ou plus déclenchait la
+   gratuité — un obstacle isolé coûtait alors 1 pour l'atteindre PUIS 1 de
+   plus pour le dépasser, ce qui empêchait justement le saute-mouton sur un
+   seul bâtiment que Nikola décrit désormais explicitely comme la règle
+   voulue.
 
-   Exemple validé avec Nikola, Titan en A1, portée 3 :
+   Exemple retranché avec Nikola le 2026-08-18, Titan en A1, portée 3 :
      A1[Titan] A2[bâtiment] A3[débris] A4[Titan] A5[ ] A6[ ]
-   A2·A3·A4 forment un seul groupe collé → 1 case. A5 est donc à 2, A6 à 3,
-   et A6 devient atteignable alors que Chebyshev l'excluait.
+   A2, A3 et A4 se sautent tous gratuitement (obstacles) → A5, la première
+   case libre, coûte 1. Il reste alors 2 de portée : A6 coûte 2.
 
    RETOUR : Map cellule → distance, restreinte aux cases où l'on peut
    ATTERRIR. Un bâtiment encore debout est exclu (saute-mouton autorisé en
@@ -2397,7 +2399,7 @@ function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, tita
   const dist = new Map([[startCell, 0]]);
   // 0-1 BFS : les arêtes de coût 0 passent en tête de file, celles de
   // coût 1 en queue. Une simple file FIFO donnerait des distances fausses
-  // dès qu'un groupe collé se traverse par plusieurs entrées.
+  // dès qu'une chaîne d'obstacles se traverse par plusieurs entrées.
   const deque = [startCell];
   while (deque.length > 0) {
     const cell = deque.shift();
@@ -2405,15 +2407,16 @@ function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, tita
     if (d >= maxRange) continue;
     const r = rowIndex(cell[0]);
     const c = Number(cell.slice(1));
-    // Le départ ne compte jamais comme obstacle (cf. commentaire ci-dessus).
-    const fromObstacle = cell !== startCell && isObstacle(cell);
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (dr === 0 && dc === 0) continue;
         const nr = r + dr, nc = c + dc;
         if (nr < 0 || nr > 8 || nc < 1 || nc > 9) continue;
         const key = rowFromIndex(nr) + nc;
-        const cost = fromObstacle && isObstacle(key) ? 0 : 1;
+        // La case d'ARRIVÉE décide seule du coût : un obstacle se saute
+        // gratuitement, une case libre coûte 1 — la case de départ n'a
+        // donc plus besoin d'échapper à sa propre notion d'obstacle.
+        const cost = isObstacle(key) ? 0 : 1;
         const nd = d + cost;
         if (nd > maxRange) continue;
         if (dist.has(key) && dist.get(key) <= nd) continue;
@@ -2425,7 +2428,11 @@ function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, tita
 
   const reach = new Map();
   dist.forEach((d, key) => {
-    if (key === startCell || d === 0) return;
+    // Seule la case de départ elle-même est exclue. Sous la nouvelle règle
+    // (obstacle = saut gratuit), une case-obstacle immédiatement voisine
+    // atterrit elle aussi à distance 0 — ça ne veut pas dire "pas atteinte",
+    // contrairement à l'ancien modèle où seul le départ pouvait valoir 0.
+    if (key === startCell) return;
     if (isStandingBuilding(key, board)) return; // atterrissage interdit sur un bâtiment debout
     reach.set(key, d);
   });
@@ -2442,15 +2449,13 @@ function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, tita
    chemin précis, et un clic unique sur la destination ne montrait donc
    jamais la trajectoire réellement prise.
 
-   `boingBoingStepCost` applique la même règle case par case : coût 0 entre
-   deux obstacles adjacents du même groupe collé, coût 1 sinon. Le joueur
-   choisit lui-même chaque case intermédiaire (l'interface ne calcule plus le
-   plus court chemin à sa place) ; seule la case de DÉPART échappe à la
-   notion d'obstacle, exactement comme dans le calcul automatique. */
+   `boingBoingStepCost` applique la même règle case par case : coût 0 si la
+   case visée est un obstacle (on saute par-dessus), coût 1 si elle est
+   libre — la case de départ n'entre plus en jeu, exactement comme dans le
+   calcul automatique. Le joueur choisit lui-même chaque case intermédiaire,
+   l'interface ne calcule plus le plus court chemin à sa place. */
 function boingBoingStepCost(fromKey, toKey, fromIsOrigin, { board, looseBlocks = {}, titans = [] }) {
-  const fromObstacle = !fromIsOrigin && isBoingBoingObstacle(fromKey, { board, looseBlocks, titans });
-  const toObstacle = isBoingBoingObstacle(toKey, { board, looseBlocks, titans });
-  return fromObstacle && toObstacle ? 0 : 1;
+  return isBoingBoingObstacle(toKey, { board, looseBlocks, titans }) ? 0 : 1;
 }
 
 function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameState) {
