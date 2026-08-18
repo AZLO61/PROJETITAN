@@ -266,6 +266,17 @@ export default function RoundPanels({ vm }) {
                 ✅ Valider l'écroulement
               </button>
             )}
+            {/* Sortie de secours. Sans elle, un Amas cerné de bâtiments
+                encore debout n'offre aucune case cliquable, « Valider »
+                reste masqué tant que tous les débris ne sont pas placés et
+                « Annuler le dernier » tant qu'aucun ne l'est : plus rien à
+                l'écran, partie bloquée pour de bon. Ce bouton n'apparaît
+                jamais tant qu'il existe une case où poser un débris. */}
+            {ecroulementCells.length === 0 && ecroulement.choix.length < ecroulement.blocs.length && (
+              <button onClick={vm.ecroulementAbandonner} style={btnStyle("#fb923c", "#c2410c", true)}>
+                🚧 Aucune case libre autour — laisser les débris sur l'Amas
+              </button>
+            )}
           </div>
         </div>
       )}

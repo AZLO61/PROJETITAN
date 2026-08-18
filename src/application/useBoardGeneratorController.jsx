@@ -2184,9 +2184,35 @@ export function useBoardGeneratorController() {
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
     enqueueReplis(replis);
-    // Atterrissage sur un Amas : la carte est jouée, mais la répartition des
-    // débris revient au joueur, case par case (ruling Nikola du 2026-08-16).
-    if (result.ecroulement) setEcroulement({ ...result.ecroulement, choix: [] });
+    /* Atterrissage sur un Amas : la carte est jouée, mais la répartition des
+       débris revient au joueur, case par case (ruling Nikola du 2026-08-16).
+
+       ⚠️ Sauf s'il n'y a nulle part où les poser. `getEcroulementCells`
+       écarte toute case portant un bâtiment DEBOUT : un Amas cerné de huit
+       bâtiments intacts (les débris ayant été projetés de loin) ne renvoie
+       aucune case éligible — vérifié par script, et un coin de plateau suffit
+       à n'avoir que trois voisines. Le panneau s'ouvrait quand même : aucune
+       case cliquable, « Valider » masqué tant que tous les débris ne sont pas
+       placés, « Annuler le dernier » masqué tant qu'aucun ne l'est. Aucune
+       sortie, partie définitivement bloquée.
+
+       Même principe que pour un DIL/RAGE impossible (ruling Nikola du
+       14/08) : ce qui ne peut pas se résoudre est noté au journal et ne
+       produit aucun effet. Les débris restent sur l'Amas. */
+    if (result.ecroulement) {
+      const cellesDispo = getEcroulementCells(
+        result.ecroulement.cellKey,
+        { board: state.board, looseBlocks },
+        []
+      ).eligibles;
+      if (cellesDispo.length === 0) {
+        setActionLog((prev) => [...prev,
+          `Amas de ${result.ecroulement.cellKey} : aucune case voisine ne peut recevoir de débris ` +
+          `(bâtiments encore debout tout autour) — l'Amas ne se répartit pas, les débris restent en place.`]);
+      } else {
+        setEcroulement({ ...result.ecroulement, choix: [] });
+      }
+    }
     if (result.applied) { markCardPlayed(selectedTitanId, "boing_boing"); setBbMode(false); setBbPath([]); }
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
@@ -2266,6 +2292,16 @@ export function useBoardGeneratorController() {
   const ecroulementAnnulerDernier = useCallback(() => {
     setEcroulement((prev) => (prev && prev.choix.length > 0 ? { ...prev, choix: prev.choix.slice(0, -1) } : prev));
   }, []);
+  /* Sortie de secours : ceinture et bretelles du garde-fou posé à
+     l'ouverture du panneau. Si un chemin de code ouvrait malgré tout une
+     répartition sans aucune case éligible, ce bouton reste la seule chose
+     à l'écran qui permette de continuer la partie. Il ne s'affiche jamais
+     tant qu'il existe une case où poser un débris. */
+  const ecroulementAbandonner = useCallback(() => {
+    setActionLog((prev) => [...prev,
+      `Amas de ${ecroulement?.cellKey} : aucune case voisine ne peut recevoir de débris — répartition abandonnée, ils restent en place.`]);
+    setEcroulement(null);
+  }, [ecroulement]);
   const ecroulementValider = useCallback(() => {
     if (!ecroulement || ecroulement.choix.length !== ecroulement.blocs.length) return;
     captureSnapshot();
@@ -2985,12 +3021,14 @@ export function useBoardGeneratorController() {
     bbUndoLastCell,
     bbDestIsBuilding,
     ecroulement,
+    setEcroulement,
     ecroulementCells,
     repliQueue,
     currentRepli,
     choisirRepli,
     ecroulementPoserDebris,
     ecroulementAnnulerDernier,
+    ecroulementAbandonner,
     ecroulementValider,
     decisionQueue,
     setDecisionQueue,
