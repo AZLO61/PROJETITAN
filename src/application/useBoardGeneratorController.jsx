@@ -1741,6 +1741,19 @@ export function useBoardGeneratorController() {
 
   const markCardPlayed = useCallback(
     (titanId, cardId) => {
+      /* Retour de Nikola (test à la table, 2026-08-18) : « il me restait
+         une carte à jouer, mais la phase a quand même avancé au round
+         suivant. » `advanceActionRound` incrémentait le compteur de rounds
+         SANS JAMAIS vérifier que la carte était réellement encore
+         programmée — un second appel accidentel avec le même `cardId`
+         (déjà retiré de `programmed` par le premier) avançait donc quand
+         même le compteur, désynchronisant « combien de cartes ce Titan a
+         réellement jouées » de « combien de fois cette fonction a été
+         appelée pour lui ». Le round ne doit avancer QUE si cet appel a
+         réellement déplacé une carte. */
+      const titanAvant = titanState.players.find((t) => t.id === titanId);
+      const carteReellementProgrammee = Boolean(titanAvant?.programmed.includes(cardId));
+
       // 1. Déplacer la carte programmed → playedThisManche
       setTitanState((prev) => {
         const updatedPlayers = prev.players.map((t) => {
@@ -1753,10 +1766,11 @@ export function useBoardGeneratorController() {
         return { ...prev, players: updatedPlayers };
       });
 
-      // 2. Avancer le tour dans le round (1 carte par Titan, 3 rounds)
-      advanceActionRound(titanId);
+      // 2. Avancer le tour dans le round (1 carte par Titan, 3 rounds) —
+      // seulement si une carte a réellement été consommée cette fois-ci.
+      if (carteReellementProgrammee) advanceActionRound(titanId);
     },
-    [advanceActionRound]
+    [advanceActionRound, titanState.players]
   );
 
   // Défausse volontaire face cachée (session) : le Titan désigne 1 de ses
@@ -1769,6 +1783,13 @@ export function useBoardGeneratorController() {
       // Une défausse consomme la carte du round et fait tourner le tour :
       // c'est une action de jeu comme une autre, donc annulable.
       captureSnapshot();
+      // Même garde-fou que markCardPlayed : le round n'avance que si la
+      // carte visée est RÉELLEMENT encore programmée à cet instant. `logMsg`
+      // était renseigné DANS le updater de setTitanState, donc encore vide
+      // juste après l'appel (le updater ne s'exécute pas synchronement) —
+      // le vérifier ici, avant tout `setState`, sur l'état déjà connu.
+      const titanAvant = titanState.players.find((t) => t.id === titanId);
+      const carteReellementProgrammee = Boolean(titanAvant?.programmed.includes(cardId));
       let logMsg = "";
       setTitanState((prev) => {
         const updatedPlayers = prev.players.map((t) => {
@@ -1780,10 +1801,12 @@ export function useBoardGeneratorController() {
         });
         return { ...prev, players: updatedPlayers };
       });
-      if (logMsg) setActionLog((prevLog) => [...prevLog, logMsg]);
-      advanceActionRound(titanId);
+      if (carteReellementProgrammee) {
+        setActionLog((prevLog) => [...prevLog, logMsg || `Titan ${titanId} défausse une carte face cachée.`]);
+        advanceActionRound(titanId);
+      }
     },
-    [advanceActionRound, captureSnapshot]
+    [advanceActionRound, captureSnapshot, titanState.players]
   );
 
   // ── TEA : calcul des cibles disponibles ──────────────────────────────────
