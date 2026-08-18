@@ -1,5 +1,45 @@
 # Changelog
 
+## Non publié — sixième passe du 2026-08-18 (nouveau test à la table)
+
+- **Survol des cartes programmées : enfin la bonne règle.** Deux lectures
+  précédentes s'étaient trompées (bloqué pendant l'inter-tour, puis rouvert
+  mais toujours câblé sur `activePlayerId`). Nikola a précisé sans
+  ambiguïté : c'est la SÉLECTION qui décide, pas le tour officiel — même
+  règle que la Phase Programmation applique déjà au secret des cartes.
+- **Un débris qui pousse un Titan** applique désormais la même règle qu'un
+  Titan qui en pousse un autre (toujours, d'au moins 1 case, dès qu'il
+  reste de l'énergie) — l'ancienne exception à 2 d'énergie minimum est
+  retirée.
+- **Main trop ciblée par la Fatigue :** nouveau filet de sécurité en
+  Programmation (`ensureProgrammableHand`), qui reprend au hasard depuis la
+  Zone Repos du Titan si sa main est descendue sous 3 cartes.
+- **Le chiffre "Énergie" reste en jaune** même au Seuil 4 (l'avertissement
+  reste porté par le badge "Seuil 4" à côté).
+
+Vérifié sans changement de code nécessaire : Boing Boing autorise déjà de
+passer par-dessus un débris/bâtiment/Titan en case intermédiaire ; Fatigue
+sur un Titan à 0 carte non jouée échoue déjà proprement ; le favicon est
+correctement configuré (probable cache navigateur, pas un bug de code).
+
+Restent ouverts, faute de temps ou d'ambiguïté non résolue cette session :
+
+- **DIL/RAGE doit bloquer TOUT déplacement pour toutes les cartes**, pas
+  seulement Graouhhh joué par un humain (déjà fait, cf. passe précédente).
+  Tout Casser, Tête en Avant, Boing Boing, Faut Pas Me Chauffer côté humain,
+  et Graouhhh lui-même côté IA, utilisent encore l'ancien schéma
+  "décision + déplacement dans le même résolveur synchrone". Chantier de
+  taille comparable à celui déjà fait sur Graouhhh, à refaire carte par
+  carte.
+- **Sortie de plateau en diagonale (nouvelle mécanique de warp) :** les deux
+  exemples donnés par Nikola ne sont pas géométriquement cohérents entre
+  eux (H4→I6 n'est pas une diagonale à pas unitaire) — clarification
+  demandée avant d'implémenter, pour ne pas casser la sortie déjà tranchée
+  le 18 août (coin qui boucle sur les deux axes).
+- **Double panneau au survol d'un bâtiment :** repro pas assez précise pour
+  localiser le défaut exact (tooltip natif du navigateur vs popup de
+  composition au clic ? deux états qui se marchent dessus ?).
+
 ## Non publié — cinquième passe du 2026-08-18 (précisions sur la quatrième)
 
 Un vrai bug trouvé grâce à des précisions de Nikola sur 3 points restés
