@@ -72,24 +72,37 @@ masque exactement le défaut.
   sur un faux rouge, la meilleure façon de rater un vrai rouge. Ce n'était
   donc pas un « flake » mais un seuil mal réglé.
 
-### Restent ouverts, volontairement
+### Les points laissés ouverts, repris dans la foulée
 
-Deux points identifiés pendant la revue et **non corrigés sciemment** : la
-démo est proche, et aucun des deux ne casse une partie.
+Nikola ayant demandé de tout solder, les deux points ci-dessus ont été
+traités juste après — plus trois autres qui traînaient de longue date.
 
-- **Graouhhh joué par une IA** déplace encore tous les Titans touchés d'un
-  coup au lieu d'attendre chaque DIL. Vérifié : l'ordre de traitement est
-  identique à celui du joueur humain (du plus loin au plus proche), donc
-  **l'état final du plateau est le même**. Défaut de séquençage visuel, pas
-  de règle. Refondre ce chemin en asynchrone à la veille d'une démo coûtait
-  plus de risque que de gain.
-- **Boing Boing sur un Titan totalement coincé** (aucune case libre
-  adjacente, cas rarissime) renvoie `applied: false` : la carte n'est pas
-  consommée, alors que la projection a déjà pu déplacer des choses sur le
-  plateau. Le joueur voit son clic « ne rien faire » sur un plateau qui a
-  pourtant bougé. Corriger proprement demande de valider la destination
-  AVANT de projeter — un changement au cœur du résolveur, à faire à tête
-  reposée et pas la veille d'une présentation.
+- **Graouhhh joué par une IA** suit maintenant le même chemin que le
+  joueur humain (`advanceGraouhhhLoop`), Titan par Titan. L'IA passait par
+  le wrapper monolithique `resolveGraouhhh`, qui déplace tous les Titans de
+  l'axe d'un coup : une cible humaine voyait ses Titans projetés AVANT
+  qu'on lui demande de trancher son Dilemme. Sans le correctif, le test
+  trouve la cible déjà en I6 quand son Dilemme s'affiche.
+- **Boing Boing sur un Titan totalement coincé : vérifié, ce n'était pas un
+  bug.** Le soupçon était que `applied: false` laisse un plateau déjà
+  modifié. Script à l'appui sur le vrai résolveur : un Titan qui ne bouge
+  pas ne pousse personne, l'empreinte du plateau est identique avant et
+  après. Aucun code changé.
+- **L'IA vise les Titans avec les débris d'un Amas.** Elle prenait la
+  première case venue, alors qu'un débris tombant sur un Titan le projette
+  et rapporte +1 Bagarre. Elle laissait filer des points gratuits à chaque
+  Amas, et camper à côté d'un tas ne coûtait rien à un humain. Vérifié : 2
+  Bagarre au lieu de 1 sur le cas de référence.
+- **Le tutoriel du livret est refait sur les chiffres du moteur.** Il
+  annonçait une énergie de 3 (en oubliant que la case du Titan compte dans
+  son Périmètre) et trois trajectoires calculées à la main du temps des
+  rebonds. Rejoué au moteur : l'exemple illustre désormais la Faille et le
+  ricochet, et un test le verrouille.
+- **Le simulateur ne perd plus une campagne à la dernière ligne.**
+  `npm run simulate -- --json simulations/x.json` jouait toutes les parties
+  puis mourait sur un ENOENT faute de dossier. Sur 500 parties, un quart
+  d'heure de calcul perdu. Les deux `.bat` ont aussi été vérifiés pour de
+  bon, point ouvert depuis leur écriture.
 
 ## Non publié — huitième passe du 2026-08-18 (repros précisées par Nikola)
 
