@@ -1,5 +1,96 @@
 # Changelog
 
+## Non publié — neuvième passe du 2026-08-18 (revue complète avant démo)
+
+Passe de revue demandée par Nikola avant une démonstration : « trouve-moi
+tous les bugs possibles et corrige-les, faut que ce soit nickel ». Quatre
+défauts sérieux trouvés, dont **trois blocages définitifs de partie** que
+rien ne permettait de contourner.
+
+### Le bug d'« Annuler », cause racine enfin trouvée
+
+L'instantané entier était construit À L'INTÉRIEUR de `setUndoStack(prev =>
+…)`. React n'exécute un updater fonctionnel qu'au traitement de sa file,
+donc APRÈS le retour de la fonction appelante — or les résolveurs du
+domaine mutent l'état EN PLACE. Séquence réelle d'un Tout Casser :
+
+1. `captureSnapshot()` → programme un updater, ne clone rien
+2. `resolveToutCasser(…)` → casse le plateau en place
+3. `setState(prev => …)` → déclenche le rendu
+4. React exécute (1) → `structuredClone` d'un plateau **déjà cassé**
+
+L'instantané enregistrait l'état d'APRÈS l'action. « Annuler » dépilait
+bien et restaurait fidèlement… l'état détruit. Le défaut touchait TOUTES
+les cartes, pas seulement le warp par la Faille remonté par Nikola. Le
+clone est désormais évalué de façon synchrone, à l'appel.
+
+Pourquoi `annuler.test.jsx` restait vert : il sépare capture et mutation
+en deux `act()`, ce qui laisse React vider sa file entre les deux et
+masque exactement le défaut.
+
+### Trois blocages définitifs de partie
+
+- **Une décision impossible arrivait à l'écran.** `canDil`/`canRage` sont
+  évalués au moment de l'impact, mais la carte continue de s'appliquer
+  ensuite (projection, replis, écroulement) : le Repaire de la cible peut
+  être retombé sous le seuil quand la décision s'affiche. DIL exige alors
+  2 options pour activer « Valider » — avec une seule affichée, ce bouton
+  ne s'active jamais. RAGE sur une cible sans ressource n'affiche aucun
+  bouton. Le ruling existait déjà (Nikola, 14/08 : décision impossible =
+  notée au journal, aucun effet), il n'était appliqué qu'à la création.
+- **Un Amas cerné de bâtiments debout.** `getEcroulementCells` écarte toute
+  case portant un bâtiment : un Amas entouré de huit bâtiments intacts ne
+  renvoie aucune case éligible (au coin du plateau, trois suffisent —
+  vérifié par script). Le panneau s'ouvrait quand même : aucune case
+  cliquable, « Valider » masqué, « Annuler le dernier » masqué. Corrigé à
+  deux niveaux : le panneau ne s'ouvre plus, et une sortie de secours
+  existe si un autre chemin l'ouvrait.
+- **La Programmation démarrait sur une carte encore due.**
+  `advanceActionRound` valide la phase pour tout le monde dès 3 rounds
+  comptés, sans regarder si les cartes ont été jouées. La transition
+  tranche désormais sur le seul fait qui ne ment pas — reste-t-il des
+  cartes programmées ? — recale le compteur et rend la main au Titan en
+  retard.
+
+### Le reste
+
+- **Les cartes sont gelées pendant qu'une décision attend.** Le clic sur le
+  plateau l'était déjà, pas les cartes : la carte se résolvait sur un
+  plateau que la décision en cours allait encore modifier, et l'ordre du
+  résultat dépendait de la vitesse de clic.
+- **Le simulateur n'appliquait pas `ensureProgrammableHand`**, le filet
+  anti-blocage que le contrôleur applique depuis le 18 août. Sur 600
+  parties de diagnostic, 49 signalaient une « manche sautée, main
+  insuffisante » que le vrai jeu ne produit plus : les chiffres
+  d'équilibrage mesuraient un jeu plus dur que celui qu'on joue.
+- **Favicon** : l'ICO et les PNG manquaient. Plusieurs navigateurs
+  réclament un `.ico` classique et ignorent un SVG seul. Générés en pur
+  Node depuis le même dessin (16/32/48 dans l'ICO, plus apple-touch-icon
+  180 pour l'écran d'accueil d'une tablette).
+- **`testTimeout` porté à 30 s.** Les tests de campagne tiennent 6 à 16 s
+  pour un défaut Vitest à 5 s : `npm run check` échouait par intermittence
+  sur un faux rouge, la meilleure façon de rater un vrai rouge. Ce n'était
+  donc pas un « flake » mais un seuil mal réglé.
+
+### Restent ouverts, volontairement
+
+Deux points identifiés pendant la revue et **non corrigés sciemment** : la
+démo est proche, et aucun des deux ne casse une partie.
+
+- **Graouhhh joué par une IA** déplace encore tous les Titans touchés d'un
+  coup au lieu d'attendre chaque DIL. Vérifié : l'ordre de traitement est
+  identique à celui du joueur humain (du plus loin au plus proche), donc
+  **l'état final du plateau est le même**. Défaut de séquençage visuel, pas
+  de règle. Refondre ce chemin en asynchrone à la veille d'une démo coûtait
+  plus de risque que de gain.
+- **Boing Boing sur un Titan totalement coincé** (aucune case libre
+  adjacente, cas rarissime) renvoie `applied: false` : la carte n'est pas
+  consommée, alors que la projection a déjà pu déplacer des choses sur le
+  plateau. Le joueur voit son clic « ne rien faire » sur un plateau qui a
+  pourtant bougé. Corriger proprement demande de valider la destination
+  AVANT de projeter — un changement au cœur du résolveur, à faire à tête
+  reposée et pas la veille d'une présentation.
+
 ## Non publié — huitième passe du 2026-08-18 (repros précisées par Nikola)
 
 - **Fix : une carte encore programmée (1 restante) ne fait plus sauter la
