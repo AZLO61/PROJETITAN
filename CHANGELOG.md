@@ -31,11 +31,13 @@ Restent ouverts, faute de temps ou d'ambiguïté non résolue cette session :
   "décision + déplacement dans le même résolveur synchrone". Chantier de
   taille comparable à celui déjà fait sur Graouhhh, à refaire carte par
   carte.
-- **Sortie de plateau en diagonale (nouvelle mécanique de warp) :** les deux
-  exemples donnés par Nikola ne sont pas géométriquement cohérents entre
-  eux (H4→I6 n'est pas une diagonale à pas unitaire) — clarification
-  demandée avant d'implémenter, pour ne pas casser la sortie déjà tranchée
-  le 18 août (coin qui boucle sur les deux axes).
+- **Sortie de plateau en diagonale : vérifiée, déjà correcte.** Les deux
+  premiers exemples de Nikola étaient géométriquement incohérents entre eux
+  (H4→I6 n'est pas une diagonale à pas unitaire) ; une fois reformulés avec
+  des cases et directions précises (A9 poussé par A8 → A1, par B8 → I1, par
+  B9 → I9), les trois correspondent exactement au comportement déjà
+  implémenté (vérifié par script direct sur `projectInDirection`). Aucun
+  changement de code.
 - **Double panneau au survol d'un bâtiment :** repro pas assez précise pour
   localiser le défaut exact (tooltip natif du navigateur vs popup de
   composition au clic ? deux états qui se marchent dessus ?).
