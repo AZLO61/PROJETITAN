@@ -1342,10 +1342,44 @@ export function useBoardGeneratorController() {
       setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
       return humanDecisions;
     }
+    /* ── UNE DÉCISION IMPOSSIBLE NE DOIT JAMAIS ARRIVER À L'ÉCRAN ──
+       `canDil` / `canRage` sont évalués par le résolveur AU MOMENT DE
+       L'IMPACT. Mais la suite de la carte continue de s'appliquer après :
+       la cible est projetée, elle sème des blocs en chemin (replis), un
+       Amas s'écroule sur elle. Son Repaire peut donc être retombé sous le
+       seuil quand la décision s'affiche enfin.
+
+       Le panneau devenait alors sans issue : DIL exige 2 options désignées
+       pour activer « Valider » — avec une seule option affichée, ce bouton
+       ne s'active JAMAIS, et rien d'autre ne permet de sortir. Même chose
+       pour une RAGE dont la cible n'a plus la moindre ressource : aucun
+       bouton, aucune sortie, partie perdue.
+
+       Le ruling est déjà tranché (Nikola, 14/08) : quand la cible n'a pas
+       de quoi subir la décision, l'action est notée au journal et ne
+       produit simplement aucun effet. On l'applique ici aussi, et pas
+       seulement à la création. */
+    const jeuCourant = { titans: curPlayers };
+    const impossibles = [];
+    const jouables = humanDecisions.filter((d) => {
+      const ok = d.type === "RAGE" ? canRage(d.defenderId, jeuCourant) : canDil(d.defenderId, jeuCourant);
+      if (!ok) impossibles.push(d);
+      return ok;
+    });
+    if (impossibles.length > 0) {
+      setActionLog((prev) => [...prev, ...impossibles.map((d) =>
+        `${d.type} (${d.cardLabel}) sans effet sur Titan ${d.defenderId} : il ne lui reste plus de quoi la subir ` +
+        `au moment de la résoudre (la carte a continué de s'appliquer après l'impact).`)]);
+    }
+    if (jouables.length === 0) {
+      setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+      return jouables;
+    }
+
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setDecisionQueue((prev) => [
       ...prev,
-      ...humanDecisions.map((d) => {
+      ...jouables.map((d) => {
         // Bug remonté (DIL vs IA) : si l'attaquant IA a déjà pré-calculé
         // ses 2 options (presetAttackerChoices), on saute directement au
         // stade DEFENDER_PICK pour le défenseur humain — jamais de stade
@@ -1375,7 +1409,7 @@ export function useBoardGeneratorController() {
         };
       }),
     ]);
-    return humanDecisions;
+    return jouables;
   }, [autoResolveIaDecisions]);
 
   /* ── FILE DES REPLIS ──
