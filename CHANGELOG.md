@@ -1,5 +1,35 @@
 # Changelog
 
+## Non publié — huitième passe du 2026-08-18 (repros précisées par Nikola)
+
+- **Fix : une carte encore programmée (1 restante) ne fait plus sauter la
+  phase en Programmation.** Repro précisée par Nikola : « il me restait une
+  carte à jouer, mais la phase est passée au round suivant… je devais
+  choisir trois nouvelles cartes alors qu'il m'en restait une, plus visible
+  ni jouable. » Cause trouvée : `advanceActionRound` avançait le compteur
+  de rounds à chaque appel de `markCardPlayed`/`discardCurrentCard`, sans
+  vérifier que la carte visée était RÉELLEMENT encore programmée — un
+  second appel (accidentel, sur une carte déjà retirée) avançait quand même
+  le round. Les deux fonctions vérifient maintenant l'état avant d'agir.
+  Nouveau test : `round-double-appel.test.jsx`. À reconfirmer à la
+  prochaine table, cette hypothèse colle à la repro mais n'a pas été
+  reproduite à l'identique du déroulé de Nikola.
+- **Bug latent trouvé au passage, sans lien avec la repro ci-dessus :**
+  dans `discardCurrentCard`, le message de log était renseigné DANS le
+  updater `setTitanState` (exécution non synchrone) puis relu juste après,
+  encore vide — la défausse volontaire ne marquait donc jamais le passif
+  Récupération comme disponible après elle. Corrigé dans le même
+  correctif ; verrouillé par `defausse-passif.test.jsx` (déjà existant).
+- **Annuler + Tout Casser avec passage par la Faille : confirmé comme un
+  vrai bug par Nikola**, avec repro précise : « les blocs qui ont pris le
+  warp ne sont pas revenus à leur case initiale, ça fausse la partie. »
+  Toujours sans cause racine identifiée — reste la priorité n°1 pour la
+  prochaine session (voir passe précédente pour la piste des snapshots
+  empilés, non confirmée).
+- **Favicon : Nikola confirme tester en local via `localhost`.** Toujours
+  aucune explication trouvée malgré un code vérifié correct en dev et en
+  build.
+
 ## Non publié — septième passe du 2026-08-18 (Nikola demande de ne rien supposer)
 
 - **Boing Boing, vraie règle enfin trouvée :** chaque obstacle se saute
