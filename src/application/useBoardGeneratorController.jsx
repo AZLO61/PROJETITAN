@@ -1026,7 +1026,7 @@ export function useBoardGeneratorController() {
             // L'IA n'a pas d'interface de répartition : elle applique la
             // répartition par défaut, cases vierges d'abord.
             if (res.ecroulement) {
-              const choix = choisirRepartitionEcroulement(res.ecroulement, jeu2);
+              const choix = choisirRepartitionEcroulement(res.ecroulement, jeu2, playerId);
               const suite = resolveEcroulementAmas(playerId, res.ecroulement, choix, jeu2);
               newLog = [...newLog, ...suite.log];
             }

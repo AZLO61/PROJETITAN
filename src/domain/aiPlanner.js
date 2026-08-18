@@ -336,16 +336,39 @@ export function appliquerCoup(coup, titanId, etat, mancheNumber, profile = makeP
  * (IA et simulateur). Suit les mêmes contraintes que le joueur humain :
  * cases vierges d'abord, empilement seulement quand il n'en reste plus.
  *
- * Aucune ruse ici : viser un Titan pour le pousser serait souvent le bon
- * coup, mais ce choix se fait après la simulation du saut, donc en dehors
- * de la boucle de notation. Le rendre malin demanderait de simuler chaque
- * répartition possible, pour un gain marginal au regard du coût.
+ * ── L'IA VISE LES TITANS (2026-08-18) ──
+ * Elle prenait la première case venue (`eligibles[0]`), un ordre de
+ * balayage sans aucun rapport avec le jeu. Or un débris qui tombe sur un
+ * Titan le projette ET rapporte +1 Bagarre à l'initiateur (cf.
+ * `resolveEcroulementAmas` : `bagarreSet.add(occupant.id)`). L'IA laissait
+ * donc filer des points gratuits à chaque Amas, et un joueur humain ne
+ * risquait jamais rien à camper à côté d'un tas prêt à s'écrouler.
+ *
+ * Pas besoin de simuler quoi que ce soit pour corriger ça : la Bagarre est
+ * acquise dès que la cible bouge réellement, il suffit de préférer une case
+ * occupée par un adversaire. On ne vise chaque Titan qu'UNE fois — le
+ * premier débris le pousse hors de la case, le suivant tomberait dans le
+ * vide (la résolution est séquentielle, cf. `resolveEcroulementAmas`).
  */
-export function choisirRepartitionEcroulement(ecroulement, etat) {
+export function choisirRepartitionEcroulement(ecroulement, etat, initiatorId = null) {
   const choix = [];
+  const dejaVises = new Set();
+  // L'initiateur se tient sur l'Amas lui-même, jamais sur une case voisine.
+  // Le paramètre reste optionnel : sans lui on se contente de ne pas viser
+  // le Titan posé sur `cellKey`, ce qui couvre déjà le cas réel.
+  const adverseSur = (cle) => (etat.titans || []).find(
+    (t) => t.cell === cle && !t.horsPlateau && t.id !== initiatorId && cle !== ecroulement.cellKey
+  );
+
   for (let i = 0; i < ecroulement.blocs.length; i++) {
     const { eligibles } = getEcroulementCells(ecroulement.cellKey, etat, choix);
-    choix.push(eligibles[0] ?? ecroulement.cellKey);
+    const surTitan = eligibles.find((cle) => !dejaVises.has(cle) && adverseSur(cle));
+    if (surTitan) {
+      dejaVises.add(surTitan);
+      choix.push(surTitan);
+    } else {
+      choix.push(eligibles[0] ?? ecroulement.cellKey);
+    }
   }
   return choix;
 }
@@ -371,7 +394,7 @@ function simulerCarte(coup, titanId, etat, mancheNumber) {
       // joueur réparte les débris. L'IA n'a pas d'interface, elle applique
       // la répartition par défaut — cases vierges d'abord, dans l'ordre.
       if (res?.ecroulement) {
-        const choix = choisirRepartitionEcroulement(res.ecroulement, etat);
+        const choix = choisirRepartitionEcroulement(res.ecroulement, etat, titanId);
         const suite = resolveEcroulementAmas(titanId, res.ecroulement, choix, etat);
         res = { ...res, log: [...(res.log || []), ...suite.log] };
       }
