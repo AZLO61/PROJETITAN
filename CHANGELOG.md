@@ -1,5 +1,89 @@
 # Changelog
 
+## Non publié — onzième passe du 2026-08-19 (3 parties de Nikola, 15 retours)
+
+Nikola joue trois parties et remonte quinze points. Trois d'entre eux ont
+d'abord demandé un arbitrage de sa part, posé carte par carte comme il l'a
+souhaité : distance de projection, sort du bloc cassé en chaîne, panneau de
+choix au ramassage.
+
+### La régression du figeage, d'abord
+
+« Un énorme bug : quand un titan a joué sa carte ça ne passe pas au suivant,
+ça fige dès la première action. » C'était une régression introduite le matin
+même, documentée dans son propre paragraphe du changelog précédent.
+
+### Ce que trois parties ont trouvé que 345 tests ne voyaient pas
+
+**L'énergie de Tout Casser était fausse.** Le livret dit « nombre de cases
+OCCUPÉES dans ton Périmètre », mais les blocs libres au sol n'étaient pas
+comptés : seuls les bâtiments et les Titans l'étaient. Sur le cas de Nikola,
+l'énergie sortait à 2 là où il en attendait 5. Une case qui porte un débris est
+occupée, c'est même le cas le plus courant en fin de Manche.
+
+**La cible d'une charge ne bougeait pas sous le Seuil 4.** « Les cibles
+impactées ne se sont pas déplacées même en DIL. » Le Seuil 4 ne décide plus que
+de RAGE contre DIL ; le déplacement, lui, a toujours lieu, avec l'énergie
+restante. Le moteur faisait déjà ainsi dans ses réactions en chaîne : les deux
+lectures divergeaient depuis le début.
+
+**Boing Boing laissait sauter à l'infini.** Un obstacle coûtait 0 et pouvait
+recevoir l'atterrissage : de débris en débris, on traversait le plateau sans
+entamer son budget. Une règle unique remplace tout : se poser coûte 1, quoi que
+porte la case ; les obstacles ne sont gratuits que survolés. Le groupe collé
+vaut donc toujours 1 case comme au livret, puisqu'on ne paie que l'arrivée. Et
+c'est ce qui permet aussi de « sauter par-dessus un débris ou dessus
+volontairement » : les deux cases sont proposées, au même prix.
+
+**Je Ne Partage Pas se sabotait.** Chaque case vidée déplaçait le Titan
+immédiatement, ce qui rétrécissait son Périmètre et rendait la deuxième case
+inatteignable — alors que la carte est faite pour piocher à plusieurs endroits.
+Un seul déplacement désormais, à la fin, sur la dernière case choisie.
+
+**Le bloc cassé par ricochet ne demandait rien.** Il part maintenant où
+l'attaquant veut, parmi les cases autour du bâtiment touché, celle d'un Titan
+comprise — « j'aurais aimé le mettre en A2 pour le faire sortir ».
+
+### Un bug qui n'en était pas un : le jeu mentait
+
+« J'ai fait tout casser sur un titan qui a déclenché un RAGE mais il n'a pas été
+déplacé, il aurait dû taper dans un bâtiment juste après. » Il L'AVAIT tapé et
+cassé un bloc, mais le bâtiment tenait encore, donc il restait sur place. Le
+journal affichait « déplacé en E6 » alors qu'il était déjà en E6. Ce qui
+ressemblait à un bug n'était qu'un silence, et le journal le dit maintenant.
+
+### Deux points vérifiés, déjà conformes
+
+Graouhhh projette déjà de « nombre de Titans touchés + 1 », et un Titan pousse
+bien un débris même quand c'est le second de la chaîne qui le rencontre : test
+à l'appui, ils finissent voisins et non superposés. Aucun code touché.
+
+### L'interface
+
+Survol d'un bâtiment après 2 secondes d'arrêt volontaire, le clic restant
+immédiat. Numéros de saut 1, 2, 3 sur les cases posées, effacés avec la carte.
+Panneau de consigne supprimé. Coches de validation rapatriées dans le panneau
+de stock, à droite sous « Bâtiments seuil », dans l'ordre d'initiative de la
+Manche. Information « dernière Manche » au même endroit, sans panneau
+supplémentaire.
+
+### Ce qui reste ouvert, dit franchement
+
+- **Boing Boing sur un Socle** : non reproduit. Socle et débris se comportent à
+  l'identique côté moteur, ramassage et pool de récupération compris.
+- **Panneau de choix de bloc après un Boing Boing sur un tas** : demande à
+  préciser, un tas de 2 blocs ou plus est un Amas et déclenche un écroulement,
+  pas un ramassage.
+- **Faut Pas Me Chauffer** : l'IA mise enfin de l'Adrénaline, mais l'usage de la
+  carte passe de 9,0 % à 9,1 % sur 100 parties. Son manque d'attrait vient
+  d'ailleurs.
+
+### Vérifications
+
+Audit, lint, **346 tests** et build au vert. Diagnostic d'invariants sans défaut
+sur 200 parties.
+
+
 ## Non publié — dixième passe du 2026-08-19 (liste de retours de Nikola)
 
 Nikola arrive avec une liste structurée de 19 points : bugs systémiques, règles
