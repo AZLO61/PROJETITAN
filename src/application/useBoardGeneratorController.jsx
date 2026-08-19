@@ -108,25 +108,6 @@ export function useBoardGeneratorController() {
   const [decisionQueue, setDecisionQueue] = useState([]);
   const [repliQueue, setRepliQueue] = useState([]);
   const [ecroulement, setEcroulement] = useState(null);
-  /* Avancement de round EN ATTENTE (points 1.2, 1.5 et 1.8 du 2026-08-19).
-
-     Trois symptomes remontes par Nikola, une seule cause : « le jeu passe
-     directement au tour suivant apres un deplacement suivi d'un DIL », « le
-     saut sur un Amas verrouille le ramassage et finit le tour », et le
-     desengagement qui bloque le deplacement passif.
-
-     `markCardPlayed` appelait `advanceActionRound` DES que la carte quittait
-     la main, sans attendre que ce qu'elle avait declenche soit resolu : un
-     DIL a trancher, un repli a placer, un Amas a repartir. Le tour basculait
-     donc pendant que le joueur avait encore une decision devant lui, et son
-     passif Recuperation passait a la trappe — « j'ai fait le dil c'est passe
-     au joueur suivant automatiquement, je n'ai pas pu ramasser le bloc tombe
-     au sol ».
-
-     Le garde-fou existait deja pour l'IA (cf. `finishAiTurn`), mais pas pour
-     le joueur humain. L'avancement est desormais MIS EN ATTENTE et ne part
-     que lorsque plus aucune resolution n'est ouverte. */
-  const [pendingRoundAdvance, setPendingRoundAdvance] = useState(null);
   const currentDecision = decisionQueue[0] || null;
   const currentRepli = repliQueue[0] || null;
   const [seedCount, setSeedCount] = useState(1);
@@ -239,7 +220,6 @@ export function useBoardGeneratorController() {
     setMoveMode(false);
     setRecupMode(false);
     setPassifUsed({});
-    setPendingRoundAdvance(null);
     setBbMode(false);
     setBbPath([]);
     setJnpMode(false);
@@ -313,7 +293,6 @@ export function useBoardGeneratorController() {
     // Action.
     setActivePlayerId(nextDetonateur(titanState.ordreJeu, titanState.detonateur));
     setPassifUsed({});
-    setPendingRoundAdvance(null);
     setMoveMode(false);
     setRecupMode(false);
     setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0);
@@ -676,7 +655,6 @@ export function useBoardGeneratorController() {
       decisionQueue: structuredClone(decisionQueue),
       repliQueue: structuredClone(repliQueue),
       ecroulement: ecroulement ? structuredClone(ecroulement) : null,
-      pendingRoundAdvance,
       fpmc: {
         attackerId: fpmcAttackerId,
         pendingIds: [...fpmcPendingIds],
@@ -708,7 +686,7 @@ export function useBoardGeneratorController() {
     setUndoStack((prev) => [...prev, snapshot]);
   }, [
     state, titanState, looseBlocks, activePlayerId, phase, passifUsed, actionLog, waitingNextTitan,
-    decisionQueue, repliQueue, ecroulement, pendingRoundAdvance, fpmcAttackerId, fpmcPendingIds, fpmcNTargets,
+    decisionQueue, repliQueue, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcNTargets,
     fpmcAttackerBase, fpmcCurrent, mancheNumber, phaseValidated, volDirection, currentEvent,
     rainbowWinnerId, vertAssignments, gameOver, showScoring, coutRentree,
   ]);
@@ -750,7 +728,6 @@ export function useBoardGeneratorController() {
     setDecisionQueue(structuredClone(snap.decisionQueue || []));
     setRepliQueue(structuredClone(snap.repliQueue || []));
     setEcroulement(snap.ecroulement ? structuredClone(snap.ecroulement) : null);
-    setPendingRoundAdvance(snap.pendingRoundAdvance ?? null);
     setFpmcAttackerId(snap.fpmc?.attackerId ?? null);
     setFpmcPendingIds([...(snap.fpmc?.pendingIds || [])]);
     setFpmcNTargets(snap.fpmc?.nTargets ?? 0);
@@ -1986,27 +1963,20 @@ export function useBoardGeneratorController() {
         return { ...prev, players: updatedPlayers };
       });
 
-      // 2. Avancer le tour dans le round (1 carte par Titan, 3 rounds) —
-      // seulement si une carte a réellement été consommée cette fois-ci, et
-      // seulement quand les résolutions déclenchées par la carte sont
-      // terminées (cf. `pendingRoundAdvance`).
-      if (carteReellementProgrammee) setPendingRoundAdvance(titanId);
-    },
-    [titanState.players]
-  );
+      /* 2. Avancer le tour dans le round (1 carte par Titan, 3 rounds),
+         seulement si une carte a réellement été consommée cette fois-ci.
 
-  /* Le tour ne bascule que lorsque plus rien n'est en attente de résolution.
-     Sans cette attente, la carte qui ouvre un DIL, un repli ou un Amas fait
-     passer la main avant que le joueur ait pu répondre, puis ramasser. */
-  useEffect(() => {
-    if (pendingRoundAdvance == null) return;
-    if (currentDecision || currentRepli || ecroulement) return;
-    if (fpmcAttackerId && (fpmcPendingIds.length > 0 || fpmcCurrent)) return;
-    const titanId = pendingRoundAdvance;
-    setPendingRoundAdvance(null);
-    advanceActionRound(titanId);
-  }, [pendingRoundAdvance, currentDecision, currentRepli, ecroulement,
-      fpmcAttackerId, fpmcPendingIds, fpmcCurrent, advanceActionRound]);
+         ⚠️ CET APPEL DOIT RESTER SYNCHRONE. `advanceActionRound` écrit
+         `aiNextPlayerRef.current`, et `finishAiTurn` la lit DÈS LE RETOUR de
+         `markCardPlayed` pour donner la main au Titan suivant. L'avoir différé
+         dans un effet, le 2026-08-19, faisait lire une ref encore vide : l'IA
+         ne passait jamais au Titan suivant et la partie figeait sur la toute
+         première action. Le report de l'avancement se fait donc à l'intérieur
+         d'`advanceActionRound`, qui sait attendre sans casser cette chaîne. */
+      if (carteReellementProgrammee) advanceActionRound(titanId);
+    },
+    [advanceActionRound, titanState.players]
+  );
 
   // Défausse volontaire face cachée (session) : le Titan désigne 1 de ses
   // 3 cartes programmées et choisit de ne pas la jouer. Aucun effet, rien
