@@ -1,5 +1,153 @@
 # Changelog
 
+## Non publié — dixième passe du 2026-08-19 (liste de retours de Nikola)
+
+Nikola arrive avec une liste structurée de 19 points : bugs systémiques, règles
+dont deux marquées **WIP**, équilibrage des IA, et interface. Cette passe en
+solde une première partie. Les points restants sont listés en fin de section,
+avec les deux arbitrages qui lui reviennent.
+
+### Un rouge préexistant, et le test avait tort
+
+`npm run check` n'était pas au vert au départ : le test de séquençage Graouhhh
+joué par une IA échouait en suite complète et passait isolé. C'est le motif déjà
+rencontré le 18 août, mais la cause était nouvelle et le correctif de la veille
+ne l'avait pas atteinte.
+
+Le test posait `passifUsed` dans le MÊME `act()` que `setActivePlayerId`. Or un
+effet sur `activePlayerId` réarme `move: false` à l'ouverture du tour de chaque
+Titan — c'est la règle voulue, le Mouvement gratuit revient à chaque tour. Le
+réglage du test était donc systématiquement écrasé, l'IA se déplaçait avant de
+jouer, et l'axe de tir n'était plus celui que le test avait préparé. Il ne
+passait alors que si l'IA atterrissait par chance sur un axe contenant encore
+une cible.
+
+Mesuré sur 12 graines : vert 10 fois sur 12 en isolé, rouge en suite complète où
+le plateau tiré n'est pas le même. Après correctif, 12 graines sur 12 donnent le
+même résultat. **Aucun code de production n'était en cause.**
+
+### L'Adrénaline vaut 2 points, et la valeur ne vit plus qu'à une source
+
+Ruling : l'Adrénaline conservée rapporte 2 points de victoire au décompte, au
+lieu de 3. Elle était trop rentable à garder, ce qui décourageait de la dépenser.
+
+La valeur vivait à **deux endroits dans le code** : le calcul du décompte final
+et l'étalon `VALEUR_ADRENALINE` du planificateur d'IA, qui arbitre entre payer
+une Adrénaline et encaisser la perte. Baisser l'un sans l'autre aurait laissé
+l'IA jouer sur un barème inexistant. Les deux partagent désormais la constante
+exportée `POINTS_PAR_ADRENALINE`.
+
+C'est aussi ce qui règle le point « réduire la conservation d'Adrénaline par les
+IA » : l'étalon baissant, l'IA paie plus volontiers et en garde moins. Aucun
+réglage séparé n'a été nécessaire.
+
+Un test vérifie que les **quatre** emplacements annoncent la même valeur
+(moteur, étalon d'IA, règles affichées, livret) et que le code ne contient plus
+de nombre en dur. Le lexique de l'application ne chiffrait pas du tout
+l'Adrénaline : un joueur ne pouvait pas savoir qu'elle rapportait des points.
+
+### Le Vert ne valait rien pour l'IA, et ce n'était pas un poids
+
+Demande : « augmenter l'attrait pour la couleur Verte dans l'attribution des
+récompenses des cerveaux IA ». Ce n'était pas un réglage de poids mais un
+**trou** : `gainMarginal` retournait 0 pour le Vert, absent du compteur de
+couleurs du Repaire. Un bloc Vert au sol valait littéralement zéro et aucune IA
+n'avait la moindre raison d'aller le chercher, alors que c'est un joker valant,
+au décompte, la meilleure case disponible.
+
+Il est désormais valorisé à ce qu'il est : le meilleur gain marginal du moment,
+majoré de sa valeur d'option (`ATTRAIT_VERT` = 1,3). Vérification : un Vert
+reste attractif là où le Bleu saturé ne vaut plus rien, ce qui est le
+comportement attendu d'un joker.
+
+Mesure sur 2 séries de 60 parties, tempérament Collectionneur :
+
+| | avant | après |
+|---|---|---|
+| Novice, score moyen | 25,76 | 26,16 |
+| Novice, ratio / Expert | 60,7 % | 63,3 % |
+| Confirmé, score moyen | 31,20 | 30,36 |
+
+Le script de mesure sait maintenant cibler un tempérament
+(`node scripts/mesure-forces.mjs 60 collectionneur`) : il était figé sur
+Opportuniste, donc incapable de répondre à une demande portant sur le
+Collectionneur.
+
+### Ramassage : deux débris sur une même case, et résolution séquentielle
+
+**Le bug (point 1.7).** Je Ne Partage Pas exigeait des cases DISTINCTES :
+cliquer deux fois la même case la désélectionnait, donc une case portant deux
+débris ne pouvait pas être vidée par la carte. Rien dans la règle ne
+l'interdisait.
+
+**La règle (point 2.1, WIP).** Le ramassage se résout élément par élément : dès
+qu'un débris est choisi, le Titan s'y déplace si la case se vide, et les débris
+suivants doivent être à portée depuis CETTE nouvelle position. Conséquence
+assumée, et c'est la partie WIP : des débris du Périmètre de départ peuvent
+devenir inaccessibles. Le revers est vrai aussi, et il est testé : en avançant,
+le Titan atteint des cases qui n'étaient pas à sa portée au départ.
+
+Le clic ne coche donc plus une case en attendant une validation globale, il
+ramasse pour de bon. Un bouton « Terminer » clôture une carte qu'on ne peut plus
+finir faute de débris à portée : sans lui, un Titan sans voisin après son
+déplacement se retrouvait devant un panneau sans issue, exactement le blocage
+rencontré trois fois le 18 août.
+
+Une seule fonction porte la règle, appelée élément par élément : le wrapper la
+boucle pour l'IA et les tests, l'interface l'appelle à chaque clic. L'humain et
+l'IA ne peuvent pas jouer deux règles différentes.
+
+### Cohabitation avec un débris (WIP), et une règle qui vivait à quatre endroits
+
+Ruling WIP : un Titan se déplace volontairement sur une case portant un débris,
+s'y arrête et la traverse, sans condition, et sans le ramasser. Avant, un bloc
+Vert encore au sol bloquait l'arrêt.
+
+La condition était **recopiée à quatre endroits** avec le même commentaire
+dupliqué. Elle ne vit plus que dans `elementAuSolBloqueArret`, avec l'ancienne
+ligne conservée en commentaire juste à côté : revenir en arrière coûte une ligne,
+ce qui est la condition pour qu'un WIP reste réellement réversible.
+
+Le livret n'interdisait déjà pas les débris, il ne parlait que des Titans et des
+bâtiments : le code était donc plus restrictif que la règle écrite. Livret et
+règles affichées le disent maintenant explicitement.
+
+### Un invariant qu'une fonction exportée ne défendait pas
+
+Trouvé en écrivant les tests de cohabitation : `resolveFreeMovement` ne
+vérifiait pas qu'un autre Titan occupait la case de destination, alors que
+`deplacerVersCaseLiberee`, dans le même fichier, le faisait déjà. En pratique
+l'interface ne propose que des cases de `getMovementReachable`, qui écarte les
+cases occupées, donc le défaut n'était pas atteignable en jeu, mais une fonction
+exportée qui peut casser un invariant du jeu doit le refuser elle-même. Les deux
+disent maintenant la même chose.
+
+### Ce qui reste de la liste
+
+Bugs non encore traités : saut sur Titan avec choix manuel de la case, fin de
+tour prématurée après Déplacement + DIL, portée et cases invalides du saut,
+projections sur double charge, saut sur Amas, jeu de cartes hors-zone,
+réengagement du déplacement passif après annulation. Interface : ordre du tour,
+fiches bâtiments au clic, menu déroulant à la charte, « + » du scoring de Manche
+4, plateau consultable après le scoring final, badge Arc-en-ciel, fusion du
+panneau de programmation.
+
+**Deux arbitrages reviennent à Nikola**, mesures à l'appui, avant de toucher aux
+forces d'IA :
+
+1. Le **Confirmé Collectionneur bat déjà l'Expert Collectionneur** : 31,20
+   contre 29,7 de moyenne, soit 104 à 106 % sur les deux séries. Le renforcer de
+   20 % aggraverait une inversion de hiérarchie déjà mesurée.
+2. Le **Novice Collectionneur** est à 60 % de l'Expert. Le porter à +50 % le
+   mettrait vers 92 % de l'Expert, ce qui supprimerait presque la marche entre le
+   plus faible et le plus fort niveau.
+
+### Vérifications
+
+Audit, lint, **330 tests** et build au vert. Diagnostic d'invariants sans défaut
+sur 625 parties.
+
+
 ## Non publié — neuvième passe du 2026-08-18 (revue complète avant démo)
 
 Passe de revue demandée par Nikola avant une démonstration : « trouve-moi

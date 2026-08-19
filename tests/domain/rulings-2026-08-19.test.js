@@ -25,6 +25,8 @@ import {
   getJeNePartagePasPool,
   resolveJeNePartagePas,
   resolveJeNePartagePasElement,
+  getMovementReachable,
+  resolveFreeMovement,
 } from "../../src/domain/gameRules.js";
 
 const ICI = dirname(fileURLToPath(import.meta.url));
@@ -209,5 +211,64 @@ describe("Ramassage sequentiel : le Perimetre suit le Titan (WIP 2026-08-19)", (
     expect(res.applied).toBe(true);
     expect(titan.repaire).toEqual(["rose", "rose", "bleu"]);
     expect(jeu.looseBlocks.C3).toEqual(["rouge"]);
+  });
+});
+
+describe("Cohabitation avec un debris (WIP 2026-08-19)", () => {
+  /* Ruling WIP : un Titan se deplace volontairement sur une case portant un
+     debris, s'y arrete et la traverse, sans condition. Avant, un bloc Vert
+     encore au sol bloquait l'arret. */
+  it("un Titan peut s'arreter sur une case portant un bloc Vert", () => {
+    const titan = t(1, "E5");
+    const jeu = { titans: [titan], looseBlocks: { E6: ["vert"] }, board: {} };
+    const res = resolveFreeMovement(1, "E6", jeu);
+    expect(titan.cell).toBe("E6");
+    expect(res.log.join(" ")).not.toMatch(/bloqu/);
+  });
+
+  it("s'y arreter ne ramasse PAS le bloc", () => {
+    const titan = t(1, "E5");
+    const jeu = { titans: [titan], looseBlocks: { E6: ["vert"] }, board: {} };
+    resolveFreeMovement(1, "E6", jeu);
+    expect(titan.repaire).toEqual([]);
+    expect(jeu.looseBlocks.E6).toEqual(["vert"]);
+  });
+
+  it("une case portant un Vert reste atteignable dans le calcul de portee", () => {
+    const titan = t(1, "E5");
+    const board = {};
+    const atteignables = getMovementReachable("E5", 2, board, {}, { E6: ["vert"] });
+    expect([...atteignables.reachable]).toContain("E6");
+    expect(titan.cell).toBe("E5");
+  });
+
+  it("les autres blocages restent en place : batiment debout et Titan present", () => {
+    /* La cohabitation ne concerne QUE les elements au sol. Un batiment debout
+       et un autre Titan bloquent toujours, ce sont deux invariants distincts
+       qu'un WIP sur les debris ne doit pas emporter avec lui. */
+    const moi = t(1, "E5");
+    const autre = t(2, "E6");
+    const jeuTitan = { titans: [moi, autre], looseBlocks: {}, board: {} };
+    const versTitan = resolveFreeMovement(1, "E6", jeuTitan);
+    expect(moi.cell).toBe("E5");
+    expect(versTitan.log.join(" ")).toMatch(/bloqu|occup/i);
+
+    const moi2 = t(1, "E5");
+    const jeuBat = {
+      titans: [moi2], looseBlocks: {},
+      board: { E6: { row: "E", col: 6, blocks: ["bleu"], socle: 1, isTeleporter: false } },
+    };
+    const versBat = resolveFreeMovement(1, "E6", jeuBat);
+    expect(moi2.cell).toBe("E5");
+    expect(versBat.log.join(" ")).toMatch(/bloqu/i);
+  });
+
+  it("la regle ne vit qu'a un seul endroit, condition d'un WIP reversible", () => {
+    const src = lire("src/domain/gameRules.js");
+    // Plus aucune recopie de la condition : elle etait dupliquee 4 fois.
+    expect(src).not.toMatch(/looseStack\.some\(\(e\) => e === "vert"\)/);
+    expect(src).toContain("function elementAuSolBloqueArret");
+    // Un seul point a rebasculer, et il est ecrit noir sur blanc.
+    expect(src).toMatch(/Avant le 2026-08-19 : return .*e === "vert"/);
   });
 });

@@ -18,7 +18,7 @@ export const LEXIQUE = [
   { icon: ICON("perimetre"), nom: "Périmètre", def: "Les 8 cases autour de ton Titan, utilisées pour le calcul d'énergie et la récupération." },
   { icon: ICON("repaire"), nom: "Repaire", def: "Ta réserve personnelle, où sont stockés les blocs et socles que tu collectes." },
   { icon: ICON("batiment"), nom: "Bâtiment", def: "Empilement de blocs colorés, jusqu'à 4 étages, sur une case bâtiment du plateau." },
-  { icon: ICON("bloc_bleu"), nom: "Bloc de béton", def: "Ressource de base récupérable. Sa couleur decide de son barème de score. Peut s'empiler pour former un Amas." },
+  { icon: ICON("bloc_bleu"), nom: "Bloc de béton", def: "Ressource de base récupérable. Sa couleur decide de son barème de score. Peut s'empiler pour former un Amas. Un bloc au sol ne bloque aucun déplacement : un Titan le traverse et peut s'arrêter dessus sans le ramasser." },
   { icon: ICON("amas"), nom: "Amas de béton", def: "Plusieurs Blocs de béton empilés sur une même case." },
   { icon: ICON("titan"), nom: "Titan", def: "Le personnage que tu incarnes : un colosse qui détruit BIG CITY." },
   { icon: ICON("socle"), nom: "Socle", def: "Placé sous chaque bâtiment à sa construction. Sa valeur est fixe, même si le bâtiment perd des blocs ensuite." },

@@ -3021,6 +3021,26 @@ function getActiveTeleporterCells(board) {
 //    bloqués) : Confirmé Nikola — l'occupant est éjecté sur une case libre
 //    adjacente à sa position, au choix de l'attaquant, plutôt que de
 //    refuser la destination.
+/* ---- COHABITATION AVEC UN ELEMENT AU SOL (WIP 2026-08-19) --------
+   Ruling Nikola du 2026-08-19, explicitement marque WIP : un Titan peut se
+   deplacer volontairement sur une case contenant un debris, s'y arreter et la
+   traverser, « sans aucune condition particuliere ». Il ne ramasse pas pour
+   autant : le ramassage reste une action a part.
+
+   Avant ce ruling, un bloc Vert encore au sol bloquait l'arret (les Socles
+   libres, eux, cohabitaient deja depuis la FAQ #9). La regle etait recopiee a
+   QUATRE endroits avec le meme commentaire duplique : c'est le piege classique
+   de ce projet, ou corriger un emplacement en laisse quatre en arriere.
+
+   Elle ne vit donc plus qu'ici. Revenir en arriere, si Nikola tranche
+   autrement, se fait en retablissant la ligne commentee ci-dessous — une
+   seule, ce qui est la condition pour qu'un WIP reste reellement reversible. */
+function elementAuSolBloqueArret(looseStack) {
+  // Avant le 2026-08-19 : return (looseStack || []).some((e) => e === "vert");
+  void looseStack;
+  return false;
+}
+
 function getFreeAdjacentCells(centerKey, board, titansByCell, looseBlocks) {
   const r0 = rowIndex(centerKey[0]);
   const c0 = Number(centerKey.slice(1));
@@ -3035,7 +3055,7 @@ function getFreeAdjacentCells(centerKey, board, titansByCell, looseBlocks) {
       const blockedByTitan = !!titansByCell[key];
       const blockedByBuilding = bldg && bldg.blocks.length > 0;
       const looseStack = looseBlocks ? (looseBlocks[key] || []) : [];
-      const hasNonDebris = looseStack.some((e) => e === "vert"); // fix session : un Socle libre cohabite avec un Titan (FAQ #9, "ramassable comme un Bloc de béton"), seul un bloc Vert (Téléporteur non collecté) reste bloquant
+      const hasNonDebris = elementAuSolBloqueArret(looseStack);
       if (blockedByTitan || blockedByBuilding || hasNonDebris) continue;
       cells.push(key);
     }
@@ -3070,7 +3090,7 @@ function getMovementReachable(startCell, maxRange, board, titansByCell, looseBlo
           const blockedByBuilding = bldg && bldg.blocks.length > 0 && !isTeleporterCell;
           // Case vide de bâtiment mais contenant un élément non-débris (socle ou bloc vert/téléporteur) = bloqué
           const looseStack = looseBlocks ? (looseBlocks[key] || []) : [];
-          const hasNonDebris = looseStack.some((e) => e === "vert"); // fix session : un Socle libre cohabite avec un Titan (FAQ #9, "ramassable comme un Bloc de béton"), seul un bloc Vert (Téléporteur non collecté) reste bloquant
+          const hasNonDebris = elementAuSolBloqueArret(looseStack);
           if (blockedByTitan || blockedByBuilding || hasNonDebris) continue;
 
           const nd = d + 1;
@@ -3145,7 +3165,7 @@ function getMovePath(startCell, destKey, maxRange, board, titansByCell, looseBlo
           const blockedByTitan = !!titansByCell[key];
           const blockedByBuilding = bldg && bldg.blocks.length > 0 && !isTeleporterCell;
           const looseStack = looseBlocks ? (looseBlocks[key] || []) : [];
-          const hasNonDebris = looseStack.some((e) => e === "vert"); // fix session : un Socle libre cohabite avec un Titan (FAQ #9, "ramassable comme un Bloc de béton"), seul un bloc Vert (Téléporteur non collecté) reste bloquant
+          const hasNonDebris = elementAuSolBloqueArret(looseStack);
           if (blockedByTitan || blockedByBuilding || hasNonDebris) continue;
           const nd = d + 1;
           if (isTeleporterCell) {
@@ -3199,9 +3219,22 @@ function resolveFreeMovement(titanId, destKey, gameState) {
     return { log: [`⚠️ Titan ${titanId} : Mouvement vers ${destKey} bloqué — bâtiment présent.`] };
   }
   const looseStack = looseBlocks ? (looseBlocks[destKey] || []) : [];
-  const hasNonDebris = looseStack.some((e) => e === "vert"); // fix session : un Socle libre cohabite avec un Titan (FAQ #9, "ramassable comme un Bloc de béton"), seul un bloc Vert (Téléporteur non collecté) reste bloquant
+  const hasNonDebris = elementAuSolBloqueArret(looseStack);
   if (hasNonDebris) {
     return { log: [`⚠️ Titan ${titanId} : Mouvement vers ${destKey} bloqué — élément non-débris présent.`] };
+  }
+  /* Deux Titans ne partagent jamais une case (invariant vérifié par
+     invariants.js). `deplacerVersCaseLiberee` défendait déjà cette règle,
+     celle-ci faisait confiance à son appelant : en pratique l'interface ne
+     propose que des cases de `getMovementReachable`, qui écarte les cases
+     occupées, mais une fonction exportée qui peut casser un invariant du jeu
+     doit le refuser elle-même. Les deux fonctions du même fichier disent
+     maintenant la même chose. */
+  const occupant = gameState.titans.find(
+    (t) => t.id !== titanId && estSurLePlateau(t) && t.cell === destKey
+  );
+  if (occupant) {
+    return { log: [`⚠️ Titan ${titanId} : Mouvement vers ${destKey} bloqué — case occupée par le Titan ${occupant.id}.`] };
   }
   const titan = gameState.titans.find((t) => t.id === titanId);
   titan.cell = destKey;
