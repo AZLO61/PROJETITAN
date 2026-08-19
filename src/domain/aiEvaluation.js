@@ -304,6 +304,28 @@ export function bestVertAssignments(titans, { exact = false } = {}) {
 // survivre jusqu'au décompte.
 const DECOTE_PORTEE = 0.35;
 
+/* ── ATTRAIT DU VERT ──────────────────────────────────────────
+   Demande de Nikola du 2026-08-19 : « augmenter l'attrait pour la couleur
+   Verte dans l'attribution des recompenses des cerveaux IA ».
+
+   Ce n'etait pas un probleme de poids mais un TROU : `gainMarginal`
+   retournait 0 pour le Vert, faute de figurer dans le compteur de couleurs
+   du Repaire. Un bloc Vert au sol valait donc litteralement zero, et aucune
+   IA n'avait la moindre raison d'aller le chercher — alors que c'est un
+   joker qui vaut, au decompte, la meilleure case disponible.
+
+   Le Vert est donc valorise a ce qu'il est : le MEILLEUR gain marginal parmi
+   les couleurs du bareme. C'est une borne basse assumee, le Vert pouvant
+   aussi aller sur une Piste ADN, ce qui n'est pas chiffrable ici sans
+   connaitre le classement.
+
+   Le coefficient ci-dessous ajoute la valeur d'OPTION du joker : le Vert
+   garde le choix de sa destination jusqu'au decompte, ce qu'aucune autre
+   couleur ne permet, et il compte pour le trophee Arc-en-ciel. Il reste
+   volontairement modere : au-dela d'environ 1,6, un temperament devient
+   monomaniaque et joue contre son propre score (cf. TEMPERAMENT_WEIGHTS). */
+const ATTRAIT_VERT = 1.3;
+
 /* ── VALEUR D'UN TITAN SORTI DU RING ──────────────────────────
    Depuis le ruling du 2026-08-16, un Titan poussé hors de BIG CITY attend
    son tour pour rentrer, et sa rentrée lui mange son Mouvement gratuit.
@@ -339,10 +361,18 @@ export function valeurAPortee(titan, gameState, rayon = 2) {
   (titan.repaire || []).forEach((c) => {
     if (compte[c] !== undefined) compte[c]++;
   });
-  const gainMarginal = (couleur) => {
-    if (compte[couleur] === undefined) return 0; // le Vert, traité ailleurs
+  const gainMarginalCouleur = (couleur) => {
+    if (compte[couleur] === undefined) return 0;
     return scoreBareme(couleur, compte[couleur] + 1) - scoreBareme(couleur, compte[couleur]);
   };
+  /* Un Vert est un joker : il ira sur la meilleure case disponible au
+     decompte. Sa valeur ici est donc le meilleur gain marginal du moment,
+     majore de sa valeur d'option (cf. ATTRAIT_VERT). Il valait 0 avant le
+     2026-08-19, ce qui rendait l'IA aveugle a une couleur entiere. */
+  const gainMarginalVert = () =>
+    Math.max(0, ...Object.keys(compte).map(gainMarginalCouleur)) * ATTRAIT_VERT;
+  const gainMarginal = (couleur) =>
+    couleur === "vert" ? gainMarginalVert() : gainMarginalCouleur(couleur);
 
   const distanceA = (key) => {
     const r = "ABCDEFGHI".indexOf(key[0]);
@@ -425,7 +455,7 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
         detail.bareme * poids.bareme +
         detail.socles * poids.socles +
         // L'Adrénaline entre dans la vue du Novice le 2026-08-18. Ce sont
-        // des jetons posés devant lui, qui valent 3 points chacun et qui
+        // des jetons posés devant lui, qui valent des points au décompte et qui
         // sont écrits sur la feuille de score : les ignorer ne modélisait
         // pas un débutant mais un joueur qui n'a pas lu les règles. Il les
         // gaspillait donc sans compter, et n'avait aucune raison d'en voler.

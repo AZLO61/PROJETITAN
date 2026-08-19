@@ -934,15 +934,23 @@ export default function BoardPanel({ vm }) {
             {/* Mode JNP */}
             {jnpMode && (
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                {/* Ramassage séquentiel (ruling 2026-08-19) : chaque clic sur
+                    une case ramasse pour de bon et déplace le Titan si la case
+                    se vide. Il n'y a donc plus rien à « valider » — le compteur
+                    dit où on en est, et « Terminer » ne sert qu'à clôturer une
+                    carte qu'on ne peut plus finir faute de débris à portée. */}
                 <span style={{ fontSize: ".75rem", color: "#71dbff" }}>
-                  {jnpSelected.length}/{jnpNbToPick} sélectionné{jnpNbToPick === 3 ? " (🏆 Lanterne Rouge)" : ""}
+                  {jnpSelected.length}/{jnpNbToPick} ramassé{jnpSelected.length > 1 ? "s" : ""}{jnpNbToPick === 3 ? " (🏆 Lanterne Rouge)" : ""}
+                </span>
+                <span style={{ fontSize: ".7rem", color: "#8fa6b8" }}>
+                  Clique une case : le ramassage est immédiat, la portée se recalcule depuis ta nouvelle position.
                 </span>
                 <button
                   onClick={jouerJeNePartagePas}
-                  disabled={jnpSelected.length !== jnpNbToPick}
-                  style={smallBtn(jnpSelected.length === jnpNbToPick, "#16E08C", "#00C97A")}
-                >Valider</button>
-                <button onClick={toggleJnpMode} style={cancelBtn()}>Annuler</button>
+                  disabled={jnpSelected.length === 0}
+                  style={smallBtn(jnpSelected.length > 0, "#16E08C", "#00C97A")}
+                >Terminer</button>
+                <button onClick={toggleJnpMode} style={cancelBtn()} disabled={jnpSelected.length > 0}>Annuler</button>
               </div>
             )}
 

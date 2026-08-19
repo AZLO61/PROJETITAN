@@ -22,12 +22,29 @@ import { setSeed } from "../src/domain/rng.js";
 const PARTIES = Number(process.argv[2] || 40);
 const SERIES = [77, 501];
 
+/* Temperament mesure. Il etait fige sur OPPORTUNISTE, ce qui ne permettait
+   pas de repondre a une demande portant sur un temperament precis : Nikola a
+   demande le 2026-08-19 de renforcer Novice COLLECTIONNEUR et Confirme
+   COLLECTIONNEUR. Une force ne se mesure pas dans l'abstrait, elle se mesure
+   avec le temperament qu'on veut regler.
+
+   Usage : node scripts/mesure-forces.mjs [parties] [temperament]
+   Temperaments : opportuniste (defaut), collectionneur, agressif. */
+const TEMPERAMENT = (process.argv[3] || TEMPERAMENTS.OPPORTUNISTE).toLowerCase();
+if (!Object.values(TEMPERAMENTS).includes(TEMPERAMENT)) {
+  console.error(`temperament inconnu : ${TEMPERAMENT}`);
+  console.error(`attendus : ${Object.values(TEMPERAMENTS).join(", ")}`);
+  process.exit(1);
+}
+
 function mesurer(force, graine) {
+  // L'Expert de reference garde le MEME temperament que la force mesuree :
+  // sinon l'ecart melangerait force et temperament, et ne mesurerait plus rien.
   const profils = {
-    1: makeProfile(FORCES.EXPERT, TEMPERAMENTS.OPPORTUNISTE),
-    2: makeProfile(force, TEMPERAMENTS.OPPORTUNISTE),
-    3: makeProfile(force, TEMPERAMENTS.OPPORTUNISTE),
-    4: makeProfile(force, TEMPERAMENTS.OPPORTUNISTE),
+    1: makeProfile(FORCES.EXPERT, TEMPERAMENT),
+    2: makeProfile(force, TEMPERAMENT),
+    3: makeProfile(force, TEMPERAMENT),
+    4: makeProfile(force, TEMPERAMENT),
   };
   // Graine du générateur remise à la même valeur avant chaque campagne :
   // deux mesures ne diffèrent que par le réglage testé, jamais par le tirage.
@@ -37,6 +54,7 @@ function mesurer(force, graine) {
 }
 
 console.log(`parties par serie   ${PARTIES}`);
+console.log(`temperament         ${TEMPERAMENT}`);
 for (const force of [FORCES.NOVICE, FORCES.CONFIRME]) {
   console.log(`\n── ${force.toUpperCase()} face a un Expert ──`);
   let cumul = 0;

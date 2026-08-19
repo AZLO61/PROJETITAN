@@ -16,7 +16,7 @@ const {
   rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, releaseSocle, projectInDirection, estSurLePlateau, indexerTitans, rentrerEnJeu,
   resolveToutCasserBatiments, resolveToutCasserBlocs,
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
-  scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, boingBoingStepCost, resolveBoingBoing,
+  scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, getJeNePartagePasCount, resolveJeNePartagePasElement, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, boingBoingStepCost, resolveBoingBoing,
   choisirRepliIA, appliquerRepli, appliquerReplElement,
   canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
@@ -2447,7 +2447,11 @@ export function useBoardGeneratorController() {
     [selectedTitanId, recupPool, titanState.players, looseBlocks, state.board, canUseRecupPassif, captureSnapshot]
   );
 
-  const jnpNbToPick = selectedTitanId ? (isLanterneRouge(selectedTitanId, { titans: titanState.players }) ? 3 : 2) : 2;
+  // Le compte vient du moteur : l'interface le recopiait, ce qui faisait deux
+  // endroits a corriger le jour ou la Lanterne Rouge changerait.
+  const jnpNbToPick = selectedTitanId
+    ? getJeNePartagePasCount(selectedTitanId, { titans: titanState.players })
+    : 2;
   const jnpPool = useMemo(
     () => (selectedTitanId
       ? new Set(getJeNePartagePasPool(selectedTitanId, { titans: titanState.players, looseBlocks }))
@@ -2458,19 +2462,69 @@ export function useBoardGeneratorController() {
     setJnpMode((m) => { const next = !m; if (next) { setTeaMode(false); setGraouMode(false); setBbMode(false); setBbPath([]); } return next; });
     setJnpSelected([]);
   }, []);
-  const jnpToggleCell = useCallback((key) => {
-    if (!jnpPool.has(key)) return;
-    setJnpSelected((prev) => { if (prev.includes(key)) return prev.filter((k) => k !== key); if (prev.length >= jnpNbToPick) return prev; return [...prev, key]; });
-  }, [jnpPool, jnpNbToPick]);
-  const jouerJeNePartagePas = useCallback(() => {
+  /* Ruling Nikola du 2026-08-19 (WIP) : le ramassage se resout ELEMENT PAR
+     ELEMENT. Le clic ne coche donc plus une case en attendant une validation
+     globale, il ramasse pour de bon, et le Titan se deplace aussitot si la
+     case se vide. Le Perimetre du prelevement suivant est alors recalcule
+     depuis sa NOUVELLE case, ce que `jnpPool` fait tout seul puisqu'il depend
+     de la position du Titan.
+
+     Deux consequences voulues :
+     · deux debris empiles sur une MEME case se ramassent, ce que l'ancienne
+       version interdisait (le second clic desélectionnait la case) ;
+     · des debris du Perimetre de depart peuvent devenir hors de portee apres
+       le premier ramassage. C'est la partie que Nikola garde en WIP. */
+  const jnpPickCell = useCallback((key) => {
     if (!selectedTitanId || !canPlayCard("je_ne_partage_pas")) return;
-    captureSnapshot();
-    const result = resolveJeNePartagePas(selectedTitanId, jnpSelected, { titans: titanState.players, looseBlocks, board: state.board });
+    if (!jnpPool.has(key)) return;
+    if (jnpSelected.length >= jnpNbToPick) return;
+
+    // L'instantane est pris avant le PREMIER element seulement : Annuler doit
+    // ramener avant la carte entiere, pas au milieu d'un ramassage.
+    if (jnpSelected.length === 0) captureSnapshot();
+
+    const result = resolveJeNePartagePasElement(
+      selectedTitanId, key,
+      { titans: titanState.players, looseBlocks, board: state.board }
+    );
     setActionLog((prev) => [...prev, ...result.log]);
-    if (result.applied) { markCardPlayed(selectedTitanId, "je_ne_partage_pas"); setJnpMode(false); setJnpSelected([]); }
+    if (!result.applied) {
+      setLooseBlocks((prev) => ({ ...prev }));
+      setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+      return;
+    }
+
+    const dejaPris = [...jnpSelected, key];
+    setJnpSelected(dejaPris);
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, jnpSelected, titanState.players, looseBlocks, state.board, canPlayCard, markCardPlayed, captureSnapshot]);
+
+    // Le compte atteint, la carte est jouee. Pas de bouton a cliquer : il n'y
+    // a plus rien a valider, tout est deja resolu.
+    if (dejaPris.length >= jnpNbToPick) {
+      markCardPlayed(selectedTitanId, "je_ne_partage_pas");
+      setJnpMode(false);
+      setJnpSelected([]);
+    }
+  }, [selectedTitanId, jnpPool, jnpSelected, jnpNbToPick, titanState.players, looseBlocks, state.board, canPlayCard, markCardPlayed, captureSnapshot]);
+
+  // Conserve sous son ancien nom : les panneaux l'appellent pour le clic case.
+  const jnpToggleCell = jnpPickCell;
+
+  /* Sortie de secours du ramassage sequentiel. Un Titan peut se retrouver
+     sans aucun debris a portee apres s'etre deplace : la carte est alors
+     ramassee a moitie et il n'y a plus rien a cliquer. Sans ce bouton, le
+     panneau resterait ouvert sans issue — exactement le blocage de partie
+     rencontre trois fois le 18 aout. Il cloture la carte avec ce qui a ete
+     obtenu. */
+  const jouerJeNePartagePas = useCallback(() => {
+    if (!selectedTitanId || !canPlayCard("je_ne_partage_pas")) return;
+    if (jnpSelected.length === 0) return;
+    setActionLog((prev) => [...prev, `Je Ne Partage Pas : ramassage cloture a ${jnpSelected.length}/${jnpNbToPick} element(s).`]);
+    markCardPlayed(selectedTitanId, "je_ne_partage_pas");
+    setJnpMode(false);
+    setJnpSelected([]);
+  }, [selectedTitanId, jnpSelected, jnpNbToPick, canPlayCard, markCardPlayed]);
 
   const jouerFautPasMeChauffer = useCallback(() => {
     if (!selectedTitanId || !canPlayCard("faut_pas_me_chauffer")) return;
@@ -3170,6 +3224,7 @@ export function useBoardGeneratorController() {
     jnpPool,
     toggleJnpMode,
     jnpToggleCell,
+    jnpPickCell,
     jouerJeNePartagePas,
     jouerFautPasMeChauffer,
     pickFpmcTarget,

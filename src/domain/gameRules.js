@@ -2240,60 +2240,106 @@ function getJeNePartagePasPool(titanId, gameState) {
     .filter((key) => looseBlocks[key] && looseBlocks[key].length > 0);
 }
 
-function resolveJeNePartagePas(titanId, selectedCellKeys, gameState) {
+/* Nombre d'elements que Je Ne Partage Pas fait ramasser. La Lanterne Rouge en
+   accorde un de plus. Expose pour que l'interface compte comme le moteur au
+   lieu de refaire le calcul de son cote. */
+function getJeNePartagePasCount(titanId, gameState) {
+  return isLanterneRouge(titanId, gameState) ? 3 : 2;
+}
+
+/* ---- RAMASSAGE SEQUENTIEL, UN ELEMENT A LA FOIS ----------------
+   Ruling Nikola du 2026-08-19, marque WIP (pas encore definitif, peut
+   evoluer) : le ramassage se resout element par element. Des qu'un premier
+   debris est choisi, le Titan s'y deplace, et les debris suivants doivent
+   etre a portee depuis CETTE NOUVELLE position, pas depuis la position
+   d'origine.
+
+   Consequence assumee par Nikola, et c'est elle qui reste WIP : des debris
+   qui etaient dans le Perimetre de depart peuvent devenir inaccessibles
+   apres le premier ramassage.
+
+   Seconde correction, celle du bug remonte : l'ancienne version exigeait des
+   cases DISTINCTES, ce qui rendait impossible de ramasser deux debris empiles
+   sur une meme case. Une case peut desormais etre choisie autant de fois
+   qu'elle porte d'elements.
+
+   Tout passe par cette fonction, appelee element par element : le wrapper
+   ci-dessous la boucle pour les appelants qui detiennent deja toute la liste
+   (IA, tests), l'interface l'appelle a chaque clic. Une seule logique, pour
+   que l'humain et l'IA ne jouent jamais deux regles differentes. */
+function resolveJeNePartagePasElement(titanId, cellKey, gameState, pickedValue) {
   const { titans, looseBlocks } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const log = [];
 
+  // Le Perimetre est relu MAINTENANT, depuis la case ou le Titan se trouve a
+  // cet instant. C'est tout l'objet du ruling.
+  const pool = new Set(getJeNePartagePasPool(titanId, gameState));
+  if (!pool.has(cellKey)) {
+    log.push(`⚠️ ${cellKey} hors Périmètre depuis ${titan.cell} ou sans bloc libre — ramassage refusé.`);
+    return { log, applied: false, decisions: [] };
+  }
+
+  const stack = looseBlocks[cellKey];
+  let idx = stack.length - 1;
+  if (pickedValue !== undefined) {
+    const found = stack.lastIndexOf(pickedValue);
+    if (found !== -1) idx = found;
+  }
+  const picked = stack.splice(idx, 1)[0];
+
+  if (isSocleMarker(picked)) {
+    const val = socleValue(picked);
+    titan.socles.push(val);
+    log.push(`${cellKey} : Socle (valeur ${val}) ramassé (aucune Adrénaline dépensable sur cette action).`);
+  } else {
+    titan.repaire.push(picked);
+    log.push(`${cellKey} : bloc ${picked} ramassé (aucune Adrénaline dépensable sur cette action).`);
+  }
+
+  // Regle transversale (confirmee Nikola) : case liberee -> deplacement
+  // OBLIGATOIRE, meme helper que le passif Recuperation.
+  if (stack.length === 0) {
+    deplacerVersCaseLiberee(titan, cellKey, gameState, log);
+    retirerPileVide(looseBlocks, cellKey);
+  }
+
+  return { log, applied: true, decisions: [] };
+}
+
+function resolveJeNePartagePas(titanId, selectedCellKeys, gameState) {
+  const { titans } = gameState;
+  const titan = titans.find((t) => t.id === titanId);
+  const log = [];
+
   const lanterneRouge = isLanterneRouge(titanId, gameState);
-  const nbToPick = lanterneRouge ? 3 : 2;
+  const nbToPick = getJeNePartagePasCount(titanId, gameState);
 
   if (lanterneRouge) {
     log.push(`🏆 Lanterne Rouge active (Repaire ${titan.repaire.length} ≤ minimum) → 3 blocs au lieu de 2.`);
   }
 
   if (selectedCellKeys.length !== nbToPick) {
-    log.push(`⚠️ Sélection invalide : ${selectedCellKeys.length} case(s) choisie(s), ${nbToPick} attendue(s).`);
+    log.push(`⚠️ Sélection invalide : ${selectedCellKeys.length} choix, ${nbToPick} attendu(s).`);
     return { log, applied: false, decisions: [] };
   }
 
-  const pool = new Set(getJeNePartagePasPool(titanId, gameState));
+  /* Plus de validation globale en amont : le Perimetre bouge avec le Titan,
+     valider les trois choix contre le Perimetre de depart n'aurait donc plus
+     aucun sens. Chaque element est valide au moment ou il est ramasse.
+
+     Un choix refuse en cours de route n'annule PAS ce qui a deja ete
+     ramasse : l'action reste `applied` des le premier element obtenu, sans
+     quoi l'appelant croirait pouvoir rejouer la carte alors que le Titan a
+     deja encaisse son butin et s'est deplace. */
+  let applied = false;
   for (const key of selectedCellKeys) {
-    if (!pool.has(key)) {
-      log.push(`⚠️ ${key} hors Périmètre ou sans bloc libre — sélection annulée.`);
-      return { log, applied: false, decisions: [] };
-    }
+    const res = resolveJeNePartagePasElement(titanId, key, gameState);
+    log.push(...res.log);
+    if (res.applied) applied = true;
   }
 
-  for (const key of selectedCellKeys) {
-    const stack = looseBlocks[key];
-    const picked = stack.pop();
-    if (isSocleMarker(picked)) {
-      const val = socleValue(picked);
-      titan.socles.push(val);
-      log.push(`${key} : Socle (valeur ${val}) ramassé (aucune Adrénaline dépensable sur cette action).`);
-    } else {
-      titan.repaire.push(picked);
-      log.push(`${key} : bloc ${picked} ramassé (aucune Adrénaline dépensable sur cette action).`);
-    }
-    // Règle transversale (confirmée Nikola, session) : case libérée →
-    // déplacement OBLIGATOIRE, même logique que le passif Récupération.
-    // Traité case par case (1 par 1), dans l'ordre de sélection du
-    // joueur : si plusieurs cases se libèrent d'affilée, le Titan finit
-    // sur la DERNIÈRE case libérée traitée (chaque libération déplace le
-    // Titan, la suivante écrase la précédente).
-    if (stack.length === 0) {
-      // Même helper que le passif Récupération : la règle est la même, elle
-      // ne doit exister qu'à un seul endroit (cf. deplacerVersCaseLiberee).
-      // Cette copie-ci ignorait la présence d'un autre Titan et provoquait
-      // des superpositions, alors que la version Récupération avait déjà
-      // été corrigée.
-      deplacerVersCaseLiberee(titan, key, gameState, log);
-      retirerPileVide(looseBlocks, key);
-    }
-  }
-
-  return { log, applied: true, decisions: [] };
+  return { log, applied, decisions: [] };
 }
 
 /* ============================================================
@@ -3969,6 +4015,8 @@ export {
   advanceGraouhhh,
   isLanterneRouge,
   getJeNePartagePasPool,
+  getJeNePartagePasCount,
+  resolveJeNePartagePasElement,
   resolveJeNePartagePas,
   PORTEE_BOING_BOING,
   chebyshevDistance,
