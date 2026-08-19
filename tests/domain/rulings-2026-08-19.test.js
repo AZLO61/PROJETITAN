@@ -159,62 +159,75 @@ describe("Je Ne Partage Pas : deux debris sur une MEME case (bug remonte)", () =
   });
 });
 
-describe("Ramassage sequentiel : le Perimetre suit le Titan (WIP 2026-08-19)", () => {
-  it("le Titan se deplace des que la case ramassee se vide", () => {
-    const titan = t(1, "B2");
-    const jeu = { titans: [titan], looseBlocks: { A2: ["bleu"] }, board: {} };
-    const res = resolveJeNePartagePasElement(1, "A2", jeu);
-    expect(res.applied).toBe(true);
-    expect(titan.cell).toBe("A2");
-  });
+describe("Je Ne Partage Pas : un seul deplacement, a la fin (WIP revise 2026-08-19)", () => {
+  /* CE WIP A ETE REVISE LE JOUR MEME, apres trois parties de Nikola.
 
-  it("un debris hors de portee APRES le deplacement devient inaccessible", () => {
-    /* C'est la consequence que Nikola assume et qui reste WIP. Titan en B2 :
-       C3 est dans son Perimetre de depart. Il ramasse d'abord en A2, s'y
-       deplace, et C3 n'est plus adjacent a A2 : le second prelevement est
-       refuse. Avant ce ruling, il aurait ete accepte. */
-    const titan = t(1, "B2");
-    const jeu = { titans: [titan], looseBlocks: { A2: ["bleu"], C3: ["rouge"] }, board: {} };
+     Premiere version, le matin : le Titan se deplacait des qu'une case se
+     vidait, et le Perimetre des prelevements suivants etait recalcule depuis
+     sa nouvelle position. Consequence, des debris du Perimetre de depart
+     devenaient inaccessibles.
 
-    // Depart : les deux cases sont bien a portee.
-    expect(getJeNePartagePasPool(1, jeu).sort()).toEqual(["A2", "C3"]);
+     Version retenue, le soir : « n'impose plus de deplacement directement sur
+     la tuile des qu'elle est libre. Pars du principe qu'en fonction du clic je
+     finis sur la derniere case selectionnee : on peut donc choisir de
+     recuperer plusieurs blocs sur des cases differentes, c'est juste qu'on
+     finit sur la derniere selectionnee si elle devient libre. »
 
-    resolveJeNePartagePasElement(1, "A2", jeu);
-    expect(titan.cell).toBe("A2");
+     La carte redevient donc ce qu'elle doit etre : on pioche a plusieurs
+     endroits de son Perimetre, sans qu'il se derobe en cours de route. */
 
-    // Depuis A2, C3 n'est plus dans le Perimetre.
-    expect(getJeNePartagePasPool(1, jeu)).not.toContain("C3");
-    const refus = resolveJeNePartagePasElement(1, "C3", jeu);
-    expect(refus.applied).toBe(false);
-    expect(refus.log.join(" ")).toMatch(/hors P.rim.tre/);
-    expect(titan.repaire).toEqual(["bleu"]);
-  });
-
-  it("un debris qui ENTRE dans le Perimetre grace au deplacement devient accessible", () => {
-    /* Le revers de la meme regle, et la raison pour laquelle elle n'est pas
-       qu'une restriction : en avancant, le Titan atteint des cases qui
-       n'etaient pas a sa portee au depart. */
-    const titan = t(1, "B2");
-    const jeu = { titans: [titan], looseBlocks: { C3: ["bleu"], D4: ["rouge"] }, board: {} };
-    expect(getJeNePartagePasPool(1, jeu)).not.toContain("D4");
-    resolveJeNePartagePasElement(1, "C3", jeu);
-    expect(titan.cell).toBe("C3");
-    const second = resolveJeNePartagePasElement(1, "D4", jeu);
-    expect(second.applied).toBe(true);
-    expect(titan.repaire.sort()).toEqual(["bleu", "rouge"]);
-    expect(titan.cell).toBe("D4");
-  });
-
-  it("un butin deja ramasse n'est jamais rendu si un choix suivant est refuse", () => {
-    /* Sans cette garantie, l'appelant croirait la carte non jouee alors que le
-       Titan a deja encaisse son butin et change de case. */
+  it("ramasser sur deux cases eloignees reste possible", () => {
+    /* Le cas que l'ancienne version rendait impossible : A2 puis C3, deux
+       cases opposees du Perimetre de B2. Avant, prendre A2 tirait le Titan en
+       A2 et C3 sortait de portee. */
     const titan = t(1, "B2", { repaire: ["rose", "rose"] });
     const pauvre = t(2, "I9");
     const jeu = { titans: [titan, pauvre], looseBlocks: { A2: ["bleu"], C3: ["rouge"] }, board: {} };
     const res = resolveJeNePartagePas(1, ["A2", "C3"], jeu);
     expect(res.applied).toBe(true);
+    expect(titan.repaire).toEqual(["rose", "rose", "bleu", "rouge"]);
+    // Il finit sur la DERNIERE case choisie, devenue libre.
+    expect(titan.cell).toBe("C3");
+  });
+
+  it("le Titan ne bouge pas entre deux prelevements", () => {
+    const titan = t(1, "B2", { repaire: ["rose", "rose"] });
+    const pauvre = t(2, "I9");
+    const jeu = { titans: [titan, pauvre], looseBlocks: { A2: ["bleu"], C3: ["rouge"] }, board: {} };
+    resolveJeNePartagePasElement(1, "A2", jeu);
+    // Apres le premier element, il est encore chez lui : c'est tout l'enjeu.
+    expect(titan.cell).toBe("B2");
+    expect(getJeNePartagePasPool(1, jeu)).toContain("C3");
+  });
+
+  it("il ne se pose pas sur une case ou il reste quelque chose", () => {
+    const titan = t(1, "E5", { repaire: ["rose", "rose"] });
+    const pauvre = t(2, "I9");
+    const jeu = { titans: [titan, pauvre], looseBlocks: { E6: ["bleu", "rouge"] }, board: {} };
+    // Une seule prise sur une case qui en porte deux : elle n'est pas videe.
+    resolveJeNePartagePasElement(1, "E6", jeu);
+    expect(titan.cell).toBe("E5");
+    expect(jeu.looseBlocks.E6).toEqual(["bleu"]);
+  });
+
+  it("deux prises sur la meme case la vident, et il s'y installe", () => {
+    const titan = t(1, "E5", { repaire: ["rose", "rose"] });
+    const pauvre = t(2, "I9");
+    const jeu = { titans: [titan, pauvre], looseBlocks: { E6: ["bleu", "rouge"] }, board: {} };
+    const res = resolveJeNePartagePas(1, ["E6", "E6"], jeu);
+    expect(res.applied).toBe(true);
+    expect(jeu.looseBlocks.E6).toBeUndefined();
+    expect(titan.cell).toBe("E6");
+  });
+
+  it("un butin deja ramasse n'est jamais rendu si un choix suivant est refuse", () => {
+    const titan = t(1, "B2", { repaire: ["rose", "rose"] });
+    const pauvre = t(2, "I9");
+    const jeu = { titans: [titan, pauvre], looseBlocks: { A2: ["bleu"] }, board: {} };
+    // Le second choix vise une case vide : refuse, mais le premier reste acquis.
+    const res = resolveJeNePartagePas(1, ["A2", "H8"], jeu);
+    expect(res.applied).toBe(true);
     expect(titan.repaire).toEqual(["rose", "rose", "bleu"]);
-    expect(jeu.looseBlocks.C3).toEqual(["rouge"]);
   });
 });
 

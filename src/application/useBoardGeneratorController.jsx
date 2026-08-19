@@ -16,7 +16,7 @@ const {
   rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, releaseSocle, projectInDirection, estSurLePlateau, indexerTitans, rentrerEnJeu,
   resolveToutCasserBatiments, resolveToutCasserBlocs,
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
-  scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, getJeNePartagePasCount, resolveJeNePartagePasElement, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
+  scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, getJeNePartagePasCount, resolveJeNePartagePasElement, deplacerSiDerniereCaseLibre, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
   choisirRepliIA, appliquerRepli, appliquerReplElement,
   canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
@@ -2574,9 +2574,21 @@ export function useBoardGeneratorController() {
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
 
-    // Le compte atteint, la carte est jouee. Pas de bouton a cliquer : il n'y
-    // a plus rien a valider, tout est deja resolu.
+    /* Le compte atteint, la carte est jouee. Pas de bouton a cliquer : tout
+       est deja resolu.
+
+       C'est aussi le moment du SEUL deplacement (Nikola, 2026-08-19) : « on
+       finit sur la derniere case selectionnee si elle devient libre ». Chaque
+       clic intermediaire ne fait donc plus bouger le Titan, ce qui lui
+       permet de piocher sur des cases eloignees les unes des autres sans que
+       son Perimetre ne se derobe en cours de route. */
     if (dejaPris.length >= jnpNbToPick) {
+      deplacerSiDerniereCaseLibre(
+        selectedTitanId, key,
+        { titans: titanState.players, looseBlocks, board: state.board }
+      );
+      setLooseBlocks((prev) => ({ ...prev }));
+      setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
       markCardPlayed(selectedTitanId, "je_ne_partage_pas");
       setJnpMode(false);
       setJnpSelected([]);
@@ -2595,11 +2607,24 @@ export function useBoardGeneratorController() {
   const jouerJeNePartagePas = useCallback(() => {
     if (!selectedTitanId || !canPlayCard("je_ne_partage_pas")) return;
     if (jnpSelected.length === 0) return;
-    setActionLog((prev) => [...prev, `Je Ne Partage Pas : ramassage cloture a ${jnpSelected.length}/${jnpNbToPick} element(s).`]);
+    // Cloture anticipee : le Titan se pose quand meme sur sa derniere case
+    // choisie, si elle est libre. Meme regle que pour un ramassage complet.
+    const derniere = jnpSelected[jnpSelected.length - 1];
+    const journal = [];
+    deplacerSiDerniereCaseLibre(
+      selectedTitanId, derniere,
+      { titans: titanState.players, looseBlocks, board: state.board },
+      journal
+    );
+    setLooseBlocks((prev) => ({ ...prev }));
+    setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+    setActionLog((prev) => [...prev, ...journal,
+      `Je Ne Partage Pas : ramassage cloture a ${jnpSelected.length}/${jnpNbToPick} element(s).`]);
     markCardPlayed(selectedTitanId, "je_ne_partage_pas");
     setJnpMode(false);
     setJnpSelected([]);
-  }, [selectedTitanId, jnpSelected, jnpNbToPick, canPlayCard, markCardPlayed]);
+  }, [selectedTitanId, jnpSelected, jnpNbToPick, canPlayCard, markCardPlayed,
+      titanState.players, looseBlocks, state.board]);
 
   const jouerFautPasMeChauffer = useCallback(() => {
     if (!selectedTitanId || !canPlayCard("faut_pas_me_chauffer")) return;

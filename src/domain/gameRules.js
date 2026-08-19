@@ -1138,6 +1138,48 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         const pushedKey = pushed.row + pushed.col;
         if (!looseBlocks[pushedKey]) looseBlocks[pushedKey] = [];
         looseBlocks[pushedKey].push(broken);
+
+        /* LE BLOC CASSE SE POSE AU CHOIX DE L'ATTAQUANT (Nikola, 2026-08-19).
+
+           Son cas : « le A1 casse un morceau mais ce n'est pas moi qui ai
+           choisi ou le mettre, alors qu'il aurait pu aller en B1, B2 ou A2 —
+           il y avait un titan en A2, j'aurais aime le mettre en A2 pour le
+           faire sortir ». Question posee, reponse : « toujours au choix de
+           l'attaquant ».
+
+           On reutilise le mecanisme de REPLI, qui a deja sa file, son bandeau,
+           son surlignage sur le plateau, sa resolution automatique quand
+           l'initiateur est une IA et son instantane d'annulation. `pushedKey`
+           n'est plus qu'un point de chute par defaut.
+
+           `titanId: null` designe le DEBRIS qui vient de se poser sur la case
+           par defaut : c'est la convention deja utilisee par les autres
+           replis, et `appliquerReplElement` sait le deplacer. */
+        if (Array.isArray(ctx.replis)) {
+          /* Les cases offertes sont celles qui entourent le BATIMENT TOUCHE,
+             pas le point de chute lointain : c'est ce que decrit Nikola, « il
+             aurait pu aller en B1, B2 ou A2 » autour du A1 qu'il venait de
+             casser. Un debris ne se pose jamais sur un batiment debout ; une
+             case portant un Titan, elle, est un choix legitime — c'est meme
+             tout l'interet, « j'aurais aime le mettre en A2 pour le faire
+             sortir ». */
+          const impactKey = rowFromIndex(nr) + nc;
+          const casesPossibles = getCasesRepliDebris(
+            rowFromIndex(r) + c, impactKey, curDr, curDc,
+            { board, looseBlocks, titans, movingTitanId: null, initiatorId: ctx.initiatorId ?? null }
+          );
+          // Le point de chute par defaut fait partie des choix offerts.
+          const choix = [...new Set([pushedKey, ...(casesPossibles || [])])];
+          if (choix.length > 1) {
+            ctx.replis.push({
+              titanId: null,
+              defaut: pushedKey,
+              cases: choix,
+              cible: impactKey,
+              initiatorId: ctx.initiatorId ?? null,
+            });
+          }
+        }
         log.push(
           `${nextKey} : ricochet au Seuil 4 (énergie ${remaining}) → bloc ${broken} cassé et projeté vers ${pushedKey}.`
         );
@@ -2350,14 +2392,25 @@ function resolveJeNePartagePasElement(titanId, cellKey, gameState, pickedValue) 
     log.push(`${cellKey} : bloc ${picked} ramassé (aucune Adrénaline dépensable sur cette action).`);
   }
 
-  // Regle transversale (confirmee Nikola) : case liberee -> deplacement
-  // OBLIGATOIRE, meme helper que le passif Recuperation.
-  if (stack.length === 0) {
-    deplacerVersCaseLiberee(titan, cellKey, gameState, log);
-    retirerPileVide(looseBlocks, cellKey);
-  }
+  /* PAS DE DEPLACEMENT AUTOMATIQUE ICI (Nikola, 2026-08-19).
 
-  return { log, applied: true, decisions: [] };
+     « Pour Je Ne Partage Pas, n'impose plus de deplacement directement sur la
+     tuile des qu'elle est libre. Pars du principe qu'en fonction du clic je
+     finis sur la derniere case selectionnee : on peut donc choisir de
+     recuperer plusieurs blocs sur des cases differentes, c'est juste qu'on
+     finit sur la derniere selectionnee si elle devient libre. »
+
+     Avant, chaque case videe deplacait le Titan immediatement. Prendre un bloc
+     en A2 puis un en C3 le tirait donc en A2 d'abord, ce qui retrecissait son
+     Perimetre et rendait C3 inatteignable — alors que la carte est justement
+     faite pour piocher a plusieurs endroits.
+
+     Le deplacement ne se joue plus qu'une fois, a la toute fin, et seulement
+     sur la DERNIERE case choisie si elle est libre : c'est le wrapper
+     ci-dessous qui s'en charge. */
+  retirerPileVide(looseBlocks, cellKey);
+
+  return { log, applied: true, decisions: [], videe: stack.length === 0 };
 }
 
 function resolveJeNePartagePas(titanId, selectedCellKeys, gameState) {
@@ -2386,13 +2439,34 @@ function resolveJeNePartagePas(titanId, selectedCellKeys, gameState) {
      quoi l'appelant croirait pouvoir rejouer la carte alors que le Titan a
      deja encaisse son butin et s'est deplace. */
   let applied = false;
+  let derniere = null;
   for (const key of selectedCellKeys) {
     const res = resolveJeNePartagePasElement(titanId, key, gameState);
     log.push(...res.log);
-    if (res.applied) applied = true;
+    if (res.applied) { applied = true; derniere = key; }
+  }
+
+  // Un seul deplacement, a la fin, sur la DERNIERE case choisie et seulement
+  // si elle s'est reellement videe (cf. le commentaire de l'element).
+  if (applied && derniere) {
+    deplacerSiDerniereCaseLibre(titanId, derniere, gameState, log);
   }
 
   return { log, applied, decisions: [] };
+}
+
+/* Deplace le Titan sur la derniere case choisie, si elle est libre. Utilise le
+   meme helper que le passif Recuperation : la regle « case liberee, on s'y
+   pose » ne change pas, c'est le MOMENT ou on l'applique qui change. */
+function deplacerSiDerniereCaseLibre(titanId, cellKey, gameState, log = []) {
+  const { titans, looseBlocks } = gameState;
+  const titan = titans.find((t) => t.id === titanId);
+  if (!titan) return false;
+  if ((looseBlocks[cellKey] || []).length > 0) {
+    log.push(`${cellKey} : il reste des elements, le Titan ${titanId} ne s'y pose pas.`);
+    return false;
+  }
+  return deplacerVersCaseLiberee(titan, cellKey, gameState, log);
 }
 
 /* ============================================================
@@ -4163,6 +4237,7 @@ export {
   getJeNePartagePasPool,
   getJeNePartagePasCount,
   resolveJeNePartagePasElement,
+  deplacerSiDerniereCaseLibre,
   resolveJeNePartagePas,
   PORTEE_BOING_BOING,
   chebyshevDistance,

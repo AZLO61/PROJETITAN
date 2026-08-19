@@ -65,7 +65,12 @@ describe("Tutoriel « Ton premier tour » du livret", () => {
 
     // 3 bâtiments frappés + 1 bloc arraché par ricochet.
     expect(e.titans[0].destruction).toBe(4);
-    // Aucun repli en attente : le tutoriel n'a pas à expliquer ce cas.
-    expect(e.replis).toHaveLength(0);
+    /* UN choix en attente depuis le 2026-08-19 : le bloc arraché par ricochet
+       se pose désormais où l'attaquant veut, parmi les cases qui entourent le
+       bâtiment touché. Nikola : « ce n'est pas moi qui ai choisi où le mettre,
+       alors qu'il aurait pu aller en B1, B2 ou A2 ». Le tutoriel du livret le
+       mentionne, il ne peut pas promettre un tour sans décision. */
+    expect(e.replis).toHaveLength(1);
+    expect(e.replis[0].cases.length).toBeGreaterThan(1);
   });
 });

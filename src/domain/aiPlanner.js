@@ -57,6 +57,7 @@ import {
   getEcroulementCells,
   resolveEcroulementAmas,
   getFPMCTargets,
+  getProgrammedSum,
   getJeNePartagePasPool,
   getMovementReachable,
   getRecuperationPool,
@@ -416,15 +417,36 @@ function simulerCarte(coup, titanId, etat, mancheNumber) {
       // jeu réel, non documentée en en-tête de simulation.js, et raison
       // pour laquelle 200 parties de diagnostic n'ont jamais emprunté ce
       // chemin de code ni vu les bugs qui s'y trouvaient.
-      // Le vrai résolveur du domaine est appelé ici, comme pour les cinq
-      // autres cartes. L'IA ne mise pas d'Adrénaline en secret, faute de
-      // règle de décision : les deux mises restent à 0.
+      /* MISE D'ADRENALINE DE L'IA (Nikola, 2026-08-19).
+
+         « J'ai surtout l'impression que les IA evitent d'utiliser cette carte,
+         en tout cas sur moi. » Elles la jouaient, mais avec DEUX MISES A ZERO :
+         faute de regle de decision, elles arrivaient au duel les mains vides et
+         le perdaient des que l'adversaire avait une carte de plus. Une carte
+         Force 3 sur six etait donc systematiquement mal notee, et l'IA
+         l'ecartait au profit d'autre chose.
+
+         La regle retenue est celle d'un joueur prudent, pas d'un devin : elle
+         ne connait pas les cartes programmees de sa cible (elles sont
+         secretes), donc elle mise le minimum qui fait basculer un duel serre.
+         Elle engage 1 Adrenaline quand son avance de base est nulle ou
+         negative, et 2 quand elle est nettement derriere et qu'elle en a les
+         moyens. Au-dela, ce serait bruler sa reserve sur une information
+         qu'elle n'a pas — l'Adrenaline vaut aussi des points au decompte. */
       const cibles = getFPMCTargets(titanId, etat);
       const decisions = [];
+      const attaquant = etat.titans.find((t) => t.id === titanId);
+      let stock = attaquant ? (attaquant.adrenaline || 0) : 0;
       for (const defId of cibles) {
-        const r = resolveFautPasMeChauffer(titanId, defId, cibles.length, etat);
+        const cible = etat.titans.find((t) => t.id === defId);
+        const ecart = getProgrammedSum(attaquant) - getProgrammedSum(cible);
+        let miseIA = 0;
+        if (stock > 0 && ecart <= 0) miseIA = ecart <= -2 && stock >= 2 ? 2 : 1;
+        stock -= miseIA;
+        const r = resolveFautPasMeChauffer(titanId, defId, cibles.length, etat, { attackerBid: miseIA });
         decisions.push(...(r.decisions || []));
       }
+      if (attaquant) attaquant.adrenaline = Math.max(0, stock);
       res = { decisions };
       break;
     }

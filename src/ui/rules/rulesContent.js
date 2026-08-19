@@ -68,7 +68,7 @@ export const CARTES = [
       "Amas (Seuil 4) : Patatras, éjection du haut vers le bas.",
       "Titan touché : DIL, ou RAGE au Seuil 4. Déplacé, +1 Bagarre.",
     ],
-    note: "🛡 Immunité : tu ne peux pas être projeté par ton propre Tout Casser. Un élément qui revient sur ta case s'y arrête immédiatement.",
+    note: "🛡 Immunité : tu ne peux pas être projeté par ton propre Tout Casser. Un élément qui revient sur ta case s'y arrête immédiatement. 🎯 Un bloc arraché par ricochet se pose où TU veux, parmi les cases autour du bâtiment touché.",
   },
   {
     num: "02",
