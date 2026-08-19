@@ -1986,12 +1986,22 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
     // peuvent être traités sans risque de superposition.
     if (hasAmas) {
       if (seuil4) {
+        /* « Applique la logique de charge pour tout » (Nikola, 2026-08-19).
+           Ces blocs partaient en `-dr, -dc`, donc A CONTRE-SENS de la charge :
+           un Titan qui defonce un Amas se le renvoyait dessus. C'est le meme
+           defaut que celui corrige le matin sur le second bloc d'un batiment,
+           quelques dizaines de lignes plus haut, et qui avait ete signale
+           comme restant a arbitrer.
+
+           Tout ce qu'une charge percute part desormais DEVANT, dans l'axe de
+           percussion, avec l'energie de l'impact. Il ne reste plus aucune
+           projection a contre-sens dans le moteur. */
         const ejected = [...stack];
         delete looseBlocks[key];
         for (let i = ejected.length - 1; i >= 0; i--) {
           const blockColor = ejected[i];
           const hauteur = i + 1;
-          const landing = projectInDirection(row, cIdx, -dr, -dc, hauteur, { board, looseBlocks, titans, log, replis, initiatorId: titanId });
+          const landing = projectInDirection(row, cIdx, dr, dc, hauteur, { board, looseBlocks, titans, log, replis, initiatorId: titanId });
           const landingKey = landing.row + landing.col;
           if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
           looseBlocks[landingKey].push(blockColor);

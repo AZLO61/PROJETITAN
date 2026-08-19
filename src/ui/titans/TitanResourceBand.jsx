@@ -26,6 +26,8 @@ export default function TitanResourceBand({
   titans, selectedTitanId, onSelect, activePlayerId, phase, titanDisplayName,
   titanModes = {}, titanProfiles = {}, profilsReveles = {}, revelerProfil, profileLabel,
   waitingNextTitan = false, titansEnAttente = [], rainbowWinnerId = null,
+  phaseValidated = {}, ordreInitiative = [], detonateurId = null,
+  validatePhase, canValidatePhase, getPhaseBlockReason,
 }) {
   /* SURVOL : LA SÉLECTION DÉCIDE, PAS LE TOUR EN COURS.
      Remonté SIX fois par Nikola (dernier repère : 2026-08-18) : « je veux
@@ -243,6 +245,33 @@ export default function TitanResourceBand({
                   <span style={{ WebkitTextFillColor: "initial", color: "initial" }}>&#127752;</span>
                   +5
                 </span>
+              )}
+              {/* VALIDATION DE PHASE, RAPATRIEE ICI (Nikola, 2026-08-19).
+
+                  Elle vivait dans la barre « M2 · 3 · Programmation », loin
+                  des Titans qu'elle concerne. On lit desormais l'etat de
+                  chacun sur son propre encart, et le Titan selectionne y
+                  trouve son bouton. La Phase Action n'en a pas : elle se
+                  valide toute seule quand les 3 rounds sont joues. */}
+              {phase !== "repos" && phase !== "action" && (
+                phaseValidated[t.id]
+                  ? <span title="A valide sa phase" style={{ cursor: "help" }}>&#9989;</span>
+                  : (selectedTitanId === t.id && validatePhase ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); validatePhase(t.id); }}
+                        disabled={canValidatePhase ? !canValidatePhase(t.id) : false}
+                        title={getPhaseBlockReason ? getPhaseBlockReason(t.id) : ""}
+                        style={{
+                          background: (canValidatePhase && canValidatePhase(t.id)) ? "#16E08C" : "rgba(255,255,255,.08)",
+                          color: (canValidatePhase && canValidatePhase(t.id)) ? "#04240f" : "rgba(255,255,255,.35)",
+                          border: "none", borderRadius: 5, padding: "1px 7px",
+                          fontSize: ".62rem", fontWeight: 800,
+                          cursor: (canValidatePhase && canValidatePhase(t.id)) ? "pointer" : "not-allowed",
+                        }}
+                      >
+                        Valider
+                      </button>
+                    ) : <span title="N'a pas encore valide sa phase" style={{ cursor: "help", opacity: .5 }}>&#11036;</span>)
               )}
               <span title="Piste ADN Bagarre" style={{ cursor: "help" }}>💪 {t.bagarre || 0}</span>
               <span title="Piste ADN Destruction" style={{ cursor: "help" }}>💥 {t.destruction || 0}</span>

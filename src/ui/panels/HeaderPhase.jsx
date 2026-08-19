@@ -2,7 +2,6 @@ import React from "react";
 import TitanResourceBand from "../titans/TitanResourceBand.jsx";
 import { TitanIcon } from "../titans/TitanVisuals.jsx";
 import { TITAN_COLORS } from "../titans/constants.js";
-import { PHASE_LABELS } from "../../domain/index.js";
 import { btnStyle, cancelBtn } from "../styles.js";
 
 export default function HeaderPhase({ vm }) {
@@ -20,7 +19,6 @@ export default function HeaderPhase({ vm }) {
     aiPlaying,
     aiStepLabel,
     phase,
-    phaseValidated,
     currentEvent,
     showScoring,
     setShowScoring,
@@ -35,20 +33,8 @@ export default function HeaderPhase({ vm }) {
     handleUndo,
     endGameReasons,
     phaseGuidance,
-    selectedTitan,
-    validatePhase,
-    canValidatePhase,
-    getPhaseBlockReason,
   } = vm;
 
-  /* Ordre d'initiative REEL de la manche : l'ordre de jeu pivote sur le
-     Detonateur, qui ouvre chaque round. */
-  const ordreInitiative = (() => {
-    const ordre = titanState?.ordreJeu ?? [];
-    const depart = ordre.indexOf(titanState?.detonateur);
-    if (depart <= 0) return ordre;
-    return [...ordre.slice(depart), ...ordre.slice(0, depart)];
-  })();
 
   return <>
       {/* ── HEADER ── */}
@@ -154,84 +140,22 @@ export default function HeaderPhase({ vm }) {
 
       {/* ── BARRE DE PHASE + INDICATEUR TITAN ACTIF ── */}
       <div style={{ marginBottom: 10 }}>
-        {/* Ligne phase */}
-        <div style={{
-          display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap",
-          background: "rgba(0,0,0,.25)", borderRadius: "10px 10px 0 0", padding: "6px 12px",
-        }}>
-          <span style={{ fontSize: ".78rem", fontFamily: "'Bowlby One', sans-serif", color: "#FFD93D" }}>
-            M{mancheNumber} · {PHASE_LABELS[phase]}
-          </span>
-          <span style={{ fontSize: ".7rem", color: "rgba(255,255,255,.4)", marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
-            {/* Bug remonté : "T1/T2/T3/T4" en texte brut ne parlait à
-                personne d'externe au projet — remplacé par l'icône du
-                Titan (même sprite que partout ailleurs dans l'UI). */}
-            {/* Point 4.1 du 2026-08-19 : « trier dynamiquement les icones de
-                validation de tour pour refleter scrupuleusement l'ordre
-                d'initiative de la manche en cours ».
+        {/* ── LIGNE DE PHASE SUPPRIMEE (Nikola, 2026-08-19) ──
+            « Supprime le panneau "M2 · 3 programmation", deplace les
+            validations des titans ailleurs, ce panneau ne sert pas
+            vraiment. »
 
-                `ordreJeu` est l'ordre FIGE de la partie. L'ordre reel d'une
-                manche commence au DETONATEUR et suit l'ordre circulaire :
-                c'est ce que fait `advanceActionRound` (« chaque nouveau round
-                repart du Detonateur en cours, et non du premier de l'ordre de
-                jeu fige »). L'encart annoncait donc un ordre que la table ne
-                jouait pas. */}
-            {ordreInitiative.map((id) => {
-              const isAi = titanModes[id] === "ia";
-              return (
-                <span
-                  key={id}
-                  title={
-                    (id === titanState.detonateur
-                      ? "Detonateur, ouvre la manche"
-                      : `Joue en ${ordreInitiative.indexOf(id) + 1}e position`)
-                    + (phaseValidated[id] ? " - a valide" : " - en attente")
-                  }
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 2,
-                    // Le Detonateur se repere d'un coup d'oeil : c'est lui qui ouvre.
-                    outline: id === titanState.detonateur ? "1px solid rgba(255,255,255,.35)" : "none",
-                    outlineOffset: 2, borderRadius: 4,
-                  }}
-                >
-                  <TitanIcon titanId={id} size={16} />
-                  {isAi ? "🤖" : ""}{phaseValidated[id] ? "✅" : "⬜"}
-                </span>
-              );
-            })}
-            {/* Point 4.6 du 2026-08-19 : « fusionner le panneau
-                "M1 3 programmation" avec le composant de validation des
-                autres Titans pour supprimer ce panneau redondant ».
+            Elle affichait trois choses, toutes redites ailleurs :
+            · le numero de Manche, deja dans la barre de stock (« Manche 1/4 ·
+              Detonateur Titan 2 ») ;
+            · le nom de la Phase, deja en toutes lettres dans la consigne du
+              moment, qui explique en plus ce qu'il faut faire ;
+            · les coches de validation de chaque Titan, qui n'avaient rien a
+              faire loin des Titans eux-memes.
 
-                La validation de phase vivait plus bas, dans un bloc a part de
-                BoardPanel, qui repetait le nom de la phase deja affiche a
-                gauche de cette meme ligne et l'etat de validation deja lu
-                dans les icones juste ici. Deux endroits pour une seule
-                information, et le bouton loin des coches qu'il modifie.
-
-                Il est maintenant a cote d'elles : on voit qui a valide, et on
-                valide, au meme endroit. */}
-            {phase !== "repos" && phase !== "action" && selectedTitan && (
-              phaseValidated[selectedTitan.id] ? null : (
-                <button
-                  onClick={() => validatePhase(selectedTitan.id)}
-                  disabled={!canValidatePhase(selectedTitan.id)}
-                  title={getPhaseBlockReason(selectedTitan.id)}
-                  style={{
-                    marginLeft: 4,
-                    background: canValidatePhase(selectedTitan.id) ? "#16E08C" : "rgba(255,255,255,.08)",
-                    color: canValidatePhase(selectedTitan.id) ? "#04240f" : "rgba(255,255,255,.35)",
-                    border: "none", borderRadius: 6, padding: "2px 8px",
-                    fontSize: ".68rem", fontWeight: 800,
-                    cursor: canValidatePhase(selectedTitan.id) ? "pointer" : "not-allowed",
-                  }}
-                >
-                  Valider
-                </button>
-              )
-            )}
-          </span>
-        </div>
+            Les coches et le bouton Valider vivent desormais dans la bande des
+            Titans, sur l'encart de chacun : on voit qui a valide en regardant
+            le Titan, et on valide au meme endroit. */}
         {/* Bandeau Titan actif — bien visible */}
         {phase === "action" && activePlayerId != null && (() => {
           const atc = TITAN_COLORS[activePlayerId];

@@ -25,8 +25,26 @@ export default function RoundPanels({ vm }) {
   // fixe, au-dessus de tout, avec les coordonnees de la case cliquee.
   const [hoverCell, setHoverCell] = React.useState(null);
   const [hoverPos, setHoverPos] = React.useState(null);
-  const openComposition = (key, el) => {
-    if (hoverCell === key) { setHoverCell(null); setHoverPos(null); return; }
+  /* Comment la fiche a ete ouverte : "clic" ou "survol".
+
+     Demande de Nikola du 2026-08-19 : « corrige le hover sur batiment et
+     remplace le visuel par celui du clic sur batiment ». Le survol affichait
+     l'infobulle NATIVE du navigateur (`title`) : rectangle gris, police
+     systeme, delai d'apparition, aucun rapport avec la charte du jeu ni avec
+     la fiche montree au clic. Deux visuels pour la meme information.
+
+     Le survol ouvre desormais exactement la meme fiche. Seule difference, et
+     elle est necessaire : ouverte au clic, la fiche pose un voile plein ecran
+     qui la referme au clic suivant ; ouverte au survol, elle se referme quand
+     le pointeur quitte la case et ne pose aucun voile, sans quoi le plateau
+     deviendrait injouable a la souris. */
+  const [hoverSource, setHoverSource] = React.useState(null);
+  const openComposition = (key, el, source = "clic") => {
+    // Recliquer la meme case referme ; le survol, lui, ne bascule pas.
+    if (hoverCell === key && source === "clic") {
+      setHoverCell(null); setHoverPos(null); setHoverSource(null); return;
+    }
+    setHoverSource(source);
     /* Point 4.2 du 2026-08-19. L'ouverture au clic existait deja en 2D, mais
        la 3D ne passe aucun element DOM : la fiche ne s'ouvrait donc jamais
        depuis le plateau 3D, alors que c'est le meme aiguilleur de clic. Sans
@@ -237,6 +255,11 @@ export default function RoundPanels({ vm }) {
         waitingNextTitan={waitingNextTitan}
         titansEnAttente={titansEnAttente}
         rainbowWinnerId={vm.rainbowWinnerId}
+        phaseValidated={vm.phaseValidated}
+        detonateurId={titanState.detonateur}
+        validatePhase={vm.validatePhase}
+        canValidatePhase={vm.canValidatePhase}
+        getPhaseBlockReason={vm.getPhaseBlockReason}
       />
 
 
@@ -489,14 +512,27 @@ export default function RoundPanels({ vm }) {
                     ? `${key} — sauter sur ce Titan : Dilemme, projection et +1 Bagarre`
                     : bbSelectable
                     ? `${key} — case suivante possible`
+                    : cellData && cellData.blocks.length > 0
+                    /* Pas de `title` natif sur un batiment debout : sa
+                       composition s'affiche dans la fiche du jeu, au survol
+                       comme au clic. Laisser les deux faisait apparaitre
+                       l'infobulle grise du systeme par-dessus la fiche. */
+                    ? undefined
                     : cellData
-                    ? `${key} · ${cellData.blocks.length} étage${cellData.blocks.length > 1 ? "s" : ""} · socle ${cellData.socle}${
-                        cellData.blocks.length
-                          ? `
-De haut en bas : ${[...cellData.blocks].reverse().map((c) => BLOCK_NAME[c] || c).join(" · ")}`
-                          : ""
-                      }`
+                    ? `${key} · couloir · socle ${cellData.socle}`
                     : key}
+                  onMouseEnter={(e) => {
+                    // Meme fiche qu'au clic, sans voile : le plateau reste jouable.
+                    if (cellData && cellData.blocks.length > 0) {
+                      openComposition(key, e.currentTarget, "survol");
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    // Une fiche ouverte au CLIC reste ouverte : elle a ete demandee.
+                    if (hoverSource === "survol" && hoverCell === key) {
+                      setHoverCell(null); setHoverPos(null); setHoverSource(null);
+                    }
+                  }}
                   style={{
                     // `aspectRatio` : la case prend sa hauteur de sa largeur
                     // réelle, elle reste carrée quelle que soit la taille de
@@ -649,10 +685,12 @@ De haut en bas : ${[...cellData.blocks].reverse().map((c) => BLOCK_NAME[c] || c)
           listés du haut vers le bas, avec les vraies icônes. */}
       {hoverCell && hoverPos && state.board[hoverCell] && state.board[hoverCell].blocks.length > 0 && (
         <>
-          <div
-            onClick={() => { setHoverCell(null); setHoverPos(null); }}
-            style={{ position: "fixed", inset: 0, zIndex: 300 }}
-          />
+          {hoverSource === "clic" && (
+            <div
+              onClick={() => { setHoverCell(null); setHoverPos(null); setHoverSource(null); }}
+              style={{ position: "fixed", inset: 0, zIndex: 300 }}
+            />
+          )}
           <div
             style={{
               position: "fixed", zIndex: 301,

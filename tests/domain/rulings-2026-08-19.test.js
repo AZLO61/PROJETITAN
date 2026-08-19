@@ -27,6 +27,7 @@ import {
   resolveJeNePartagePasElement,
   getMovementReachable,
   resolveFreeMovement,
+  resolveTeteEnAvant,
 } from "../../src/domain/gameRules.js";
 
 const ICI = dirname(fileURLToPath(import.meta.url));
@@ -270,5 +271,70 @@ describe("Cohabitation avec un debris (WIP 2026-08-19)", () => {
     expect(src).toContain("function elementAuSolBloqueArret");
     // Un seul point a rebasculer, et il est ecrit noir sur blanc.
     expect(src).toMatch(/Avant le 2026-08-19 : return .*e === "vert"/);
+  });
+});
+
+describe("La logique de charge s'applique a TOUT ce qui est percute", () => {
+  /* Nikola, 2026-08-19 : « je veux que tu appliques la logique de charge pour
+     tout ». Un Titan qui charge envoie ce qu'il percute DEVANT lui, dans l'axe
+     de percussion. Deux projections partaient a contre-sens et revenaient sur
+     l'attaquant : le second bloc d'un batiment au Seuil 4, et les blocs d'un
+     Amas balaye au Seuil 4. */
+
+  const bat = (cle, etages) => ({
+    [cle]: { row: cle[0], col: Number(cle.slice(1)), blocks: Array(etages).fill("bleu"), socle: etages, isTeleporter: false },
+  });
+  // Colonne = distance vers l'est. L'attaquant part de E1 et charge vers E9.
+  const versEst = { dr: 0, dc: 1 };
+
+  it("le second bloc d'un batiment part DEVANT, jamais sur l'attaquant", () => {
+    /* Charge de E1 vers l'est, batiment de 3 etages en E2. Au Seuil 4, un
+       second bloc est ejecte : il doit atterrir a l'EST de E2, donc en colonne
+       superieure a 2, et surtout jamais en colonne 1 (la case de depart). */
+    const titan = t(1, "E1", { adrenaline: 5 });
+    const jeu = { titans: [titan], looseBlocks: {}, board: { ...bat("E2", 3) }, replis: [] };
+    // 3 Adrenalines : l'energie a distance 1 depasse largement le Seuil 4.
+    resolveTeteEnAvant(1, versEst.dr, versEst.dc, 3, jeu);
+
+    const casesAvecBlocs = Object.keys(jeu.looseBlocks).filter((k) => jeu.looseBlocks[k].length > 0);
+    expect(casesAvecBlocs.length).toBeGreaterThan(0);
+    casesAvecBlocs.forEach((cle) => {
+      expect(cle[0]).toBe("E");                    // reste sur la ligne de charge
+      expect(Number(cle.slice(1))).toBeGreaterThan(2); // et DEVANT le batiment
+    });
+  });
+
+  it("les blocs d'un Amas balaye partent DEVANT, jamais sur l'attaquant", () => {
+    /* Meme charge, mais l'obstacle est un Amas de 3 blocs en E2. Au Seuil 4
+       c'est un Patatras : les blocs sont ejectes. Ils partaient a contre-sens,
+       donc vers E1, la case meme d'ou venait le Titan. */
+    const titan = t(1, "E1", { adrenaline: 5 });
+    const jeu = {
+      titans: [titan],
+      looseBlocks: { E2: ["bleu", "rose", "rouge"] },
+      board: {},
+      replis: [],
+    };
+    resolveTeteEnAvant(1, versEst.dr, versEst.dc, 3, jeu);
+
+    const casesAvecBlocs = Object.keys(jeu.looseBlocks).filter((k) => jeu.looseBlocks[k].length > 0);
+    expect(casesAvecBlocs.length).toBeGreaterThan(0);
+    casesAvecBlocs.forEach((cle) => {
+      expect(Number(cle.slice(1))).toBeGreaterThan(2);
+    });
+    // Et rien n'est revenu sur la case de depart de l'attaquant.
+    expect(jeu.looseBlocks.E1 || []).toHaveLength(0);
+  });
+
+  it("plus aucune projection a contre-sens ne subsiste dans le moteur", () => {
+    /* Filet de coherence : le jour ou quelqu'un rajoute une projection, elle
+       doit suivre la meme regle. On ne cherche que le CODE, pas les
+       commentaires qui expliquent l'ancien comportement. */
+    const src = lire("src/domain/gameRules.js");
+    const lignesDeCode = src
+      .split(String.fromCharCode(10))
+      .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*") && !l.trim().startsWith("/*"));
+    const fautives = lignesDeCode.filter((l) => /projectInDirection\([^)]*-dr,\s*-dc/.test(l));
+    expect(fautives).toEqual([]);
   });
 });
