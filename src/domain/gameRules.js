@@ -3722,6 +3722,17 @@ function countRepaireColors(titan) {
 // élément par bloc Vert du Repaire de ce Titan (placement secret).
 // rainbowWinnerId : Titan déjà crédité du Trophée Arc-en-ciel en cours de
 // partie (suivi live, cf. useEffect dans le composant), ou null.
+/* Valeur d'une Adrenaline conservee au decompte final.
+   Ruling Nikola du 2026-08-19 : 2 points, contre 3 auparavant. Elle etait
+   trop rentable a garder, ce qui decourageait de la depenser.
+
+   Constante EXPORTEE et non nombre en dur : la valeur vivait a deux endroits
+   dans le code, ici et comme etalon `VALEUR_ADRENALINE` du planificateur
+   d'IA, qui arbitre entre payer une Adrenaline et encaisser la perte. Les
+   deux ont donc desormais une seule source, sans quoi baisser l'une sans
+   l'autre fait jouer l'IA sur un bareme qui n'existe plus. */
+const POINTS_PAR_ADRENALINE = 2;
+
 function computeFinalScore(players, vertAssignments, rainbowWinnerId) {
   const baseCounts = {};
   players.forEach((t) => (baseCounts[t.id] = countRepaireColors(t)));
@@ -3807,7 +3818,7 @@ function computeFinalScore(players, vertAssignments, rainbowWinnerId) {
     const rainbowBonus = rainbowWinnerId === t.id ? 5 : 0;
     const bagarrePts = bagarreRank[t.id] || 0;
     const destructionPts = destructionRank[t.id] || 0;
-    const adrenalinePts = 3 * (t.adrenaline || 0);
+    const adrenalinePts = POINTS_PAR_ADRENALINE * (t.adrenaline || 0);
     const bareme = b.bleu + b.rose + b.orange + b.rouge;
     totals[t.id] = {
       bareme,
@@ -3903,6 +3914,7 @@ function classementFinal(players, totals) {
 // px ; le sprite garde son ratio d'aspect propre à l'intérieur.
 
 export {
+  POINTS_PAR_ADRENALINE,
   STOCK_INITIAL,
   COULEURS,
   COLOR_HEX,

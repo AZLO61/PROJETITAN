@@ -48,6 +48,7 @@
 ============================================================ */
 
 import {
+  POINTS_PAR_ADRENALINE,
   PORTEE_BOING_BOING,
   appliquerReplElement,
   getBoingBoingReach,
@@ -222,9 +223,13 @@ function perteSiRetire(repaire, couleur) {
   return scoreBareme(couleur, n) - scoreBareme(couleur, n - 1);
 }
 
-// Valeur d'une Adrénaline au décompte final (3 points par le livret).
-// Sert d'étalon quand un défenseur arbitre entre payer et encaisser.
-const VALEUR_ADRENALINE = 3;
+/* Valeur d'une Adrenaline au decompte final. Sert d'etalon quand un
+   defenseur arbitre entre payer une Adrenaline et encaisser la perte.
+   Importee du moteur, jamais recopiee : elle a baisse de 3 a 2 le
+   2026-08-19, et une copie locale aurait laisse l'IA arbitrer sur l'ancien
+   bareme. Effet voulu du passage a 2 : l'IA paie plus volontiers, donc elle
+   en conserve moins en fin de partie. */
+const VALEUR_ADRENALINE = POINTS_PAR_ADRENALINE;
 
 /**
  * Applique la résolution la plus probable des décisions générées par un

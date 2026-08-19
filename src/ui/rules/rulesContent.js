@@ -13,7 +13,7 @@ const ICON = (name) => `${import.meta.env.BASE_URL}assets/rules/${name}.png`;
 export const LEXIQUE = [
   { icon: ICON("energie"), nom: "Énergie", def: "Détermine le seuil actif de l'action jouée, au moment où tu la joues." },
   { icon: ICON("seuil4"), nom: "Seuil 4", def: "Palier atteint à 4 ou plus : active l'effet le plus fort de la carte jouée." },
-  { icon: ICON("adrenaline"), nom: "Adrénaline", def: "Permet de modifier la valeur d'énergie d'une action. Tu en gagnes 1 à chaque début de Manche." },
+  { icon: ICON("adrenaline"), nom: "Adrénaline", def: "Permet de modifier la valeur d'énergie d'une action. Tu en gagnes 1 à chaque début de Manche. Elle se conserve d'une Manche à l'autre, et chaque Adrénaline encore en réserve à la fin de la partie rapporte 2 points de victoire." },
   { icon: ICON("fatigue"), nom: "Fatigue", def: "La cible perd 1 carte non jouée, piochée au hasard et placée en Repos." },
   { icon: ICON("perimetre"), nom: "Périmètre", def: "Les 8 cases autour de ton Titan, utilisées pour le calcul d'énergie et la récupération." },
   { icon: ICON("repaire"), nom: "Repaire", def: "Ta réserve personnelle, où sont stockés les blocs et socles que tu collectes." },
