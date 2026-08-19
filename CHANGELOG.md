@@ -122,30 +122,164 @@ cases occupées, donc le défaut n'était pas atteignable en jeu, mais une fonct
 exportée qui peut casser un invariant du jeu doit le refuser elle-même. Les deux
 disent maintenant la même chose.
 
+### Le lissage des niveaux d'IA
+
+Nikola, après lecture des mesures : « lisse les niveaux des IA pour avoir un
+peu d'écart entre les niveaux mais il faut un moins grand gap entre eux ».
+
+Deux problèmes mesurés au départ, tempérament Collectionneur, 2 séries de 60
+parties : le Novice plafonnait à **63 %** du score de l'Expert, et le Confirmé
+**battait** l'Expert (104 à 106 %) — la hiérarchie était inversée.
+
+**L'inversion venait de la nuisance.** L'évaluation différentielle, réservée à
+l'Expert, lui fait maximiser son avance plutôt que son score. Elle était
+appliquée au même poids quel que soit son tempérament : un Expert
+Collectionneur dépensait donc ses tours à gêner les autres alors que son barème
+ne le paie pas. Gêner un adversaire est une action de la famille ADN, elle est
+désormais pondérée par le tempérament. Un Agressif (adn 1,5) nuit plus qu'avant,
+un Collectionneur (adn 0,7) nettement moins, un Opportuniste (adn 1,0)
+exactement comme avant.
+
+**Le Novice garde son vrai handicap.** Il ne voit toujours ni le score complet
+ni les adversaires — c'est l'erreur du débutant et ça doit rester sa signature.
+Ce qui a changé : il perçoit une PART des bonus de fin (`visionBonus`, réglé à
+0,25 après trois mesures), sa fenêtre de tirage passe de 3 coups à 2 avec un
+biais plus fort, et son rayon de vision passe de 2 à 3 cases comme les autres.
+Un débutant voit le plateau, il le lit moins bien.
+
+Réglage de `visionBonus` par la mesure, pas au jugé : à 0,5 le Novice atteignait
+95 % et devenait indiscernable du Confirmé ; à 0 il retombait à 72 %.
+
+Résultat, 2 séries de 60 parties par tempérament :
+
+| | avant | après |
+|---|---|---|
+| Novice Collectionneur | 63 % | ~87 % |
+| Confirmé Collectionneur | 104-107 % (inversé) | ~96 % |
+| Novice Opportuniste | — | ~83 % |
+| Confirmé Opportuniste | — | ~98 % |
+
+Progression monotone dans les deux tempéraments, écarts resserrés.
+
+Trois tests décrivaient l'ancien réglage et ont été alignés. Ils disent
+maintenant ce qui doit rester vrai plutôt que les valeurs d'hier : le Novice se
+trompe encore (son second choix sort réellement, le troisième n'existe plus), et
+il reste sous le Confirmé.
+
+### Les sept bugs restants
+
+**1.2 + 1.5 + 1.8 — une seule cause pour trois symptômes.** « Le jeu passe
+directement au tour suivant après un déplacement suivi d'un DIL », « le saut sur
+un Amas verrouille le ramassage et finit le tour », et le désengagement qui
+bloque le passif. `markCardPlayed` appelait `advanceActionRound` dès que la carte
+quittait la main, sans attendre que ce qu'elle avait déclenché soit résolu : DIL
+à trancher, repli à placer, Amas à répartir. Le tour basculait donc pendant que
+le joueur avait encore une décision devant lui, et son passif Récupération
+passait à la trappe — « j'ai fait le dil c'est passé au joueur suivant
+automatiquement, je n'ai pas pu ramasser le bloc tombé au sol ». Le garde-fou
+existait déjà pour l'IA (`finishAiTurn`), pas pour le joueur humain.
+L'avancement est désormais mis en attente et ne part que lorsque plus aucune
+résolution n'est ouverte.
+
+**1.1 — le placement du Titan coincé devient un choix.** C'était le dernier
+placement automatique du jeu, signalé par un TODO dans le code. Aucun mécanisme
+neuf : c'est le même choix géométrique que le REPLI, qui a déjà sa file, son
+bandeau, son surlignage sur le plateau, sa résolution automatique quand
+l'initiateur est une IA, et son instantané d'annulation.
+
+**1.3 — portée du saut et cases cibles.** Deux défauts pour un seul calcul. Un
+bâtiment debout était cliquable comme étape ET comme destination, alors qu'on ne
+s'y arrête jamais. Pire, un obstacle coûte 0 (saute-mouton) : en cliquant de
+bâtiment en bâtiment, on traversait le plateau sans jamais entamer son budget.
+On propose désormais « directement la case d'atterrissage située immédiatement
+derrière selon l'angle de percussion », et le trajet complet entre dans le
+chemin pour rester lisible à la table.
+
+Le test de tracé du 17 août validait l'ancien comportement, celui où l'on
+cliquait les cases du groupe collé une à une. Il a été réécrit : ce qui ne
+change pas, et qu'il vérifie toujours, c'est le COÛT — le groupe collé compte
+pour 1 case, exactement comme le livret V36.2 le décrit. Seul le nombre de clics
+change.
+
+**1.4 — projection sur double charge.** Le second bloc partait en `-dr, -dc`,
+à contre-sens de la charge : il revenait sur la case de l'attaquant au lieu
+d'être expulsé. Il part maintenant dans l'axe de percussion, ce que dit aussi la
+physique de la carte. **À signaler à Nikola** : les blocs d'un AMAS balayé au
+Seuil 4 partent eux aussi à contre-sens, quelques lignes plus bas. Il n'a pas
+demandé ce cas, il n'a pas été touché.
+
+**1.6 — cartes jouées hors-champ.** Un Titan sorti du plateau pouvait jouer ses
+cartes, qui s'appliquaient dans le vide. Il rentre à l'ouverture de SON tour,
+mais il peut être éjecté PENDANT son propre tour, par une réaction en chaîne ou
+un repli offensif : c'est là que le trou s'ouvrait. La défausse reste possible
+via `canDiscardCard`, sans quoi un Titan éjecté ne pourrait ni jouer ni
+défausser et la partie se bloquerait — exactement le genre de panneau sans issue
+rencontré trois fois le 18 août.
+
+### L'interface
+
+**4.1 — ordre du tour.** L'encart affichait `ordreJeu`, l'ordre figé de la
+partie, alors qu'une manche commence au Détonateur. L'en-tête annonçait donc un
+ordre que la table ne jouait pas. La liste est pivotée sur le Détonateur, qui
+porte son propre repérage.
+
+**4.2 — fiches bâtiments au clic.** Déjà au clic en 2D, mais la 3D ne passe
+aucun élément DOM : la fiche ne s'ouvrait jamais depuis le plateau 3D, alors que
+c'est le même aiguilleur de clic.
+
+**4.3 — les « + » du scoring.** La ligne affichait « 3 → 5 (+2) » : trois
+nombres côte à côte dont deux comptent des choses différentes et le troisième un
+gain hypothétique, au moment précis où l'on place ses Verts. Le gain marginal
+reste dans l'infobulle, où il est expliqué au lieu d'être juxtaposé.
+
+**4.3 — menu déroulant à la charte.** Le placement des Verts se faisait avec des
+`<select>` NATIFS : sur Windows, le système dessine sa propre liste, fond blanc
+et police système, qu'aucun CSS ne peut atteindre. Sur le fond violet du
+décompte, l'effet était celui d'une boîte de dialogue étrangère au jeu. Le menu
+est désormais dessiné par l'application, aux couleurs déjà en place, et garde le
+comportement d'un select : fermeture au clic extérieur et à Échap, option
+désactivée non cliquable.
+
+**4.4 — plateau consultable après le scoring.** Tout était masqué derrière le
+décompte depuis le 17 août. À la table, on veut au contraire pouvoir revenir au
+plateau pour comprendre le score ou montrer une position. Il revient sous le
+décompte, en consultation seule.
+
+**4.5 — badge Arc-en-ciel.** Le trophée était annoncé une fois au journal puis
+n'apparaissait plus avant le décompte final. Personne ne se souvient qui l'a
+pris trois manches plus tôt, alors que c'est 5 points et que ça ne se reprend
+pas.
+
+**4.6 — panneau redondant supprimé.** La validation de phase vivait dans un bloc
+à part, qui répétait le nom de la phase et l'état de validation déjà affichés en
+haut de page, et posait son bouton loin des coches qu'il modifie.
+
+### Vérifié sur l'application construite, pas seulement en test
+
+Une partie pilotée dans un Chromium headless a servi à contrôler ce que la table
+verra : l'ordre du tour commence bien par le Détonateur, et le bouton de
+validation est fusionné dans l'en-tête. C'est aussi ce qui a permis d'écarter
+une fausse alerte — le panneau des cartes semblait avoir disparu, il était
+simplement conditionné à la sélection d'un Titan, comme avant.
+
 ### Ce qui reste de la liste
 
-Bugs non encore traités : saut sur Titan avec choix manuel de la case, fin de
-tour prématurée après Déplacement + DIL, portée et cases invalides du saut,
-projections sur double charge, saut sur Amas, jeu de cartes hors-zone,
-réengagement du déplacement passif après annulation. Interface : ordre du tour,
-fiches bâtiments au clic, menu déroulant à la charte, « + » du scoring de Manche
-4, plateau consultable après le scoring final, badge Arc-en-ciel, fusion du
-panneau de programmation.
+Rien. Les 19 points sont traités.
 
-**Deux arbitrages reviennent à Nikola**, mesures à l'appui, avant de toucher aux
-forces d'IA :
+Deux remarques a signaler, hors perimetre demande :
 
-1. Le **Confirmé Collectionneur bat déjà l'Expert Collectionneur** : 31,20
-   contre 29,7 de moyenne, soit 104 à 106 % sur les deux séries. Le renforcer de
-   20 % aggraverait une inversion de hiérarchie déjà mesurée.
-2. Le **Novice Collectionneur** est à 60 % de l'Expert. Le porter à +50 % le
-   mettrait vers 92 % de l'Expert, ce qui supprimerait presque la marche entre le
-   plus faible et le plus fort niveau.
+1. Les blocs d'un **Amas balaye au Seuil 4** par une charge partent a
+   contre-sens, comme le faisait le second bloc d'un batiment avant le point
+   1.4. Nikola n'a pas demande ce cas, il n'a pas ete touche.
+2. Le **Confirme Opportuniste** est a 98 % de l'Expert, tres pres. C'est le
+   sens du lissage demande, mais l'ecart entre ces deux niveaux est desormais
+   mince sur ce temperament.
 
 ### Vérifications
 
-Audit, lint, **330 tests** et build au vert. Diagnostic d'invariants sans défaut
-sur 625 parties.
+Audit, lint, **334 tests** et build au vert. Diagnostic d'invariants sans
+défaut sur 600 parties supplémentaires, à 3 et à 4 Titans. Interface contrôlée
+sur l'application réellement construite, dans un navigateur.
 
 
 ## Non publié — neuvième passe du 2026-08-18 (revue complète avant démo)
