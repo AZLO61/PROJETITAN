@@ -594,14 +594,27 @@ function getPerimeter(row, col) {
 // pas soi-même, pas parce qu'elle ne compterait pas. Compter l'occupation
 // et appliquer l'effet sont deux passes distinctes — la note est ici pour
 // qu'un prochain relecteur ne « corrige » pas une règle voulue.
-function computeEnergyToutCasser(perimeterCells, board, titansByCell, adrenalineBonus = 0) {
+function computeEnergyToutCasser(perimeterCells, board, titansByCell, adrenalineBonus = 0, looseBlocks = {}) {
+  /* Livret : « Energie = nombre de cases OCCUPEES dans ton Perimetre (max 8) ».
+
+     Bug remonte par Nikola le 2026-08-19 : « tu es sur de bien jauger la
+     puissance de l'energie ? je suis en D4, batiment C3 qui se prend une
+     energie de 5 ». Mesure sur son cas : l'energie sortait a 2.
+
+     Les BLOCS LIBRES au sol n'etaient pas comptes. Or une case qui porte un
+     debris ou un Socle est occupee au sens du livret, exactement comme une
+     case qui porte un batiment ou un Titan — c'est meme la situation la plus
+     courante en fin de Manche, quand le sol se couvre de gravats. Tout Casser
+     etait donc systematiquement sous-evalue, et son Seuil 4 quasi
+     inatteignable des que le Perimetre etait fait de debris. */
   let occupied = 0;
   for (const cell of perimeterCells) {
     const key = cell.row + cell.col;
     const bldg = board[key];
     const hasBuilding = bldg && bldg.blocks.length > 0;
     const hasTitan = !!titansByCell[key];
-    if (hasBuilding || hasTitan) occupied++;
+    const hasLoose = (looseBlocks[key] || []).length > 0;
+    if (hasBuilding || hasTitan || hasLoose) occupied++;
   }
   return Math.min(occupied + adrenalineBonus, 8); // plafond carte Tout Casser
 }
@@ -1568,7 +1581,7 @@ function releverPercussion(titanId, gameState, adrenalineBonus = 0) {
   const titan = titans.find((t) => t.id === titanId);
   const perimeter = getPerimeter(titan.cell[0], Number(titan.cell.slice(1)));
   const titansByCell = indexerTitans(titans);
-  const energie = computeEnergyToutCasser(perimeter, board, titansByCell, adrenalineBonus);
+  const energie = computeEnergyToutCasser(perimeter, board, titansByCell, adrenalineBonus, gameState.looseBlocks || {});
   const blocs = new Set();
   const amas = new Set();
   for (const cell of perimeter) {
@@ -1943,7 +1956,24 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
       // rapporte pas de point. Le crédit était donné ici INCONDITIONNELLEMENT,
       // avant même de savoir si la cible allait bouger — et même en dessous
       // du Seuil 4, où aucune projection n'a lieu du tout.
-      if (seuil4) {
+      /* LA CIBLE EST TOUJOURS PROJETEE (Nikola, 2026-08-19).
+
+         « les cibles impactees ne se sont pas deplacees meme en DIL,
+         normalement c'est le titan touche qui impacte l'autre ». La
+         projection etait conditionnee au Seuil 4 : sous 4 d'energie, un Titan
+         percute de plein fouet encaissait un Dilemme sans bouger d'un pouce,
+         et la chaine derriere lui ne partait jamais.
+
+         C'est aussi ce que dit deja le moteur ailleurs : la reaction en
+         chaine de `projectInDirection` pousse « qu'importe le seuil, avec
+         l'energie restante que l'element lui a transmise » (repricise par
+         Nikola le 2026-08-18). Le Seuil 4 ne decide que de RAGE contre DIL,
+         pas du fait de bouger.
+
+         Distance retenue pour cette carte, choix de Nikola du 2026-08-19 :
+         l'ENERGIE RESTANTE de la charge. Percute de pres il part loin,
+         percute en bout de course il bouge a peine. */
+      {
         const occupant = titans.find((t) => t.id === occupantId);
         const caseAvant = occupant.cell;
         // movingTitanId : c'est l'occupant qu'on projette (cf. projectInDirection).

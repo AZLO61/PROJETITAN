@@ -28,6 +28,9 @@ import {
   getMovementReachable,
   resolveFreeMovement,
   resolveTeteEnAvant,
+  computeEnergyToutCasser,
+  getPerimeter,
+  indexerTitans,
 } from "../../src/domain/gameRules.js";
 
 const ICI = dirname(fileURLToPath(import.meta.url));
@@ -336,5 +339,65 @@ describe("La logique de charge s'applique a TOUT ce qui est percute", () => {
       .filter((l) => !l.trim().startsWith("//") && !l.trim().startsWith("*") && !l.trim().startsWith("/*"));
     const fautives = lignesDeCode.filter((l) => /projectInDirection\([^)]*-dr,\s*-dc/.test(l));
     expect(fautives).toEqual([]);
+  });
+});
+
+describe("Tout Casser : une case qui porte un debris EST une case occupee", () => {
+  /* Bug remonte par Nikola apres trois parties : « tu es sur de bien jauger
+     la puissance de l'energie ? je suis en D4, batiment C3 qui se prend une
+     energie de 5 ». Mesure sur son cas : l'energie sortait a 2.
+
+     Les blocs libres au sol n'entraient pas dans le compte. Or le livret dit
+     « nombre de cases OCCUPEES dans ton Perimetre », et une case qui porte un
+     debris ou un Socle est occupee — c'est meme le cas le plus courant en fin
+     de Manche, quand le sol se couvre de gravats. */
+  const perim = (cle) => getPerimeter(cle[0], Number(cle.slice(1)));
+
+  it("les debris au sol comptent dans l'energie", () => {
+    const sans = computeEnergyToutCasser(perim("E5"), {}, {}, 0, {});
+    const avec = computeEnergyToutCasser(perim("E5"), {}, {}, 0, {
+      D4: ["bleu"], D5: ["rose"], E4: ["rouge"], F6: ["bleu"],
+    });
+    expect(sans).toBe(0);
+    expect(avec).toBe(4);
+  });
+
+  it("batiments, Titans et debris se cumulent sans doublon", () => {
+    const board = { D4: { row: "D", col: 4, blocks: ["bleu"], socle: 1, isTeleporter: false } };
+    const titans = [{ id: 2, cell: "E4", horsPlateau: false }];
+    // D4 porte a la fois un batiment ET un debris : la case ne compte qu'une fois.
+    const energie = computeEnergyToutCasser(
+      perim("E5"), board, indexerTitans(titans), 0, { D4: ["bleu"], D6: ["rose"] }
+    );
+    expect(energie).toBe(3); // D4 (batiment+debris) + E4 (Titan) + D6 (debris)
+  });
+
+  it("le plafond de 8 tient toujours", () => {
+    const partout = {};
+    perim("E5").forEach((c) => { partout[c.row + c.col] = ["bleu"]; });
+    expect(computeEnergyToutCasser(perim("E5"), {}, {}, 3, partout)).toBe(8);
+  });
+});
+
+describe("Tete en Avant : la cible bouge meme sous le Seuil 4", () => {
+  it("une charge sans Adrenaline projette quand meme sa cible", () => {
+    const a = t(1, "E1");
+    const cible = t(2, "E2", { repaire: ["bleu", "rose"] });
+    const jeu = { titans: [a, cible], looseBlocks: {}, board: {}, replis: [] };
+    resolveTeteEnAvant(1, 0, 1, 0, jeu);
+    expect(cible.cell).not.toBe("E2");
+    expect(a.bagarre).toBeGreaterThan(0);
+  });
+
+  it("la chaine part aussi : deux Titans alignes reculent tous les deux", () => {
+    /* Le cas exact de Nikola : « j'etais sur F1, le titan G1 et le suivant
+       H1, les cibles impactees ne se sont pas deplacees meme en DIL ». */
+    const a = t(1, "F1");
+    const g = t(2, "G1", { repaire: ["bleu", "rose"] });
+    const h = t(3, "H1", { repaire: ["bleu", "rose"] });
+    const jeu = { titans: [a, g, h], looseBlocks: {}, board: {}, replis: [] };
+    resolveTeteEnAvant(1, 1, 0, 0, jeu);
+    expect(g.cell).not.toBe("G1");
+    expect(h.cell).not.toBe("H1");
   });
 });

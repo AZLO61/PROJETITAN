@@ -361,12 +361,31 @@ describe("ruling — une bagarre non remportée ne rapporte aucun point", () => 
     expect(titans[0].bagarre).toBeGreaterThan(0);
   });
 
-  it("Tête en Avant sous le Seuil 4 : aucune projection, aucun point", () => {
-    // Sans Seuil 4 la cible n'est pas projetée du tout : il y a bien
-    // contact (un DIL est déclenché), mais pas de bagarre remportée.
+  it("Tête en Avant sous le Seuil 4 : la cible est projetée quand même", () => {
+    /* RULING DU 2026-08-19. Ce test verrouillait l'inverse : « sans Seuil 4 la
+       cible n'est pas projetée du tout ». Nikola, après trois parties :
+       « les cibles impactées ne se sont pas déplacées même en DIL,
+       normalement c'est le titan touché qui impacte l'autre ».
+
+       Le Seuil 4 ne décide plus que de RAGE contre DIL. Le déplacement, lui,
+       a toujours lieu, avec l'énergie restante de la charge — ce que le
+       moteur faisait déjà dans ses réactions en chaîne (« qu'importe le
+       seuil, le Titan se déplace si possible avec l'énergie transmise »). */
     const titans = [t(1, "E1"), t(2, "E4")];
     titans[1].repaire = ["bleu", "rose"];
     resolveTeteEnAvant(1, 0, 1, 0, { board: {}, looseBlocks: {}, titans });
+    expect(titans[1].cell).not.toBe("E4"); // elle a bien reculé
+    expect(titans[0].bagarre).toBeGreaterThan(0); // bagarre remportée
+  });
+
+  it("Tête en Avant : une cible coincée ne rapporte toujours aucun point", () => {
+    /* La contrepartie tient toujours : pas de déplacement, pas de Bagarre.
+       Une cible plaquée contre un mur de bâtiments ne bouge pas. */
+    const titans = [t(1, "E1"), t(2, "E2")];
+    titans[1].repaire = ["bleu", "rose"];
+    const board = murAutour(["E3", "E4", "E5"]);
+    resolveTeteEnAvant(1, 0, 1, 0, { board, looseBlocks: {}, titans });
+    expect(titans[1].cell).toBe("E2");
     expect(titans[0].bagarre).toBe(0);
   });
 
