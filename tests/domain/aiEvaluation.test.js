@@ -79,11 +79,23 @@ describe("force — le Novice regarde moins loin, il ne triche pas", () => {
     expect(evaluatePosition(1, avec, confirme)).toBeGreaterThan(evaluatePosition(1, sans, confirme));
   });
 
-  it("le Novice est insensible aux Pistes ADN, le Confirmé les valorise", () => {
+  it("le Novice sous-estime les Pistes ADN, le Confirmé les compte en entier", () => {
+    /* LISSAGE DU 2026-08-19. Le Novice était AVEUGLE aux Pistes ADN et à tous
+       les bonus de fin, ce qui le laissait à 63 % du score de l'Expert.
+       Nikola : « lisse les niveaux [...] il faut un moins grand gap entre
+       eux ». Il en perçoit désormais une part (`visionBonus`), ce qui est
+       aussi un modèle plus juste du débutant : il n'ignore pas que les bonus
+       existent, il les sous-estime.
+
+       Ce qui doit rester vrai, et c'est l'objet du test : il les valorise
+       toujours NETTEMENT MOINS que le Confirmé, sinon la hiérarchie
+       disparaît. */
     const sans = etat([titan(1), titan(2, { bagarre: 5 })]);
     const avec = etat([titan(1, { bagarre: 5 }), titan(2)]);
-    expect(evaluatePosition(1, avec, novice)).toBe(evaluatePosition(1, sans, novice));
-    expect(evaluatePosition(1, avec, confirme)).toBeGreaterThan(evaluatePosition(1, sans, confirme));
+    const gainNovice = evaluatePosition(1, avec, novice) - evaluatePosition(1, sans, novice);
+    const gainConfirme = evaluatePosition(1, avec, confirme) - evaluatePosition(1, sans, confirme);
+    expect(gainNovice).toBeGreaterThan(0);
+    expect(gainConfirme).toBeGreaterThan(gainNovice);
   });
 
   it("le Novice voit quand même son butin : les Socles comptent", () => {
@@ -176,15 +188,22 @@ describe("valeur à portée — l'IA voit ce qui traîne autour d'elle", () => {
     }
   });
 
-  it("le Novice reste plus myope que le Confirmé", () => {
-    // Ce qui le distingue toujours : il ne voit ni le score complet (bonus
-    // Rose, trophées, Pistes ADN) ni les adversaires, et il ne regarde
-    // autour de lui que ce qu'il peut atteindre ce tour-ci. Renforcer le
-    // Novice ne devait pas effacer la hiérarchie des forces.
+  it("le Novice reste en dessous du Confirmé, sans être relégué", () => {
+    /* LISSAGE DU 2026-08-19. Le rayon de portée du Novice est passé de 2 à 3,
+       comme les autres : un débutant VOIT le plateau, il le lit juste moins
+       bien. Ce n'est donc plus lui qui porte la distinction.
+
+       Ce qui la porte maintenant, et que ce test verrouille : il ne voit
+       toujours pas le score complet, il ne voit pas les adversaires, et il ne
+       perçoit qu'une PART des bonus de fin. Un `visionBonus` à 1 ferait de lui
+       un Confirmé, à 0 il retomberait au gouffre d'avant. */
     expect(FORCE_SETTINGS[FORCES.NOVICE].voitScoreComplet).toBe(false);
     expect(FORCE_SETTINGS[FORCES.NOVICE].voitAdversaires).toBe(false);
-    expect(FORCE_SETTINGS[FORCES.NOVICE].rayonPortee).toBeLessThan(FORCE_SETTINGS[FORCES.CONFIRME].rayonPortee);
+    expect(FORCE_SETTINGS[FORCES.NOVICE].visionBonus).toBeGreaterThan(0);
+    expect(FORCE_SETTINGS[FORCES.NOVICE].visionBonus).toBeLessThan(1);
     expect(FORCE_SETTINGS[FORCES.CONFIRME].voitScoreComplet).toBe(true);
+    // Il garde aussi du bruit là où le Confirmé n'en a plus.
+    expect(FORCE_SETTINGS[FORCES.NOVICE].topN).toBeGreaterThan(FORCE_SETTINGS[FORCES.CONFIRME].topN);
     // Le différentiel adverse reste la marche entre Confirmé et Expert :
     // c'est de là que vient toute la nuisance, et lui seul l'a.
     expect(FORCE_SETTINGS[FORCES.CONFIRME].poidsAdversaires).toBe(0);
@@ -362,12 +381,20 @@ describe("tirage pondéré — le Novice revient vers son meilleur coup", () => 
     expect(d.A).toBeGreaterThan(d.C * 4);
   });
 
-  it("il se trompe encore : les autres coups sortent réellement", () => {
-    // Un Novice qui prendrait toujours le meilleur coup serait un Expert
-    // myope, pas un débutant. La molette de bruit doit rester audible.
+  it("il se trompe encore : le second coup sort réellement", () => {
+    /* LISSAGE DU 2026-08-19 : la fenêtre de tirage passe de 3 coups à 2, et le
+       biais de 3 à 4. Le Novice tire donc beaucoup plus souvent son meilleur
+       coup — c'est l'essentiel de ce qui l'a remonté sans lui donner la vue
+       du Confirmé.
+
+       Ce qui doit rester vrai : il se trompe ENCORE. Un Novice qui prendrait
+       toujours le meilleur coup serait un Expert myope, pas un débutant. Son
+       second choix sort donc toujours, le troisième n'existe plus. */
     const d = distribution(makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE));
     expect(d.B).toBeGreaterThan(0);
-    expect(d.C).toBeGreaterThan(0);
+    expect(d.C).toBe(0);
+    // Et il penche nettement vers le meilleur, sans s'y enfermer.
+    expect(d.A).toBeGreaterThan(d.B);
   });
 
   it("l'Expert prend toujours le meilleur, sans tirage", () => {

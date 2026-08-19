@@ -1879,13 +1879,26 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
       log.push(`${key} : bâtiment touché (énergie ${energie}) → bloc ${broken} en Repaire (+1 Destruction, Titan ${titanId} → ${titan.destruction}).`);
 
       if (seuil4 && bldg.blocks.length > 0) {
+        /* Point 1.4 de la liste du 2026-08-19. Le second bloc partait en
+           `-dr, -dc`, c'est-a-dire A CONTRE-SENS de la charge : il revenait
+           donc sur la case de l'attaquant au lieu d'etre expulse. Nikola :
+           « le premier morceau va dans le repaire ; le second doit etre
+           projete strictement dans l'axe de percussion en fonction de
+           l'energie de la charge au moment de l'impact ».
+
+           C'est aussi ce que dit la physique de la carte : un Titan qui
+           defonce un batiment en fonce dedans, les gravats partent DEVANT.
+
+           A signaler a Nikola, meme schema quelques lignes plus bas : les
+           blocs d'un AMAS balaye au Seuil 4 partent eux aussi a contre-sens.
+           Il n'a pas demande ce cas, il n'a donc pas ete touche. */
         const below = bldg.blocks.pop();
-        const landing = projectInDirection(row, cIdx, -dr, -dc, energie, { board, looseBlocks, titans, log, replis, initiatorId: titanId });
+        const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, replis, initiatorId: titanId });
         const landingKey = landing.row + landing.col;
         if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
         looseBlocks[landingKey].push(below);
         log.push(
-          `${key} : Seuil 4 → bloc du dessous ${below} projeté (direction opposée) vers ${landingKey}` +
+          `${key} : Seuil 4 → bloc du dessous ${below} projeté dans l'axe de la charge (énergie ${energie}) vers ${landingKey}` +
             (landing.hasBounced ? " (après rebond)" : "")
         );
       }
@@ -2578,8 +2591,32 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
          la correction du même défaut. */
       const freeAdj = getFreeAdjacentCells(destKey, board, indexerTitans(titans), looseBlocks);
       if (freeAdj.length > 0) {
-        landingKey = freeAdj[0]; // TODO : choix explicite de l'attaquant (UI) — auto-pick en attendant
-        log.push(`${destKey} : Titan ${occupantId} coincé (rebond avant/arrière bloqués) → éjecté sur case libre adjacente ${landingKey} (auto-sélection, choix attaquant à câbler en UI).`);
+        landingKey = freeAdj[0];
+        /* Point 1.1 de la liste du 2026-08-19. Ce cas etait le dernier
+           placement AUTOMATIQUE du jeu : l'occupant coince partait sur la
+           premiere case libre trouvee, sans que l'attaquant ait la main. Le
+           livret est clair partout ailleurs, c'est le Titan initiateur qui
+           choisit ou l'on pose un element arrete.
+
+           On ne construit pas de mecanisme neuf : c'est exactement le meme
+           choix geometrique que le REPLI, qui a deja sa file, son bandeau, son
+           surlignage sur le plateau, sa resolution automatique quand
+           l'initiateur est une IA, et son instantane d'annulation. On depose
+           donc une demande de repli, et `landingKey` ne sert plus que de
+           point de chute par defaut si le joueur reclique la meme case.
+
+           Note : `cases.length <= 1` est filtre par `enqueueReplis`, donc une
+           seule case libre ne derange personne avec un choix inutile. */
+        if (Array.isArray(replis)) {
+          replis.push({
+            titanId: occupantId,
+            defaut: landingKey,
+            cases: freeAdj,
+            cible: destKey,
+            initiatorId: titanId,
+          });
+        }
+        log.push(`${destKey} : Titan ${occupantId} coincé (rebond avant/arrière bloqués) → éjecté sur une case libre adjacente, au choix du Titan ${titanId} (${freeAdj.length} possibilité${freeAdj.length > 1 ? "s" : ""}, ${landingKey} par défaut).`);
       } else {
         log.push(`${destKey} : Titan ${occupantId} totalement coincé (aucune case libre adjacente) — destination refusée.`);
         return { log, applied: false, decisions: [] };

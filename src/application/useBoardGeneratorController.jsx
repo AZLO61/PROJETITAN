@@ -108,6 +108,25 @@ export function useBoardGeneratorController() {
   const [decisionQueue, setDecisionQueue] = useState([]);
   const [repliQueue, setRepliQueue] = useState([]);
   const [ecroulement, setEcroulement] = useState(null);
+  /* Avancement de round EN ATTENTE (points 1.2, 1.5 et 1.8 du 2026-08-19).
+
+     Trois symptomes remontes par Nikola, une seule cause : « le jeu passe
+     directement au tour suivant apres un deplacement suivi d'un DIL », « le
+     saut sur un Amas verrouille le ramassage et finit le tour », et le
+     desengagement qui bloque le deplacement passif.
+
+     `markCardPlayed` appelait `advanceActionRound` DES que la carte quittait
+     la main, sans attendre que ce qu'elle avait declenche soit resolu : un
+     DIL a trancher, un repli a placer, un Amas a repartir. Le tour basculait
+     donc pendant que le joueur avait encore une decision devant lui, et son
+     passif Recuperation passait a la trappe — « j'ai fait le dil c'est passe
+     au joueur suivant automatiquement, je n'ai pas pu ramasser le bloc tombe
+     au sol ».
+
+     Le garde-fou existait deja pour l'IA (cf. `finishAiTurn`), mais pas pour
+     le joueur humain. L'avancement est desormais MIS EN ATTENTE et ne part
+     que lorsque plus aucune resolution n'est ouverte. */
+  const [pendingRoundAdvance, setPendingRoundAdvance] = useState(null);
   const currentDecision = decisionQueue[0] || null;
   const currentRepli = repliQueue[0] || null;
   const [seedCount, setSeedCount] = useState(1);
@@ -220,6 +239,7 @@ export function useBoardGeneratorController() {
     setMoveMode(false);
     setRecupMode(false);
     setPassifUsed({});
+    setPendingRoundAdvance(null);
     setBbMode(false);
     setBbPath([]);
     setJnpMode(false);
@@ -293,6 +313,7 @@ export function useBoardGeneratorController() {
     // Action.
     setActivePlayerId(nextDetonateur(titanState.ordreJeu, titanState.detonateur));
     setPassifUsed({});
+    setPendingRoundAdvance(null);
     setMoveMode(false);
     setRecupMode(false);
     setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0);
@@ -655,6 +676,7 @@ export function useBoardGeneratorController() {
       decisionQueue: structuredClone(decisionQueue),
       repliQueue: structuredClone(repliQueue),
       ecroulement: ecroulement ? structuredClone(ecroulement) : null,
+      pendingRoundAdvance,
       fpmc: {
         attackerId: fpmcAttackerId,
         pendingIds: [...fpmcPendingIds],
@@ -686,7 +708,7 @@ export function useBoardGeneratorController() {
     setUndoStack((prev) => [...prev, snapshot]);
   }, [
     state, titanState, looseBlocks, activePlayerId, phase, passifUsed, actionLog, waitingNextTitan,
-    decisionQueue, repliQueue, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcNTargets,
+    decisionQueue, repliQueue, ecroulement, pendingRoundAdvance, fpmcAttackerId, fpmcPendingIds, fpmcNTargets,
     fpmcAttackerBase, fpmcCurrent, mancheNumber, phaseValidated, volDirection, currentEvent,
     rainbowWinnerId, vertAssignments, gameOver, showScoring, coutRentree,
   ]);
@@ -728,6 +750,7 @@ export function useBoardGeneratorController() {
     setDecisionQueue(structuredClone(snap.decisionQueue || []));
     setRepliQueue(structuredClone(snap.repliQueue || []));
     setEcroulement(snap.ecroulement ? structuredClone(snap.ecroulement) : null);
+    setPendingRoundAdvance(snap.pendingRoundAdvance ?? null);
     setFpmcAttackerId(snap.fpmc?.attackerId ?? null);
     setFpmcPendingIds([...(snap.fpmc?.pendingIds || [])]);
     setFpmcNTargets(snap.fpmc?.nTargets ?? 0);
@@ -1812,6 +1835,17 @@ export function useBoardGeneratorController() {
       // cliquée (activePlayerId ne change qu'à ce moment-là). TODO : quand
       // "Toujours plus"/"Gourmandise" seront codés, ajouter l'exception ici.
       if (waitingNextTitan) return false;
+      /* Point 1.6 du 2026-08-19 : « un Titan sorti du plateau peut continuer
+         a jouer ses cartes hors-champ ». Il n'a plus ni Perimetre, ni axe, ni
+         case d'ou charger : toutes ses cartes s'appliquaient dans le vide, et
+         certaines le laissaient dans un etat dont il ne revenait pas.
+
+         Il rentre normalement a l'ouverture de SON tour (ruling du
+         2026-08-16), mais il peut aussi etre ejecte PENDANT son propre tour,
+         par une reaction en chaine ou un repli offensif : c'est la que le
+         trou s'ouvrait. La defausse, elle, reste possible — voir
+         `canDiscardCard` juste apres, sans quoi la partie se bloquerait. */
+      if (selectedTitan.horsPlateau) return false;
       /* UNE DÉCISION NON TRANCHÉE GÈLE AUSSI LES CARTES.
          Le clic sur le PLATEAU était déjà bloqué pendant un DIL/RAGE, un
          repli ou une répartition d'Amas (cf. `decisionEnAttente` dans
@@ -1829,6 +1863,25 @@ export function useBoardGeneratorController() {
      currentDecision, currentRepli, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcCurrent]
   );
 
+  /* Defausser reste TOUJOURS possible quand jouer ne l'est pas pour cause de
+     hors-plateau. Sans cette porte, un Titan ejecte pendant son tour ne
+     pourrait ni jouer ni defausser : le round n'avancerait plus et la partie
+     serait definitivement bloquee — exactement le genre de panneau sans issue
+     rencontre trois fois le 18 aout. Toutes les autres conditions de
+     `canPlayCard` restent valables. */
+  const canDiscardCard = useCallback(
+    (cardId) => {
+      if (phase !== "action" || !selectedTitan || selectedTitan.id !== activePlayerId) return false;
+      if (!selectedTitan.programmed.includes(cardId)) return false;
+      if (waitingNextTitan) return false;
+      if (currentDecision || currentRepli || ecroulement) return false;
+      if (fpmcAttackerId && (fpmcPendingIds.length > 0 || fpmcCurrent)) return false;
+      return true;
+    },
+    [phase, selectedTitan, activePlayerId, waitingNextTitan,
+     currentDecision, currentRepli, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcCurrent]
+  );
+
   const getPlayBlockReason = useCallback(
     (cardId) => {
       if (!selectedTitan) return "";
@@ -1836,6 +1889,7 @@ export function useBoardGeneratorController() {
       if (selectedTitan.id !== activePlayerId) return `Pas le tour de T${selectedTitan.id}`;
       if (!selectedTitan.programmed.includes(cardId)) return `${CARD_LABEL[cardId]} non programmée.`;
       if (waitingNextTitan) return `Confirme "Titan suivant" avant de continuer.`;
+      if (selectedTitan.horsPlateau) return `T${selectedTitan.id} est hors de BIG CITY : il ne peut que défausser. Il rentrera à l'ouverture de son prochain tour.`;
       // Dire CE QU'ON ATTEND, pas seulement que c'est bloqué : sans ça la
       // carte devient grise sans raison visible au milieu d'une partie.
       if (currentDecision) return `Tranche d'abord le ${currentDecision.type} en attente.`;
@@ -1933,11 +1987,26 @@ export function useBoardGeneratorController() {
       });
 
       // 2. Avancer le tour dans le round (1 carte par Titan, 3 rounds) —
-      // seulement si une carte a réellement été consommée cette fois-ci.
-      if (carteReellementProgrammee) advanceActionRound(titanId);
+      // seulement si une carte a réellement été consommée cette fois-ci, et
+      // seulement quand les résolutions déclenchées par la carte sont
+      // terminées (cf. `pendingRoundAdvance`).
+      if (carteReellementProgrammee) setPendingRoundAdvance(titanId);
     },
-    [advanceActionRound, titanState.players]
+    [titanState.players]
   );
+
+  /* Le tour ne bascule que lorsque plus rien n'est en attente de résolution.
+     Sans cette attente, la carte qui ouvre un DIL, un repli ou un Amas fait
+     passer la main avant que le joueur ait pu répondre, puis ramasser. */
+  useEffect(() => {
+    if (pendingRoundAdvance == null) return;
+    if (currentDecision || currentRepli || ecroulement) return;
+    if (fpmcAttackerId && (fpmcPendingIds.length > 0 || fpmcCurrent)) return;
+    const titanId = pendingRoundAdvance;
+    setPendingRoundAdvance(null);
+    advanceActionRound(titanId);
+  }, [pendingRoundAdvance, currentDecision, currentRepli, ecroulement,
+      fpmcAttackerId, fpmcPendingIds, fpmcCurrent, advanceActionRound]);
 
   // Défausse volontaire face cachée (session) : le Titan désigne 1 de ses
   // 3 cartes programmées et choisit de ne pas la jouer. Aucun effet, rien
@@ -2173,37 +2242,87 @@ export function useBoardGeneratorController() {
   // la pointe actuelle, dans la limite du budget restant. `bbPath` seul (pas
   // `bbReachable`, qui ne connaît que le plus court chemin) décide de ce qui
   // est jouable ensuite.
-  const bbNextClickable = useMemo(() => {
-    if (!selectedTitan || !bbMode) return new Set();
+  /* Point 1.3 de la liste du 2026-08-19, deux defauts pour un seul calcul.
+
+     · « propose des cases cibles invalides (ex. la case d'un batiment
+       direct) » : un batiment debout etait cliquable comme etape ET comme
+       destination finale, alors qu'on ne s'arrete JAMAIS dessus. Le calcul
+       automatique (`getBoingBoingReach`) l'excluait deja, le trace par clics
+       l'avait oublie.
+
+     · « permet d'enchainer les sauts au-dela du cout theorique » : un
+       obstacle coute 0 (saute-mouton). En cliquant de batiment en batiment,
+       on traversait donc le plateau sans jamais entamer son budget.
+
+     La correction fait ce que Nikola demande explicitement : on ne propose
+     plus la case du batiment, mais « directement la case d'atterrissage
+     situee immediatement derriere selon l'angle de percussion ». On avance
+     dans l'axe tant qu'on rencontre des batiments debout, et on propose la
+     premiere case ou l'on peut reellement se poser. Le cout du groupe franchi
+     est compte case par case, exactement comme le moteur le compte.
+
+     `bbNextRoutes` retient le trajet complet de chaque proposition, pour que
+     le chemin trace a l'ecran passe visiblement par-dessus les batiments
+     survoles : c'est ce que Nikola demandait le 18 aout, « que ce soit clair
+     pour tout le monde a la table ».
+
+     Les autres obstacles (debris, Titans) restent des cibles valides : y
+     atterrir EST le coup, percussion ou ramassage. Seul le batiment debout
+     est infranchissable a l'arret. */
+  const bbNextRoutes = useMemo(() => {
+    const routes = new Map();
+    if (!selectedTitan || !bbMode) return routes;
+    const jeu = { board: state.board, looseBlocks, titans: titanState.players };
     const tipKey = bbPath.length > 0 ? bbPath[bbPath.length - 1] : selectedTitan.cell;
     const fromIsOrigin = bbPath.length === 0;
     const tr = rowIndex(tipKey[0]);
     const tc = Number(tipKey.slice(1));
-    const out = new Set();
+
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (dr === 0 && dc === 0) continue;
-        const nr = tr + dr, nc = tc + dc;
-        if (nr < 0 || nr > 8 || nc < 1 || nc > 9) continue;
-        const key = rowFromIndex(nr) + nc;
-        const cost = boingBoingStepCost(tipKey, key, fromIsOrigin, { board: state.board, looseBlocks, titans: titanState.players });
-        if (bbBudgetUsed + cost > bbMaxRange) continue;
-        out.add(key);
+        let from = tipKey;
+        let fromOrigine = fromIsOrigin;
+        let cumul = 0;
+        const trajet = [];
+        let nr = tr + dr;
+        let nc = tc + dc;
+        while (nr >= 0 && nr <= 8 && nc >= 1 && nc <= 9) {
+          const key = rowFromIndex(nr) + nc;
+          cumul += boingBoingStepCost(from, key, fromOrigine, jeu);
+          if (bbBudgetUsed + cumul > bbMaxRange) break;
+          trajet.push(key);
+          const bat = state.board[key];
+          const batimentDebout = Boolean(bat && bat.blocks && bat.blocks.length > 0);
+          if (!batimentDebout) {
+            if (!routes.has(key)) routes.set(key, trajet.slice());
+            break;
+          }
+          from = key;
+          fromOrigine = false;
+          nr += dr;
+          nc += dc;
+        }
       }
     }
-    return out;
+    return routes;
   }, [selectedTitan, bbMode, bbPath, bbBudgetUsed, bbMaxRange, state.board, looseBlocks, titanState.players]);
+
+  const bbNextClickable = useMemo(() => new Set(bbNextRoutes.keys()), [bbNextRoutes]);
 
   const bbPathClick = useCallback((key) => {
     if (!selectedTitan) return;
-    // Recliquer une case déjà posée dans le chemin revient dessus — annule
-    // tout ce qui a été tracé après. Pas besoin d'un bouton "annuler" dédié
-    // pour corriger un trajet, juste recliquer où on veut reprendre.
+    // Recliquer une case deja posee dans le chemin revient dessus : tout ce
+    // qui a ete trace apres est annule. Pas besoin d'un bouton dedie pour
+    // corriger un trajet, il suffit de recliquer ou l'on veut reprendre.
     const idx = bbPath.indexOf(key);
     if (idx !== -1) { setBbPath(bbPath.slice(0, idx + 1)); return; }
-    if (!bbNextClickable.has(key)) return; // pas une voisine directe, ou budget dépassé
-    setBbPath((prev) => [...prev, key]);
-  }, [selectedTitan, bbPath, bbNextClickable]);
+    const route = bbNextRoutes.get(key);
+    if (!route) return; // hors de portee, ou budget depasse
+    // Le trajet complet entre dans le chemin : les batiments survoles s'y
+    // voient, seule la derniere case est un atterrissage.
+    setBbPath((prev) => [...prev, ...route]);
+  }, [selectedTitan, bbPath, bbNextRoutes]);
 
   const bbUndoLastCell = useCallback(() => { setBbPath((prev) => prev.slice(0, -1)); }, []);
 
@@ -3111,6 +3230,7 @@ export function useBoardGeneratorController() {
     setBbPath,
     bbBudgetUsed,
     bbNextClickable,
+    bbNextRoutes,
     bbPathClick,
     bbUndoLastCell,
     bbDestIsBuilding,
@@ -3194,6 +3314,7 @@ export function useBoardGeneratorController() {
     confirmProgrammation,
     chooseVolDirection,
     canPlayCard,
+    canDiscardCard,
     getPlayBlockReason,
     advanceActionRound,
     markCardPlayed,

@@ -137,8 +137,32 @@ export const FORCE_LABELS = Object.freeze({
 //
 // La hiérarchie reste franche : le Novice plafonne aux deux tiers du score
 // de l'Expert, le Confirmé à un peu plus de 90 %.
+/* ---- LISSAGE DES NIVEAUX (2026-08-19) ---------------------------
+   Demande de Nikola : « lisse les niveaux des IA pour avoir un peu d'ecart
+   entre les niveaux mais il faut un moins grand gap entre eux ». Deux
+   problemes mesures avant ce reglage, temperament Collectionneur, 2 series de
+   60 parties :
+
+   · le Novice plafonnait a 63 % du score de l'Expert, un gouffre ;
+   · le Confirme BATTAIT l'Expert (104 a 106 %), la hierarchie etait inversee.
+
+   Ce qui a ete change, et pourquoi :
+
+   NOVICE. Il garde son vrai handicap, `voitScoreComplet: false` — il ne voit
+   que son butin, pas les bonus ni les classements, ce qui EST l'erreur du
+   debutant et doit rester sa signature. On lui retire en revanche du bruit
+   inutile : la fenetre de tirage passe de 3 a 2 coups et le biais de 3 a 4,
+   donc il tire beaucoup plus souvent son meilleur coup tout en gardant des
+   erreurs plausibles. Sa vision de portee passe de 2 a 3 cases, comme les
+   autres : un debutant voit le plateau, il le lit juste moins bien.
+
+   EXPERT. Sa nuisance est desormais MODULEE PAR SON TEMPERAMENT (voir
+   `poidsAdverseEffectif`). Gener un adversaire est une action de la famille
+   ADN/agression : un Expert Collectionneur y consacrait autant d'energie
+   qu'un Agressif, alors que son bareme ne le paie pas. Il jouait donc contre
+   son propre score, ce qui expliquait l'inversion avec le Confirme. */
 export const FORCE_SETTINGS = Object.freeze({
-  [FORCES.NOVICE]: { voitScoreComplet: false, voitAdrenaline: true, voitAdversaires: false, poidsAdversaires: 0, voitPortee: true, rayonPortee: 2, topN: 3, biais: 3 },
+  [FORCES.NOVICE]: { voitScoreComplet: false, visionBonus: 0.25, voitAdrenaline: true, voitAdversaires: false, poidsAdversaires: 0, voitPortee: true, rayonPortee: 3, topN: 2, biais: 4 },
   [FORCES.CONFIRME]: { voitScoreComplet: true, voitAdrenaline: true, voitAdversaires: false, poidsAdversaires: 0, voitPortee: true, rayonPortee: 3, topN: 1, biais: 1 },
   [FORCES.EXPERT]: { voitScoreComplet: true, voitAdrenaline: true, voitAdversaires: true, poidsAdversaires: 0.5, voitPortee: true, rayonPortee: 3, topN: 1, biais: 1 },
 });
@@ -451,9 +475,26 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
     // exactement l'erreur du joueur débutant, qui ramasse sans regarder
     // la piste ADN ni compter ses paires.
     if (!reglages.voitScoreComplet) {
+      /* VISION PARTIELLE DES BONUS DE FIN (lissage du 2026-08-19).
+
+         Le Novice ne voyait RIEN de ce qui se compte a la fin : bonus Rose,
+         trophee Collectionneur, Arc-en-ciel, pistes ADN. C'est ce qui creusait
+         l'essentiel de son retard, mesure a 63 % du score de l'Expert.
+
+         Il ne s'agit pas de lui donner la vue complete, ce qui en ferait un
+         Confirme : il en percoit desormais une PART (`visionBonus`). C'est
+         aussi plus juste comme modele de debutant, qui n'ignore pas qu'il
+         existe des bonus mais les sous-estime et joue surtout son butin. */
+      const part = reglages.visionBonus ?? 0;
       return (
         detail.bareme * poids.bareme +
         detail.socles * poids.socles +
+        part * (
+          detail.roseBonus * poids.bareme +
+          detail.collectionneurBonus * poids.socles +
+          detail.rainbowBonus +
+          (detail.bagarrePts + detail.destructionPts) * poids.adn
+        ) +
         // L'Adrénaline entre dans la vue du Novice le 2026-08-18. Ce sont
         // des jetons posés devant lui, qui valent des points au décompte et qui
         // sont écrits sur la feuille de score : les ignorer ne modélisait
@@ -489,7 +530,13 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
   // en coûte 6 au leader devient meilleur qu'un coup qui lui en rapporte
   // 5 sans gêner personne. Toute la nuisance émerge de là, sans qu'aucune
   // heuristique « attaque le premier » n'ait été écrite.
-  const poidsAdverse = reglages.poidsAdversaires ?? 0;
+  /* La nuisance est une action de la famille ADN : la ponderer par le
+     temperament evite qu'un Expert Collectionneur depense ses tours a gener
+     les autres alors que son bareme ne le paie pas. C'est ce qui le faisait
+     passer DERRIERE le Confirme en mesure. Un Agressif (adn 1,5) nuit donc
+     plus qu'avant, un Collectionneur (adn 0,7) nettement moins, un
+     Opportuniste (adn 1,0) exactement comme avant. */
+  const poidsAdverse = (reglages.poidsAdversaires ?? 0) * poids.adn;
   if (poidsAdverse > 0) {
     const adversaires = titans.filter((t) => t.id !== titanId);
     if (adversaires.length > 0) {

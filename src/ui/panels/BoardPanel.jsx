@@ -135,6 +135,7 @@ export default function BoardPanel({ vm }) {
     canPlayCard,
     advanceActionRound,
     discardCurrentCard,
+    canDiscardCard,
     teaTargets,
     toggleTeaMode,
     graouMode,
@@ -780,7 +781,7 @@ export default function BoardPanel({ vm }) {
                             )}
                             {/* Défausse volontaire face cachée (session) : sans effet, sans
                                 révélation aux adversaires — fait quand même avancer le round. */}
-                            {canPlay && (
+                            {canDiscardCard(cardId) && (
                               <button
                                 onClick={() => {
                                   if (animating) return;
