@@ -262,6 +262,68 @@ validation est fusionné dans l'en-tête. C'est aussi ce qui a permis d'écarter
 une fausse alerte — le panneau des cartes semblait avoir disparu, il était
 simplement conditionné à la sélection d'un Titan, comme avant.
 
+### Une régression que j'ai créée, et pourquoi les tests ne l'ont pas vue
+
+Nikola, quelques minutes après la livraison : « j'ai un énorme bug, quand un
+titan a joué sa carte ça ne passe pas au suivant donc ça fige dès la première
+action ».
+
+**La cause.** `markCardPlayed` appelait `advanceActionRound` de façon
+SYNCHRONE, et `finishAiTurn` lit `aiNextPlayerRef.current` dès le retour de cet
+appel pour donner la main au Titan suivant. L'invariante était écrite juste
+au-dessus, en toutes lettres : « advanceActionRound étant désormais 100 %
+synchrone, aiNextPlayerRef.current est fiable dès le retour de markCardPlayed ».
+Différer l'avancement dans un effet React faisait lire une ref encore vide.
+
+Mesuré dans les deux sens : avec le code fautif, 1 carte jouée puis plus rien,
+le même Titan restant actif indéfiniment. Après correctif, 10 cartes et les
+quatre Titans qui alternent.
+
+**Pourquoi 334 tests n'ont rien vu.** Aucun ne vérifiait que la partie TOURNE.
+Ils vérifiaient tous des règles, sur des états posés à la main, avec un seul
+coup joué. `partie-ia-avance.test.jsx` comble ce trou : quatre IA, la partie
+doit se dérouler seule sur une trentaine de tours, et aucun Titan ne doit rester
+bloqué. C'est un filet de vie, pas un test de règle — la catégorie qui manquait.
+
+**Et le point 1.2 dans tout ça.** Mon premier test visait la mauvaise cible : il
+exigeait que `waitingNextTitan` reste faux pendant un Dilemme, et j'ai modifié
+le code pour satisfaire ce test. Or `waitingNextTitan` ne veut pas dire « le
+tour est fini » mais « la carte du round est jouée ». Ce qui décide de ce que le
+joueur peut encore faire, c'est `decisionBloquante`, que BoardPanel consultait
+**déjà correctement** pour masquer le ramassage et « Titan suivant » tant qu'une
+résolution est ouverte. Le mécanisme demandé existait donc avant que j'y touche.
+
+**Leçon, à garder :** avant de modifier un rouage central, lire le commentaire
+qui l'entoure. Celui-ci disait exactement ce que j'allais casser. Et un test qui
+force à changer un rouage interne doit faire suspecter le test, pas le rouage.
+
+### La logique de charge, partout
+
+Il restait une projection à contre-sens : les blocs d'un Amas balayé au Seuil 4.
+Un Titan qui défonçait un Amas se le renvoyait dessus. C'est le cas signalé le
+matin même comme restant à arbitrer, et Nikola a tranché : « applique la logique
+de charge pour tout ». Tout ce qu'une charge percute part désormais devant, dans
+l'axe de percussion. Un test vérifie qu'aucune projection à contre-sens ne
+subsiste dans le code.
+
+### Le survol des bâtiments
+
+Il affichait l'infobulle NATIVE du navigateur (`title`) : rectangle gris, police
+système, délai d'apparition. Rien à voir avec la fiche du clic. Deux visuels pour
+la même information. Le survol ouvre maintenant la même fiche, sans le voile
+plein écran qui rendrait le plateau injouable à la souris.
+
+### La barre « M2 · 3 · Programmation », supprimée
+
+Elle affichait trois choses, toutes redites ailleurs : le numéro de Manche (déjà
+dans la barre de stock), le nom de la Phase (déjà dans la consigne du moment,
+qui explique en plus quoi faire), et les coches de validation, qui n'avaient rien
+à faire loin des Titans. Les coches et le bouton Valider sont maintenant sur
+l'encart de chaque Titan.
+
+C'est le deuxième passage sur ce panneau : la veille, la demande avait été lue
+comme « fusionner » alors qu'elle disait « supprimer ».
+
 ### Ce qui reste de la liste
 
 Rien. Les 19 points sont traités.
@@ -277,9 +339,10 @@ Deux remarques a signaler, hors perimetre demande :
 
 ### Vérifications
 
-Audit, lint, **334 tests** et build au vert. Diagnostic d'invariants sans
-défaut sur 600 parties supplémentaires, à 3 et à 4 Titans. Interface contrôlée
-sur l'application réellement construite, dans un navigateur.
+Audit, lint, **339 tests** et build au vert. Diagnostic d'invariants sans défaut
+sur 1100 parties supplémentaires, à 3 et à 4 Titans. Interface contrôlée sur
+l'application réellement construite, dans un navigateur, y compris le
+déroulement d'une partie complète à quatre IA.
 
 
 ## Non publié — neuvième passe du 2026-08-18 (revue complète avant démo)
