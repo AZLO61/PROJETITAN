@@ -340,18 +340,21 @@ describe("Boing Boing — RAGE au Seuil 4 (ruling Nikola du 2026-08-17)", () => 
   });
 
   it("le coût en Adrénaline monte avec la distance sautée", () => {
-    // La case visée par la carte compte comme un obstacle qui se saute
-    // gratuitement (retour Nikola du 2026-08-18) : atterrir SUR le Titan
-    // cible ne coûte donc rien en soi, seules les cases LIBRES traversées
-    // avant coûtent 1 chacune. E4→E7 (2 cases libres, E5 et E6, avant le
-    // Titan) coûte 2 : distance encore hors de portée du Seuil 4 avec 1
-    // seule Adrénaline (énergie 3+1−1 = 3), atteinte avec 2 (3+2−1 = 4).
-    const titans = [t(1, "E4", { adrenaline: 2 }), cible("E7")];
+    /* REGLE REVISEE LE 2026-08-19. Atterrir coûte 1, TOUJOURS, y compris sur
+       la case du Titan visé. Auparavant un obstacle valait 0, ce qui laissait
+       enchaîner les débris sans fin : « j'ai un bug qui m'a permis de sauter
+       une 4e fois sur un débris ou socle ».
+
+       E4 vers E7 avec E5 et E6 LIBRES vaut donc 3 sauts, et non plus 2 : on ne
+       survole que des obstacles, jamais une case vide. Énergie = 3 + Adrénaline
+       − (distance − 1), soit 3+a−2. Le Seuil 4 demande maintenant 3
+       Adrénalines là où 2 suffisaient. */
+    const titans = [t(1, "E4", { adrenaline: 3 }), cible("E7")];
     const res = resolveBoingBoing(1, "E7", 1, 1, { board: {}, looseBlocks: {}, titans });
     expect((res.decisions || [])[0].type).toBe("DIL");
 
-    const titans2 = [t(1, "E4", { adrenaline: 2 }), cible("E7")];
-    const res2 = resolveBoingBoing(1, "E7", 2, 1, { board: {}, looseBlocks: {}, titans: titans2 });
+    const titans2 = [t(1, "E4", { adrenaline: 3 }), cible("E7")];
+    const res2 = resolveBoingBoing(1, "E7", 3, 1, { board: {}, looseBlocks: {}, titans: titans2 });
     expect((res2.decisions || [])[0].type).toBe("RAGE");
   });
 

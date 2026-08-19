@@ -404,9 +404,12 @@ describe("Boing Boing sur un Amas — répartition au choix", () => {
     expect(res.applied).toBe(true);
     expect(res.ecroulement.blocs).toHaveLength(3);
     expect(res.ecroulement.cellKey).toBe("E6");
-    // E6 est un Amas, donc un obstacle : il se saute gratuitement (retour
-    // Nikola du 2026-08-18) — il reste l'intégralité des 3 d'énergie.
-    expect(res.ecroulement.energie).toBe(3);
+    /* REGLE REVISEE LE 2026-08-19 : atterrir coute 1, meme sur un obstacle.
+       E6 est donc a distance 1 et non plus 0, et il reste 2 d'energie au lieu
+       de 3. C'est la contrepartie assumee de la correction du « 4e saut » :
+       on ne peut plus enchainer les debris gratuitement, mais chaque saut
+       coute aussi 1 d'energie a l'arrivee. */
+    expect(res.ecroulement.energie).toBe(2);
     expect(etat.titans[0].cell).toBe("E6");
   });
 

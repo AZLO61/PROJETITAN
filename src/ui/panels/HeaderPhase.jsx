@@ -32,7 +32,6 @@ export default function HeaderPhase({ vm }) {
     undoStack,
     handleUndo,
     endGameReasons,
-    phaseGuidance,
   } = vm;
 
 
@@ -227,29 +226,16 @@ export default function HeaderPhase({ vm }) {
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
 
-      {/* ── CONSIGNE DU MOMENT ──
-          Dit ce que la Phase en cours attend, et l'action concrete a faire
-          maintenant. C'etait jusqu'ici soit implicite, soit cache dans un
-          `title` HTML que personne ne survole. Meme traitement visuel que le
-          bandeau Evenement ci-dessous. */}
-      {phaseGuidance && (phaseGuidance.what || phaseGuidance.you) && (
-        <div style={{
-          background: "rgba(255,217,61,.08)", border: "1px solid rgba(255,217,61,.3)",
-          borderRadius: 10, padding: "8px 12px", marginBottom: 10,
-        }}>
-          {phaseGuidance.what && (
-            <div style={{ fontSize: ".72rem", color: "rgba(255,255,255,.6)", lineHeight: 1.4 }}>
-              {phaseGuidance.what}
-            </div>
-          )}
-          {phaseGuidance.you && (
-            <div style={{ fontSize: ".78rem", color: "#FFD93D", fontWeight: 700, marginTop: 3, lineHeight: 1.4 }}>
-              👉 {phaseGuidance.you}
-            </div>
-          )}
-        </div>
-      )}
+      {/* ── CONSIGNE DU MOMENT, SUPPRIMEE (Nikola, 2026-08-19) ──
+          « Supprime-moi le panneau d'indication de ce que fait un titan
+          adverse, ou de quoi faire, celui au-dessus des encarts de titan. »
 
+          Il annoncait a la fois ce que la Phase attendait et ce que le Titan
+          actif etait en train de faire. Deux informations deja portees
+          ailleurs : la carte en cours se lit sur le bandeau du Titan actif,
+          et la sequence du tour est rappelee dessous. Sur une table, un
+          pave de texte qui change a chaque clic se lit une fois puis
+          s'ignore — et il poussait le plateau vers le bas. */}
 
       {/* ── ANIMATION IN PROGRESS INDICATOR ── */}
       {animating && (

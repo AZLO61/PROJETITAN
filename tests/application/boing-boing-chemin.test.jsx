@@ -93,9 +93,13 @@ describe("Boing Boing : chemin tracé case par case", () => {
     // E7, la première case posable derrière le groupe, l'est.
     expect(vmCourant.bbNextClickable.has("E7")).toBe(true);
     act(() => { vmCourant.bbPathClick("E7"); });
-    // Le trajet complet est enregistré : les bâtiments survolés se voient.
-    expect(vmCourant.bbPath).toEqual(["E5", "E6", "E7"]);
-    // Et le coût reste celui du livret : le groupe collé vaut 1 case.
+    /* REFONTE DU 2026-08-19 : `bbPath` ne contient plus que les
+       ATTERRISSAGES. Les bâtiments franchis vivent dans `bbSurvol`, une
+       entrée par saut, et ne coûtent rien — c'est ce qui empêche d'enchaîner
+       les obstacles gratuitement. */
+    expect(vmCourant.bbPath).toEqual(["E7"]);
+    expect(vmCourant.bbSurvol[0]).toEqual(["E5", "E6"]);
+    // Un seul atterrissage, donc 1 de budget : le groupe collé vaut 1 case.
     expect(vmCourant.bbBudgetUsed).toBe(1);
     expect(vmCourant.bbDest).toBe("E7");
   });
@@ -103,12 +107,12 @@ describe("Boing Boing : chemin tracé case par case", () => {
   it("recliquer une case déjà dans le chemin y revient", async () => {
     await partieAvecUnGroupeColle();
     act(() => { vmCourant.bbPathClick("E7"); });
-    expect(vmCourant.bbPath).toEqual(["E5", "E6", "E7"]);
+    expect(vmCourant.bbPath).toEqual(["E7"]);
 
-    // Recliquer une case survolée ramène le tracé jusqu'à elle.
-    act(() => { vmCourant.bbPathClick("E5"); });
-    expect(vmCourant.bbPath).toEqual(["E5"]);
-    expect(vmCourant.bbDest).toBe("E5");
+    // Recliquer la case posée y revient : le tracé s'arrête là.
+    act(() => { vmCourant.bbPathClick("E7"); });
+    expect(vmCourant.bbPath).toEqual(["E7"]);
+    expect(vmCourant.bbDest).toBe("E7");
   });
 
   it("un atterrissage sur un bâtiment reste impossible à valider", async () => {
@@ -116,14 +120,13 @@ describe("Boing Boing : chemin tracé case par case", () => {
        l'on y revient en recliquant une case survolée, la destination redevient
        un bâtiment : jouer la carte doit rester refusé. */
     const t1 = await partieAvecUnGroupeColle();
-    act(() => { vmCourant.bbPathClick("E7"); });
+    /* Un bâtiment debout n'est plus jamais proposé : ni comme étape, ni comme
+       destination. On ne peut donc plus se retrouver avec une destination
+       invalide, et c'est le vrai garde-fou. */
+    expect(vmCourant.bbNextClickable.has("E5")).toBe(false);
+    expect(vmCourant.bbNextClickable.has("E6")).toBe(false);
     act(() => { vmCourant.bbPathClick("E5"); });
-    expect(vmCourant.bbDest).toBe("E5");
-    expect(vmCourant.bbDestIsBuilding).toBe(true);
-
-    act(() => { vmCourant.jouerBoingBoing(); });
-    // Rien ne s'est passé : le chemin et la position du Titan n'ont pas bougé.
-    expect(vmCourant.bbPath).toEqual(["E5"]);
+    expect(vmCourant.bbPath).toEqual([]);
     expect(vmCourant.titanState.players.find((p) => p.id === t1.id).cell).toBe("E4");
 
     act(() => { vmCourant.bbPathClick("E7"); });
@@ -154,7 +157,7 @@ describe("Boing Boing : chemin tracé case par case", () => {
       vmCourant.setLooseBlocks((prev) => ({ ...prev }));
     });
 
-    // Portée 3 sans Adrénaline : chaque case libre supplémentaire coûte 1.
+    // Portée 3 sans Adrénaline : chaque atterrissage coûte 1.
     act(() => { vmCourant.bbPathClick("E8"); });
     expect(vmCourant.bbBudgetUsed).toBe(2);
     act(() => { vmCourant.bbPathClick("E9"); });

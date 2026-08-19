@@ -16,7 +16,7 @@ const {
   rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, releaseSocle, projectInDirection, estSurLePlateau, indexerTitans, rentrerEnJeu,
   resolveToutCasserBatiments, resolveToutCasserBlocs,
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
-  scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, getJeNePartagePasCount, resolveJeNePartagePasElement, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, boingBoingStepCost, resolveBoingBoing,
+  scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, getJeNePartagePasCount, resolveJeNePartagePasElement, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
   choisirRepliIA, appliquerRepli, appliquerReplElement,
   canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
@@ -221,7 +221,7 @@ export function useBoardGeneratorController() {
     setRecupMode(false);
     setPassifUsed({});
     setBbMode(false);
-    setBbPath([]);
+    setBbPath([]); setBbSurvol([]);
     setJnpMode(false);
     setJnpSelected([]);
     setGraouMode(false);
@@ -526,6 +526,9 @@ export function useBoardGeneratorController() {
   // carte atterrit — n'est plus qu'un dérivé : la dernière case du chemin.
   // Une seule source de vérité, jamais désynchronisée.
   const [bbPath, setBbPath] = useState([]);
+  // Cases FRANCHIES a chaque saut, une entree par atterrissage. Elles ne
+  // coutent rien, elles ne servent qu'a dessiner la trajectoire.
+  const [bbSurvol, setBbSurvol] = useState([]);
   const bbDest = bbPath.length > 0 ? bbPath[bbPath.length - 1] : null;
   // Écroulement d'Amas en attente de répartition par le joueur :
   // { cellKey, blocs, energie, choix } — un choix de case par débris, posé
@@ -718,7 +721,7 @@ export function useBoardGeneratorController() {
     setPhase(snap.phase);
     setPassifUsed(structuredClone(snap.passifUsed));
     setActionLog([...snap.actionLog]);
-    setMoveMode(false); setRecupMode(false); setBbMode(false); setBbPath([]);
+    setMoveMode(false); setRecupMode(false); setBbMode(false); setBbPath([]); setBbSurvol([]);
     setJnpMode(false); setJnpSelected([]); setGraouMode(false);
     /* Les files en attente sont RESTAURÉES, plus vidées. Les vider défaisait
        le plateau sans défaire les décisions qu'il avait déclenchées : on
@@ -2082,16 +2085,16 @@ export function useBoardGeneratorController() {
   const closeAllCardModes = useCallback(() => {
     setTeaMode(false);
     setGraouMode(false);
-    setBbMode(false); setBbPath([]);
+    setBbMode(false); setBbPath([]); setBbSurvol([]);
     setJnpMode(false); setJnpSelected([]);
   }, []);
 
   const toggleGraouMode = useCallback(() => {
-    setGraouMode((m) => { const next = !m; if (next) { setTeaMode(false); setBbMode(false); setBbPath([]); setJnpMode(false); setJnpSelected([]); } return next; });
+    setGraouMode((m) => { const next = !m; if (next) { setTeaMode(false); setBbMode(false); setBbPath([]); setBbSurvol([]); setJnpMode(false); setJnpSelected([]); } return next; });
   }, []);
 
   const toggleTeaMode = useCallback(() => {
-    setTeaMode((m) => { const next = !m; if (next) { setGraouMode(false); setBbMode(false); setBbPath([]); setJnpMode(false); setJnpSelected([]); } return next; });
+    setTeaMode((m) => { const next = !m; if (next) { setGraouMode(false); setBbMode(false); setBbPath([]); setBbSurvol([]); setJnpMode(false); setJnpSelected([]); } return next; });
   }, []);
 
   const jouerTeteEnAvant = useCallback((targetKey) => {
@@ -2183,7 +2186,7 @@ export function useBoardGeneratorController() {
 
   const toggleBbMode = useCallback(() => {
     setBbMode((m) => { const next = !m; if (next) { setTeaMode(false); setGraouMode(false); setJnpMode(false); setJnpSelected([]); } return next; });
-    setBbPath([]);
+    setBbPath([]); setBbSurvol([]);
   }, []);
 
   /* ── CHEMIN DE BOING BOING, CASE PAR CASE ──
@@ -2195,81 +2198,60 @@ export function useBoardGeneratorController() {
      case adjacente, avec la même règle de coût que le calcul automatique
      (`boingBoingStepCost`) — le moteur de résolution, lui, ne regarde
      toujours que la dernière case (`bbDest`), inchangé. */
-  const bbBudgetUsed = useMemo(() => {
-    if (!selectedTitan || bbPath.length === 0) return 0;
-    let total = 0;
-    let prev = selectedTitan.cell;
-    let prevIsOrigin = true;
-    for (const key of bbPath) {
-      total += boingBoingStepCost(prev, key, prevIsOrigin, { board: state.board, looseBlocks, titans: titanState.players });
-      prev = key;
-      prevIsOrigin = false;
-    }
-    return total;
-  }, [selectedTitan, bbPath, state.board, looseBlocks, titanState.players]);
+  /* BUDGET DU SAUT (refonte du 2026-08-19).
 
-  // Cases cliquables EN PLUS du chemin déjà tracé : les voisines directes de
-  // la pointe actuelle, dans la limite du budget restant. `bbPath` seul (pas
-  // `bbReachable`, qui ne connaît que le plus court chemin) décide de ce qui
-  // est jouable ensuite.
-  /* Point 1.3 de la liste du 2026-08-19, deux defauts pour un seul calcul.
+     Chaque case OU L'ON SE POSE coute 1, quoi qu'elle porte. Les obstacles
+     survoles en chemin sont gratuits : ils n'entrent pas dans `bbPath`, ils
+     vivent dans `bbSurvol` et ne servent qu'a dessiner la trajectoire.
 
-     · « propose des cases cibles invalides (ex. la case d'un batiment
-       direct) » : un batiment debout etait cliquable comme etape ET comme
-       destination finale, alors qu'on ne s'arrete JAMAIS dessus. Le calcul
-       automatique (`getBoingBoingReach`) l'excluait deja, le trace par clics
-       l'avait oublie.
+     Avant, un obstacle coutait 0 ET pouvait recevoir l'atterrissage : en
+     cliquant de debris en debris on traversait le plateau sans entamer son
+     budget. Nikola : « j'ai un bug qui m'a permis de sauter une 4e fois sur
+     un debris ou socle ». */
+  const bbBudgetUsed = bbPath.length;
 
-     · « permet d'enchainer les sauts au-dela du cout theorique » : un
-       obstacle coute 0 (saute-mouton). En cliquant de batiment en batiment,
-       on traversait donc le plateau sans jamais entamer son budget.
+  /* Ce qui est cliquable depuis la pointe du trajet, et par quel chemin.
 
-     La correction fait ce que Nikola demande explicitement : on ne propose
-     plus la case du batiment, mais « directement la case d'atterrissage
-     situee immediatement derriere selon l'angle de percussion ». On avance
-     dans l'axe tant qu'on rencontre des batiments debout, et on propose la
-     premiere case ou l'on peut reellement se poser. Le cout du groupe franchi
-     est compte case par case, exactement comme le moteur le compte.
+     Dans chaque direction on remonte l'axe et on propose TOUTE case ou l'on
+     peut se poser, en franchissant gratuitement ce qui est sur le passage :
+     la case du debris juste devant, et aussi celle qui le suit. C'est la
+     demande de Nikola du 2026-08-19 : « je peux sauter par-dessus un debris ou
+     un socle comme un batiment, ou bien sauter dessus volontairement ». Le
+     choix lui revient, le moteur ne tranche pas a sa place.
 
-     `bbNextRoutes` retient le trajet complet de chaque proposition, pour que
-     le chemin trace a l'ecran passe visiblement par-dessus les batiments
-     survoles : c'est ce que Nikola demandait le 18 aout, « que ce soit clair
-     pour tout le monde a la table ».
+     Un batiment encore debout reste la seule case ou l'on ne se pose jamais :
+     il est franchi, jamais vise.
 
-     Les autres obstacles (debris, Titans) restent des cibles valides : y
-     atterrir EST le coup, percussion ou ramassage. Seul le batiment debout
-     est infranchissable a l'arret. */
+     `bbNextRoutes` retient pour chaque proposition les cases SURVOLEES, afin
+     que la trajectoire se voie a l'ecran sans compter dans le budget. */
   const bbNextRoutes = useMemo(() => {
     const routes = new Map();
     if (!selectedTitan || !bbMode) return routes;
-    const jeu = { board: state.board, looseBlocks, titans: titanState.players };
+    if (bbBudgetUsed >= bbMaxRange) return routes; // budget epuise
     const tipKey = bbPath.length > 0 ? bbPath[bbPath.length - 1] : selectedTitan.cell;
-    const fromIsOrigin = bbPath.length === 0;
     const tr = rowIndex(tipKey[0]);
     const tc = Number(tipKey.slice(1));
+
+    const estBatimentDebout = (key) => Boolean(state.board[key]?.blocks?.length > 0);
+    const estObstacle = (key) =>
+      estBatimentDebout(key)
+      || (looseBlocks[key] || []).length > 0
+      || titanState.players.some((t) => !t.horsPlateau && t.cell === key);
 
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (dr === 0 && dc === 0) continue;
-        let from = tipKey;
-        let fromOrigine = fromIsOrigin;
-        let cumul = 0;
-        const trajet = [];
         let nr = tr + dr;
         let nc = tc + dc;
+        const survoles = [];
         while (nr >= 0 && nr <= 8 && nc >= 1 && nc <= 9) {
           const key = rowFromIndex(nr) + nc;
-          cumul += boingBoingStepCost(from, key, fromOrigine, jeu);
-          if (bbBudgetUsed + cumul > bbMaxRange) break;
-          trajet.push(key);
-          const bat = state.board[key];
-          const batimentDebout = Boolean(bat && bat.blocks && bat.blocks.length > 0);
-          if (!batimentDebout) {
-            if (!routes.has(key)) routes.set(key, trajet.slice());
-            break;
+          if (!estBatimentDebout(key) && !routes.has(key)) {
+            routes.set(key, survoles.slice());
           }
-          from = key;
-          fromOrigine = false;
+          // On ne poursuit au-dela que tant qu'on longe des obstacles.
+          if (!estObstacle(key)) break;
+          survoles.push(key);
           nr += dr;
           nc += dc;
         }
@@ -2282,19 +2264,23 @@ export function useBoardGeneratorController() {
 
   const bbPathClick = useCallback((key) => {
     if (!selectedTitan) return;
-    // Recliquer une case deja posee dans le chemin revient dessus : tout ce
-    // qui a ete trace apres est annule. Pas besoin d'un bouton dedie pour
-    // corriger un trajet, il suffit de recliquer ou l'on veut reprendre.
+    // Recliquer une case deja posee y revient : tout ce qui suit est annule.
     const idx = bbPath.indexOf(key);
-    if (idx !== -1) { setBbPath(bbPath.slice(0, idx + 1)); return; }
-    const route = bbNextRoutes.get(key);
-    if (!route) return; // hors de portee, ou budget depasse
-    // Le trajet complet entre dans le chemin : les batiments survoles s'y
-    // voient, seule la derniere case est un atterrissage.
-    setBbPath((prev) => [...prev, ...route]);
+    if (idx !== -1) {
+      setBbPath(bbPath.slice(0, idx + 1));
+      setBbSurvol((prev) => prev.slice(0, idx + 1));
+      return;
+    }
+    const survoles = bbNextRoutes.get(key);
+    if (!survoles) return; // hors de portee, batiment, ou budget epuise
+    setBbPath((prev) => [...prev, key]);
+    setBbSurvol((prev) => [...prev, survoles]);
   }, [selectedTitan, bbPath, bbNextRoutes]);
 
-  const bbUndoLastCell = useCallback(() => { setBbPath((prev) => prev.slice(0, -1)); }, []);
+  const bbUndoLastCell = useCallback(() => {
+    setBbPath((prev) => prev.slice(0, -1));
+    setBbSurvol((prev) => prev.slice(0, -1));
+  }, []);
 
   // Un bâtiment encore debout se traverse en vol (saute-mouton) mais ne se
   // reçoit jamais comme atterrissage — la pointe du chemin doit continuer.
@@ -2342,7 +2328,7 @@ export function useBoardGeneratorController() {
         setEcroulement({ ...result.ecroulement, choix: [] });
       }
     }
-    if (result.applied) { markCardPlayed(selectedTitanId, "boing_boing"); setBbMode(false); setBbPath([]); }
+    if (result.applied) { markCardPlayed(selectedTitanId, "boing_boing"); setBbMode(false); setBbPath([]); setBbSurvol([]); }
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
@@ -2548,7 +2534,7 @@ export function useBoardGeneratorController() {
     [selectedTitanId, titanState.players, looseBlocks]
   );
   const toggleJnpMode = useCallback(() => {
-    setJnpMode((m) => { const next = !m; if (next) { setTeaMode(false); setGraouMode(false); setBbMode(false); setBbPath([]); } return next; });
+    setJnpMode((m) => { const next = !m; if (next) { setTeaMode(false); setGraouMode(false); setBbMode(false); setBbPath([]); setBbSurvol([]); } return next; });
     setJnpSelected([]);
   }, []);
   /* Ruling Nikola du 2026-08-19 (WIP) : le ramassage se resout ELEMENT PAR
@@ -3201,6 +3187,7 @@ export function useBoardGeneratorController() {
     bbBudgetUsed,
     bbNextClickable,
     bbNextRoutes,
+    bbSurvol,
     bbPathClick,
     bbUndoLastCell,
     bbDestIsBuilding,

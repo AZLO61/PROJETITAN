@@ -2492,47 +2492,78 @@ function isStandingBuilding(key, board) {
   return Boolean(b && b.blocks.length > 0);
 }
 
+/* ---- PORTEE DE BOING BOING ---------------------------------------
+   REGLE UNIQUE, posee le 2026-08-19 apres les retours de Nikola :
+
+   · CHAQUE case ou l'on se POSE coute 1, qu'elle soit vide, qu'elle porte un
+     debris, un Socle ou un Titan. Seul un batiment encore debout ne peut
+     jamais recevoir un atterrissage.
+   · Les obstacles SURVOLES en chemin sont gratuits : un groupe d'elements
+     colles ne compte que pour 1 case, exactement comme le dit le livret
+     V36.2, puisqu'on paie la case d'arrivee et rien d'autre.
+
+   Ce que cela corrige. Avant, un obstacle valait 0 ET pouvait recevoir
+   l'atterrissage : en cliquant de debris en debris on traversait le plateau
+   sans jamais entamer son budget. Nikola : « j'ai un bug qui m'a permis de
+   sauter une 4e fois sur un debris ou socle ». Le meme abus avait ete corrige
+   la veille pour les batiments seuls ; il restait entier pour les debris.
+
+   Ce que cela permet, et c'est l'autre demande : « je peux sauter par-dessus
+   un debris ou un socle comme un batiment, ou bien sauter dessus
+   volontairement ». Les deux cases sont proposees — celle du debris, et celle
+   juste derriere — et elles coutent la meme chose. Le choix est au joueur, pas
+   au moteur. */
 function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, titans = [] }) {
-  const isObstacle = (key) => isBoingBoingObstacle(key, { board, looseBlocks, titans });
+  const estBatimentDebout = (key) => isStandingBuilding(key, board);
+  const estObstacle = (key) => isBoingBoingObstacle(key, { board, looseBlocks, titans });
 
   const dist = new Map([[startCell, 0]]);
-  // 0-1 BFS : les arêtes de coût 0 passent en tête de file, celles de
-  // coût 1 en queue. Une simple file FIFO donnerait des distances fausses
-  // dès qu'une chaîne d'obstacles se traverse par plusieurs entrées.
-  const deque = [startCell];
-  while (deque.length > 0) {
-    const cell = deque.shift();
+  const file = [startCell];
+
+  while (file.length > 0) {
+    const cell = file.shift();
     const d = dist.get(cell);
     if (d >= maxRange) continue;
     const r = rowIndex(cell[0]);
     const c = Number(cell.slice(1));
+
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (dr === 0 && dc === 0) continue;
-        const nr = r + dr, nc = c + dc;
-        if (nr < 0 || nr > 8 || nc < 1 || nc > 9) continue;
-        const key = rowFromIndex(nr) + nc;
-        // La case d'ARRIVÉE décide seule du coût : un obstacle se saute
-        // gratuitement, une case libre coûte 1 — la case de départ n'a
-        // donc plus besoin d'échapper à sa propre notion d'obstacle.
-        const cost = isObstacle(key) ? 0 : 1;
-        const nd = d + cost;
-        if (nd > maxRange) continue;
-        if (dist.has(key) && dist.get(key) <= nd) continue;
-        dist.set(key, nd);
-        if (cost === 0) deque.unshift(key); else deque.push(key);
+        /* Dans chaque direction on retient DEUX destinations au plus : la
+           case voisine si on peut s'y poser, et la premiere case posable
+           derriere le groupe d'obstacles contigus. Les deux au meme prix. */
+        let nr = r + dr;
+        let nc = c + dc;
+        let premiere = true;
+        while (nr >= 0 && nr <= 8 && nc >= 1 && nc <= 9) {
+          const key = rowFromIndex(nr) + nc;
+          const posable = !estBatimentDebout(key);
+          if (posable) {
+            const nd = d + 1;
+            if (nd <= maxRange && (!dist.has(key) || dist.get(key) > nd)) {
+              dist.set(key, nd);
+              file.push(key);
+            }
+            // On ne survole au-dela que si cette case est elle-meme un
+            // obstacle : sinon la trajectoire s'arrete la, elle est libre.
+            if (!estObstacle(key)) break;
+          }
+          // Case survolee (batiment debout, ou obstacle qu'on choisit de
+          // franchir) : on continue dans le meme axe, sans rien payer.
+          premiere = false;
+          void premiere;
+          nr += dr;
+          nc += dc;
+        }
       }
     }
   }
 
   const reach = new Map();
   dist.forEach((d, key) => {
-    // Seule la case de départ elle-même est exclue. Sous la nouvelle règle
-    // (obstacle = saut gratuit), une case-obstacle immédiatement voisine
-    // atterrit elle aussi à distance 0 — ça ne veut pas dire "pas atteinte",
-    // contrairement à l'ancien modèle où seul le départ pouvait valoir 0.
     if (key === startCell) return;
-    if (isStandingBuilding(key, board)) return; // atterrissage interdit sur un bâtiment debout
+    if (estBatimentDebout(key)) return; // atterrissage interdit sur un batiment debout
     reach.set(key, d);
   });
   return reach;
@@ -2554,7 +2585,12 @@ function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, tita
    calcul automatique. Le joueur choisit lui-même chaque case intermédiaire,
    l'interface ne calcule plus le plus court chemin à sa place. */
 function boingBoingStepCost(fromKey, toKey, fromIsOrigin, { board, looseBlocks = {}, titans = [] }) {
-  return isBoingBoingObstacle(toKey, { board, looseBlocks, titans }) ? 0 : 1;
+  /* Depuis le 2026-08-19 : se poser coute 1, quoi que porte la case. Les
+     obstacles ne sont gratuits que SURVOLES, et un survol n'est jamais un
+     pas — il n'apparait donc pas ici. Retourner 0 sur un obstacle laissait
+     enchainer les debris sans fin (bug du « 4e saut »). */
+  void fromKey; void fromIsOrigin; void board; void looseBlocks; void titans;
+  return 1;
 }
 
 function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameState) {

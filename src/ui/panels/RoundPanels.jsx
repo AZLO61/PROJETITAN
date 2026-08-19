@@ -39,7 +39,21 @@ export default function RoundPanels({ vm }) {
      le pointeur quitte la case et ne pose aucun voile, sans quoi le plateau
      deviendrait injouable a la souris. */
   const [hoverSource, setHoverSource] = React.useState(null);
+  /* Deux secondes d'arret volontaire avant que la fiche d'un batiment ne
+     s'ouvre au survol. Le minuteur vit dans une ref : le redemarrer ne doit
+     pas provoquer de rendu. */
+  const DELAI_SURVOL_MS = 2000;
+  const survolTimerRef = React.useRef(null);
+  const annulerAttenteSurvol = React.useCallback(() => {
+    if (survolTimerRef.current) {
+      clearTimeout(survolTimerRef.current);
+      survolTimerRef.current = null;
+    }
+  }, []);
+  // Un minuteur en cours ne doit jamais survivre au demontage du plateau.
+  React.useEffect(() => annulerAttenteSurvol, [annulerAttenteSurvol]);
   const openComposition = (key, el, source = "clic") => {
+    if (source === "clic") annulerAttenteSurvol();
     // Recliquer la meme case referme ; le survol, lui, ne bascule pas.
     if (hoverCell === key && source === "clic") {
       setHoverCell(null); setHoverPos(null); setHoverSource(null); return;
@@ -88,6 +102,7 @@ export default function RoundPanels({ vm }) {
     bbMode,
     bbDest,
     bbPath,
+    bbMaxRange,
     bbNextClickable,
     bbDestIsBuilding,
     moveMode,
@@ -133,6 +148,16 @@ export default function RoundPanels({ vm }) {
      `el` est l'élément DOM cliqué, dont la composition d'un bâtiment tire sa
      position à l'écran. La 3D n'en a pas : elle passe null, et ce seul
      affichage-là reste propre à la 2D. */
+  /* Ordre d'initiative REEL de la Manche : l'ordre de jeu pivote sur le
+     Detonateur, qui ouvre chaque round (cf. `advanceActionRound`). C'est lui
+     que le panneau de stock affiche, pas l'ordre fige de la partie. */
+  const ordreInitiative = (() => {
+    const ordre = titanState?.ordreJeu ?? [];
+    const depart = ordre.indexOf(titanState?.detonateur);
+    if (depart <= 0) return ordre;
+    return [...ordre.slice(depart), ...ordre.slice(0, depart)];
+  })();
+
   const clicCase = (key, el = null) => {
     /* Partie finie : le plateau reste CONSULTABLE mais ne se joue plus
        (point 4.4 du 2026-08-19). On saute tous les modes d'action et on ne
@@ -272,6 +297,11 @@ export default function RoundPanels({ vm }) {
         detonateurName={titanDisplayName(titanState.detonateur)}
         occupiedCount={occupiedCount}
         apocalypseThreshold={apocalypseThreshold}
+        ordreInitiative={ordreInitiative}
+        phaseValidated={vm.phaseValidated}
+        titanModes={titanModes}
+        detonateurId={titanState.detonateur}
+        titanDisplayName={titanDisplayName}
       />
 
 
@@ -407,6 +437,17 @@ export default function RoundPanels({ vm }) {
               const isBldg = isBuildingCell(r, c);
               const topBlock = cellData && cellData.blocks.length > 0 ? cellData.blocks[cellData.blocks.length - 1] : null;
               const inPerimeter = perimeterKeys.has(key);
+              /* NUMERO DE SAUT (Nikola, 2026-08-19) : « indique un chiffre pour
+                 chaque case que je clique 1 2 3, pense a rajouter un chiffre si
+                 j'utilise de l'Adrenaline, et apres que la carte soit utilisee
+                 enleve les chiffres du saut ».
+
+                 `bbPath` ne contient que les ATTERRISSAGES depuis la refonte du
+                 meme jour : son index + 1 est donc exactement le numero du saut,
+                 Adrenaline comprise puisqu'elle allonge la portee et donc le
+                 nombre de sauts possibles. Les chiffres disparaissent tout seuls
+                 avec `bbMode`, remis a false des que la carte est jouee. */
+              const bbNumeroSaut = bbMode ? bbPath.indexOf(key) + 1 : 0;
               const jnpSelectable = jnpMode && jnpPool.has(key);
               const jnpIsSelected = jnpMode && jnpSelected.includes(key);
               /* Boing Boing : chemin cliqué case par case (demande Nikola,
@@ -522,12 +563,25 @@ export default function RoundPanels({ vm }) {
                     ? `${key} · couloir · socle ${cellData.socle}`
                     : key}
                   onMouseEnter={(e) => {
-                    // Meme fiche qu'au clic, sans voile : le plateau reste jouable.
-                    if (cellData && cellData.blocks.length > 0) {
-                      openComposition(key, e.currentTarget, "survol");
-                    }
+                    /* SURVOL TEMPORISE (Nikola, 2026-08-19) : « je souhaite la
+                       fonction qu'il faut rester 2 sec dessus pour avoir le
+                       detail du batiment ».
+
+                       Sans delai, la fiche s'ouvrait au moindre passage de
+                       souris sur le plateau et clignotait sans arret pendant
+                       qu'on cherchait sa case. Deux secondes, c'est le temps
+                       d'un arret volontaire : on ne l'obtient pas par accident,
+                       et le clic reste la voie immediate pour qui la veut tout
+                       de suite. */
+                    if (!cellData || cellData.blocks.length === 0) return;
+                    const cible = e.currentTarget;
+                    annulerAttenteSurvol();
+                    survolTimerRef.current = setTimeout(() => {
+                      openComposition(key, cible, "survol");
+                    }, DELAI_SURVOL_MS);
                   }}
                   onMouseLeave={() => {
+                    annulerAttenteSurvol();
                     // Une fiche ouverte au CLIC reste ouverte : elle a ete demandee.
                     if (hoverSource === "survol" && hoverCell === key) {
                       setHoverCell(null); setHoverPos(null); setHoverSource(null);
@@ -599,6 +653,21 @@ export default function RoundPanels({ vm }) {
                   )}
                   {moveIsTeleport && (
                     <span style={{ position: "absolute", top: 1, right: 2, fontSize: "8px", opacity: .8 }}>🌀</span>
+                  )}
+                  {bbNumeroSaut > 0 && (
+                    <span
+                      title={`Saut ${bbNumeroSaut} sur ${bbMaxRange}`}
+                      style={{
+                        position: "absolute", top: 1, left: 2,
+                        minWidth: 13, height: 13, borderRadius: "50%",
+                        background: "#16E08C", color: "#04240f",
+                        fontSize: "9px", fontWeight: 900, lineHeight: "13px",
+                        textAlign: "center", padding: "0 2px",
+                        boxShadow: "0 0 4px rgba(22,224,140,.8)",
+                      }}
+                    >
+                      {bbNumeroSaut}
+                    </span>
                   )}
                   {looseBlocks[key] && looseBlocks[key].length > 0 && (() => {
                     const stack = looseBlocks[key];

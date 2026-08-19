@@ -2,6 +2,7 @@ import React from "react";
 import { COLOR_HEX, STOCK_INITIAL } from "../../domain/gameRules.js";
 import { BLOCK_NAME, BLOCK_ORDER } from "../blockNames.js";
 import BlockIcon from "../BlockIcon.jsx";
+import { TitanIcon } from "../titans/TitanVisuals.jsx";
 
 // ============================================================
 // ÉTAT DU PLATEAU — blocs restants et avancement de la partie
@@ -53,6 +54,8 @@ function StockItem({ color, label, remaining, total, alert }) {
 export default function BlockStockBar({
   board, looseBlocks,
   mancheNumber, totalManches, detonateurName, occupiedCount, apocalypseThreshold,
+  ordreInitiative = [], phaseValidated = {}, titanModes = {}, detonateurId = null,
+  titanDisplayName,
 }) {
   const onBoard = { bleu: 0, rose: 0, orange: 0, rouge: 0, vert: 0 };
   Object.values(board).forEach((b) =>
@@ -82,6 +85,13 @@ export default function BlockStockBar({
             Manche <strong style={{ color: "#FFD93D", fontVariantNumeric: "tabular-nums" }}>
               {mancheNumber}/{totalManches}
             </strong>
+            {/* « L'information derniere manche peut apparaitre aussi dans le
+                panneau stock, ne rajoute pas un panneau » (Nikola,
+                2026-08-19). Elle vit donc ici, collee au compteur qu'elle
+                qualifie, plutot que dans un bandeau de plus. */}
+            {mancheNumber === totalManches && (
+              <strong style={{ color: "#ef4444", marginLeft: 6 }}>· DERNIERE MANCHE</strong>
+            )}
           </span>
           <span title="Titan qui ouvre la Manche">
             Détonateur <strong style={{ color: "#fffaee" }}>{detonateurName}</strong>
@@ -100,6 +110,47 @@ export default function BlockStockBar({
               <span style={{ opacity: .6 }}> · seuil {apocalypseThreshold}</span>
             </span>
           )}
+        </div>
+      )}
+
+      {/* QUI ON ATTEND (Nikola, 2026-08-19) : « y avait une fonction de petite
+          icone carre coche pour savoir qui on attend, remets-la mais dans le
+          panneau du stock et a droite en dessous "batiment seuil", ca evite de
+          refaire un panneau et l'information est bien visible. Actualise le
+          placement des petites icones en fonction de l'ordre du tour defini. »
+
+          Les icones suivent donc l'ordre d'INITIATIVE de la Manche, celui qui
+          commence au Detonateur, et non l'ordre fige de la partie. */}
+      {ordreInitiative.length > 0 && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+          justifyContent: "flex-end",
+          fontSize: ".66rem", color: "rgba(255,255,255,.45)",
+          paddingBottom: 7, marginBottom: 7,
+          borderBottom: "1px solid rgba(255,255,255,.08)",
+        }}>
+          <span style={{ marginRight: "auto" }}>Ordre du tour</span>
+          {ordreInitiative.map((id, rang) => (
+            <span
+              key={id}
+              title={
+                `${rang + 1}${rang === 0 ? "er" : "e"} a jouer`
+                + (id === detonateurId ? " (Detonateur)" : "")
+                + ` — ${titanDisplayName ? titanDisplayName(id) : `Titan ${id}`}`
+                + (phaseValidated[id] ? " : a valide" : " : on l'attend")
+              }
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 2, cursor: "help",
+                opacity: phaseValidated[id] ? 1 : .75,
+                outline: id === detonateurId ? "1px solid rgba(255,255,255,.3)" : "none",
+                outlineOffset: 2, borderRadius: 4,
+              }}
+            >
+              <TitanIcon titanId={id} size={15} />
+              {titanModes[id] === "ia" ? "\ud83e\udd16" : ""}
+              {phaseValidated[id] ? "\u2705" : "\u2b1c"}
+            </span>
+          ))}
         </div>
       )}
 
