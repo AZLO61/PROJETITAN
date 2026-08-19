@@ -27,6 +27,15 @@ export default function RoundPanels({ vm }) {
   const [hoverPos, setHoverPos] = React.useState(null);
   const openComposition = (key, el) => {
     if (hoverCell === key) { setHoverCell(null); setHoverPos(null); return; }
+    /* Point 4.2 du 2026-08-19. L'ouverture au clic existait deja en 2D, mais
+       la 3D ne passe aucun element DOM : la fiche ne s'ouvrait donc jamais
+       depuis le plateau 3D, alors que c'est le meme aiguilleur de clic. Sans
+       element, on affiche la fiche au centre de l'ecran. */
+    if (!el) {
+      setHoverPos({ x: window.innerWidth / 2, y: Math.round(window.innerHeight * 0.35) });
+      setHoverCell(key);
+      return;
+    }
     const r = el.getBoundingClientRect();
     setHoverPos({ x: r.left + r.width / 2, y: r.top });
     setHoverCell(key);
@@ -107,6 +116,16 @@ export default function RoundPanels({ vm }) {
      position à l'écran. La 3D n'en a pas : elle passe null, et ce seul
      affichage-là reste propre à la 2D. */
   const clicCase = (key, el = null) => {
+    /* Partie finie : le plateau reste CONSULTABLE mais ne se joue plus
+       (point 4.4 du 2026-08-19). On saute tous les modes d'action et on ne
+       garde que la fiche d'un bâtiment et la sélection d'un Titan, qui sont
+       de la lecture. */
+    if (vm.gameOver) {
+      const fin = state.board[key];
+      if (fin && fin.blocks.length > 0) { openComposition(key, el); return; }
+      if (titansByCell[key]) setSelectedTitanId(titansByCell[key]);
+      return;
+    }
     // DIL/RAGE et Faut Pas Me Chauffer se tranchent dans leur bandeau dédié,
     // jamais par un clic sur une case : sans cette garde, cliquer le plateau
     // pendant qu'une décision de ce type attend (sur MOI ou sur un AUTRE
@@ -131,7 +150,7 @@ export default function RoundPanels({ vm }) {
       return;
     }
     const cellData = state.board[key];
-    if (el && cellData && cellData.blocks.length > 0) { openComposition(key, el); return; }
+    if (cellData && cellData.blocks.length > 0) { openComposition(key, el); return; }
     if (titansByCell[key]) setSelectedTitanId(titansByCell[key]);
   };
 
@@ -217,6 +236,7 @@ export default function RoundPanels({ vm }) {
         profileLabel={profileLabel}
         waitingNextTitan={waitingNextTitan}
         titansEnAttente={titansEnAttente}
+        rainbowWinnerId={vm.rainbowWinnerId}
       />
 
 

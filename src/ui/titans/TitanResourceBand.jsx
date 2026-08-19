@@ -25,7 +25,7 @@ import { baremeHint } from "../blockNames.js";
 export default function TitanResourceBand({
   titans, selectedTitanId, onSelect, activePlayerId, phase, titanDisplayName,
   titanModes = {}, titanProfiles = {}, profilsReveles = {}, revelerProfil, profileLabel,
-  waitingNextTitan = false, titansEnAttente = [],
+  waitingNextTitan = false, titansEnAttente = [], rainbowWinnerId = null,
 }) {
   /* SURVOL : LA SÉLECTION DÉCIDE, PAS LE TOUR EN COURS.
      Remonté SIX fois par Nikola (dernier repère : 2026-08-18) : « je veux
@@ -220,6 +220,30 @@ export default function TitanResourceBand({
                 />
                 {(t.socles || []).length}
               </span>
+              {/* Point 4.5 du 2026-08-19 : « ajouter un badge d'etat
+                  Arc-en-ciel directement dans le cadre UI du Titan lorsqu'il
+                  realise cette condition ».
+
+                  Le trophee etait annonce UNE FOIS au journal, au moment ou il
+                  tombe, puis n'apparaissait plus nulle part avant le decompte
+                  final. A la table, personne ne se souvient qui l'a pris trois
+                  manches plus tot, alors que c'est 5 points et que ca ne se
+                  reprend pas. Il se lit maintenant en permanence, au meme
+                  endroit que le reste des ressources du Titan. */}
+              {rainbowWinnerId === t.id && (
+                <span
+                  title="Trophee Arc-en-ciel : premier a avoir possede les 5 couleurs, +5 points au decompte final"
+                  style={{
+                    cursor: "help", display: "inline-flex", alignItems: "center", gap: 2,
+                    background: "linear-gradient(90deg,#ff4d6d,#ffb703,#8ac926,#4cc9f0,#b15cff)",
+                    WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
+                    fontWeight: 800,
+                  }}
+                >
+                  <span style={{ WebkitTextFillColor: "initial", color: "initial" }}>&#127752;</span>
+                  +5
+                </span>
+              )}
               <span title="Piste ADN Bagarre" style={{ cursor: "help" }}>💪 {t.bagarre || 0}</span>
               <span title="Piste ADN Destruction" style={{ cursor: "help" }}>💥 {t.destruction || 0}</span>
               {/* Cartes de la Manche : jouees, defaussees, restantes. Seul le

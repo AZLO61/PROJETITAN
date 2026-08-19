@@ -6,6 +6,101 @@ import { smallBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
 import { BLOCK_NAME, scoreBloc } from "../blockNames.js";
 
+/* ============================================================
+   MENU DEROULANT A LA CHARTE
+   ============================================================
+   Point 4.3 de la liste du 2026-08-19 : Â« refondre le menu deroulant complet
+   selon la charte graphique officielle du site Â».
+
+   Le placement des Verts, qui est le tout dernier geste de la partie et le
+   plus lourd de consequences, se faisait avec des `<select>` NATIFS. Sur
+   Windows, le systeme dessine alors sa propre liste : fond blanc, police
+   systeme, surlignage bleu. En plein ecran de decompte, sur un fond violet
+   sombre, l'effet est celui d'une boite de dialogue etrangere au jeu â et
+   aucun style CSS ne peut l'atteindre, c'est le systeme qui la peint.
+
+   Ce menu-ci est donc dessine par l'application. Il reprend la charte deja
+   en place ailleurs : fond sombre translucide, bordure claire, jaune #FFD93D
+   pour l'accent, vert #16E08C pour ce qui est acquis, coins a 6-8 px.
+
+   Il garde le comportement d'un select : fermeture au clic exterieur et a
+   Echap, option desactivee non cliquable, valeur courante affichee. */
+function MenuDA({ valeur, options, placeholder, onChange }) {
+  const [ouvert, setOuvert] = React.useState(false);
+  const boite = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!ouvert) return undefined;
+    const dehors = (e) => { if (boite.current && !boite.current.contains(e.target)) setOuvert(false); };
+    const echap = (e) => { if (e.key === "Escape") setOuvert(false); };
+    document.addEventListener("mousedown", dehors);
+    document.addEventListener("keydown", echap);
+    return () => {
+      document.removeEventListener("mousedown", dehors);
+      document.removeEventListener("keydown", echap);
+    };
+  }, [ouvert]);
+
+  const choisie = options.find((o) => o.value === valeur);
+
+  return (
+    <div ref={boite} style={{ position: "relative", display: "inline-block" }}>
+      <button
+        type="button"
+        onClick={() => setOuvert((o) => !o)}
+        style={{
+          background: choisie ? "rgba(22,224,140,.14)" : "rgba(255,255,255,.08)",
+          color: choisie ? "#7ef2a8" : "#fffaee",
+          border: `1px solid ${choisie ? "rgba(22,224,140,.5)" : "rgba(255,255,255,.2)"}`,
+          borderRadius: 6, padding: "3px 8px", fontSize: ".7rem",
+          fontFamily: "inherit", fontWeight: choisie ? 700 : 400,
+          cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+        }}
+      >
+        {choisie ? choisie.label : placeholder}
+        <span style={{ fontSize: ".6rem", opacity: .7 }}>{ouvert ? "▲" : "▼"}</span>
+      </button>
+
+      {ouvert && (
+        <div
+          style={{
+            position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 60,
+            minWidth: "max-content",
+            background: "linear-gradient(180deg, #2d1d5d 0%, #150826 100%)",
+            border: "1px solid rgba(255,217,61,.45)",
+            borderRadius: 8, padding: 4,
+            boxShadow: "0 8px 24px rgba(0,0,0,.55)",
+            display: "flex", flexDirection: "column", gap: 2,
+          }}
+        >
+          {options.map((o) => {
+            const active = o.value === valeur;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                disabled={o.disabled}
+                onClick={() => { if (!o.disabled) { onChange(o.value); setOuvert(false); } }}
+                title={o.hint || undefined}
+                style={{
+                  background: active ? "rgba(255,217,61,.18)" : "transparent",
+                  color: o.disabled ? "rgba(255,255,255,.28)" : (active ? "#FFD93D" : "#fffaee"),
+                  border: "none", borderRadius: 5, padding: "4px 9px",
+                  fontSize: ".7rem", fontFamily: "inherit", textAlign: "left",
+                  fontWeight: active ? 700 : 400,
+                  cursor: o.disabled ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+                }}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DecisionPanels({ vm }) {
   // Journal d'actions : replie par defaut. Sur une partie d'1h30 il grossit
   // sans fin et poussait le reste de la page vers le bas, alors qu'on ne le
@@ -76,9 +171,18 @@ export default function DecisionPanels({ vm }) {
         </strong>
         <span style={{ color: "rgba(255,255,255,.35)", fontSize: ".9em" }}>→</span>
         <span style={{ color: pts > 0 ? "#FFD93D" : "rgba(255,255,255,.3)", fontVariantNumeric: "tabular-nums" }}>{pts}</span>
-        <span style={{ color: gain > 0 ? "#7ef2a8" : "rgba(255,255,255,.25)", fontSize: ".9em" }}>
-          (+{gain})
-        </span>
+        {/* Point 4.3 du 2026-08-19 : « supprimer l'affichage confus des "+" a
+            cote des chiffres durant la phase de placement des Verts ».
+
+            La ligne affichait « 3 -> 5 (+2) » : trois nombres cote a cote dont
+            deux comptent des choses differentes (des blocs, des points) et le
+            troisieme un gain hypothetique. Au moment ou l'on place ses Verts,
+            c'est-a-dire quand on lit ce tableau le plus attentivement, ce
+            troisieme nombre se confondait avec le score.
+
+            Le gain marginal n'est pas perdu : il reste dans l'infobulle
+            ci-dessus, en toutes lettres, ou il est explique au lieu d'etre
+            juxtapose. */}
       </span>
     );
   };
@@ -345,17 +449,22 @@ export default function DecisionPanels({ vm }) {
                   {ouvert && !estIA && (
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 7 }}>
                       {Array.from({ length: vertCount }).map((_, i) => (
-                        <select key={i}
-                          value={vertAssignments[t.id]?.[i] ? `${vertAssignments[t.id][i].type}:${vertAssignments[t.id][i].target}` : ""}
-                          onChange={(e) => updateVertAssignment(t.id, i, e.target.value)}
-                          style={{ background: "rgba(255,255,255,.08)", color: "#fffaee", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "3px 6px", fontSize: ".7rem" }}>
-                          <option value="">Vert #{i + 1}…</option>
-                          {["bleu","rose","orange","rouge"].map((c) => (
-                            <option key={c} value={`color:${c}`} disabled={owned[c] < 1}>Barème {BLOCK_NAME[c]}{owned[c] < 1 ? " (0 bloc)" : ""}</option>
-                          ))}
-                          <option value="adn:bagarre">Piste Bagarre +1</option>
-                          <option value="adn:destruction">Piste Destruction +1</option>
-                        </select>
+                        <MenuDA
+                          key={i}
+                          valeur={vertAssignments[t.id]?.[i] ? `${vertAssignments[t.id][i].type}:${vertAssignments[t.id][i].target}` : ""}
+                          placeholder={`Vert #${i + 1}…`}
+                          onChange={(v) => updateVertAssignment(t.id, i, v)}
+                          options={[
+                            ...["bleu", "rose", "orange", "rouge"].map((c) => ({
+                              value: `color:${c}`,
+                              label: `Barème ${BLOCK_NAME[c]}${owned[c] < 1 ? " (0 bloc)" : ""}`,
+                              disabled: owned[c] < 1,
+                              hint: owned[c] < 1 ? "Un Vert ne rejoint une couleur que si tu en possèdes déjà au moins une." : undefined,
+                            })),
+                            { value: "adn:bagarre", label: "Piste Bagarre +1" },
+                            { value: "adn:destruction", label: "Piste Destruction +1" },
+                          ]}
+                        />
                       ))}
                     </div>
                   )}
@@ -383,7 +492,7 @@ export default function DecisionPanels({ vm }) {
           {gameOver && vertsRestants > 0 && (
             <div style={{ overflowX: "auto", marginBottom: 12 }}>
               <div style={{ color: "rgba(255,255,255,.6)", fontSize: ".72rem", marginBottom: 5 }}>
-                Repaires, à cet instant — le gain entre parenthèses est celui d'un bloc de plus.
+                Repaires, à cet instant. Survole une case pour savoir ce que rapporterait un bloc de plus.
               </div>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".74rem" }}>
                 <thead>

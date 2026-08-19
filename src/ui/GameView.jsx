@@ -49,10 +49,25 @@ export default function GameView(vm) {
           journal. Le placement secret des Verts, qui est le tout dernier
           geste de la partie, était donc invisible.
 
-          Une fois la partie finie, on ne montre plus QUE le décompte : le
-          plateau, les panneaux de tour et les décisions n'ont plus d'objet. */}
+          Une fois la partie finie, le décompte passe EN TÊTE.
+
+          Point 4.4 du 2026-08-19 : « maintenir le plateau et la carte
+          totalement visibles et consultables même après l'affichage de
+          l'écran de scoring final ». Le 17 août, tout avait été masqué
+          derrière le décompte ; à la table, on veut au contraire pouvoir
+          revenir sur le plateau pour comprendre le score, recompter un
+          Périmètre ou montrer une position aux autres joueurs.
+
+          Le plateau revient donc SOUS le décompte, en consultation seule :
+          `clicCase` n'y route plus que la fiche d'un bâtiment et la sélection
+          d'un Titan (cf. le garde `gameOver` dans RoundPanels). Les commandes
+          de jeu (BoardPanel), elles, restent masquées : la partie est finie,
+          il n'y a plus rien à jouer. */}
       {vm.gameOver ? (
-        <DecisionPanels vm={vm} />
+        <>
+          <DecisionPanels vm={vm} />
+          <RoundPanels vm={vm} />
+        </>
       ) : (
         <>
           <RoundPanels vm={vm} />

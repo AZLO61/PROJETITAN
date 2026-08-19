@@ -958,36 +958,17 @@ export default function BoardPanel({ vm }) {
           </div>
           )} {/* fin guard cartes IA */}
 
-          {/* ── VALIDATION DE PHASE ── */}
-          {/* Phase Repos : plus de validation manuelle ni de vol au choix —
-              résolution automatique via la bannière "Vol Phase Repos"
-              (sens choisi par le Détonateur), voir plus haut dans la page.
-              Phase Action : la validation est 100% automatique via
-              advanceActionRound (voir useBoardGeneratorController) dès que
-              les 3 rounds sont joués par tout le monde — le seul geste que
-              le joueur doit faire entre deux cartes est "▶ Titan suivant".
-              Afficher "✔ Valider ma Phase" ici en plus créait un double
-              effet de validation (bug remonté #boing-boing / passage de
-              titan). */}
-          {phase !== "repos" && phase !== "action" && (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-              borderTop: "1px dashed rgba(255,255,255,.1)", paddingTop: 8,
-            }}>
-              <span style={{ fontSize: ".72rem", color: "#FFD93D", fontWeight: 700 }}>{PHASE_LABELS[phase]} :</span>
-              {phaseValidated[selectedTitan.id]
-                ? <span style={{ fontSize: ".72rem", color: "#16E08C" }}>✅ Validé — en attente des autres</span>
-                : <button
-                    onClick={() => validatePhase(selectedTitan.id)}
-                    disabled={!canValidatePhase(selectedTitan.id)}
-                    title={getPhaseBlockReason(selectedTitan.id)}
-                    style={smallBtn(canValidatePhase(selectedTitan.id), "#16E08C", "#00C97A")}
-                  >
-                    ✔ Valider ma Phase
-                  </button>
-              }
-            </div>
-          )}
+          {/* ── VALIDATION DE PHASE ──
+              Fusionnee dans l'en-tete le 2026-08-19 (point 4.6). Le bloc qui
+              vivait ici repetait le nom de la phase et l'etat de validation
+              deja affiches en haut de page, et posait son bouton loin des
+              coches qu'il modifie. Il est desormais a cote d'elles, dans
+              HeaderPhase.
+
+              Rappel de ce qui n'a pas change : la Phase Repos se resout par
+              sa banniere de vol, et la Phase Action se valide toute seule via
+              `advanceActionRound` des que les 3 rounds sont joues. Aucune de
+              ces deux phases n'a jamais eu de bouton ici. */}
         </div>
       )}
 
