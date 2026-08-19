@@ -68,13 +68,23 @@ describe("Graouhhh joué par une IA", () => {
       // offrir à l'IA un axe plus tentant que celui qu'on a préparé.
       if (vmCourant.titanState.players[3]) vmCourant.titanState.players[3].cell = "I9";
       vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
-      // Mouvement passif et Ramassage déjà consommés : sans ça l'IA se
-      // déplace d'abord, l'axe de tir n'est plus celui qu'on a préparé, et
-      // le test mesurerait autre chose que ce qu'il prétend mesurer.
-      vmCourant.setPassifUsed((prev) => ({ ...prev, [t1.id]: { move: true, recup: true } }));
       vmCourant.setPhase("action");
       vmCourant.setSelectedTitanId(t1.id);
       vmCourant.setActivePlayerId(t1.id);
+    });
+
+    /* Mouvement passif et Ramassage consommés — mais dans un SECOND act, et
+       c'est tout l'enjeu. Un effet sur `activePlayerId` réarme `move: false`
+       à l'ouverture du tour de chaque Titan (c'est la règle : le Mouvement
+       gratuit revient à chaque tour). Posé dans le même act que
+       `setActivePlayerId`, le réglage était donc écrasé par cet effet, l'IA
+       se déplaçait quand même, et l'axe de tir n'était plus celui qu'on avait
+       préparé. Le test ne passait alors que si l'IA atterrissait par chance
+       sur un axe contenant encore une cible : vert 10 fois sur 12 en isolé,
+       rouge en suite complète où le plateau tiré n'est pas le même. Mesuré,
+       pas supposé. */
+    act(() => {
+      vmCourant.setPassifUsed((prev) => ({ ...prev, [t1.id]: { move: true, recup: true } }));
     });
 
     // La boucle IA enchaîne ses étapes sur des minuteries de 2 s.
