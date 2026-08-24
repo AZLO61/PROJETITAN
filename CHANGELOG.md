@@ -1,5 +1,73 @@
 # Changelog
 
+## Non publié — douzième passe du 2026-08-24 (liste de 14 retours)
+
+Nikola arrive avec une liste de 14 points. Sept sont des demandes d'interface
+et corrections de fond traitées directement ; deux (projection de Tout Casser
+en fonction du Périmètre, recul de Graouhhh en nombre de Titans+1) étaient déjà
+conformes, vérifiés dans le code sans rien changer ; les cinq restants (choix
+du Titan à la sortie d'un angle, défausse/Tout Casser qui semblent sauter le
+Ramassage, Bagarre de Faut Pas Me Chauffer, déclenchement de fin de partie)
+demandent soit un arbitrage de Nikola, soit une reproduction plus précise —
+aucun défaut de code n'a pu être confirmé à la lecture pour ces cinq-là, et un
+test de non-régression existant (`defausse-passif.test.jsx`) couvre déjà le
+scénario le plus proche de la défausse sans échouer.
+
+### Traités
+
+- **"Titan X joue" retiré** : redondant avec la surbrillance de l'encart actif
+  dans `TitanResourceBand`.
+- **"Ordre du tour" n'est plus écrit**, et les icônes sous "Bâtiments · seuil"
+  sont plafonnées à 2 lignes.
+- **Bug de fond, aperçu Tout Casser** : le badge Énergie/Seuil du panneau
+  appelait `computeEnergyToutCasser` sans son 5ᵉ paramètre `looseBlocks` — il
+  ignorait donc les débris et Socles au sol dans l'AFFICHAGE, contrairement à
+  la résolution réelle qui les comptait déjà depuis la onzième passe. D'où le
+  "seuil affiché à 3" alors que l'effet de Seuil 4 s'appliquait correctement.
+- **Panneau "Dernière Manche" séparé retiré** : l'information vit uniquement
+  dans le panneau de stock, comme demandé le 19 août.
+- **IA en DIL** : elle ne pesait que la perte infligée au défenseur. Elle
+  compare désormais aussi ce qu'ELLE gagne, sur les cartes dont le bloc perdu
+  rejoint son propre Repaire (Faut Pas Me Chauffer, cf. `DESTINATION_BLOC_PERDU`).
+  Corrige au passage un oubli du modèle simplifié de l'IA : ce bloc n'était
+  jamais crédité à l'attaquant dans sa simulation interne.
+- **Classement final fusionné** dans la ligne TOTAL du tableau de scoring —
+  médailles 🥇🥈🥉 au lieu du bloc de classement séparé (départage du livret
+  inchangé, juste plus de bloc dédié).
+- **Survol d'un bâtiment : 2 s → 1 s.**
+
+### Déjà conformes, vérifiés sans rien changer
+
+- Tout Casser projette déjà ses blocs cassés sur une distance égale à
+  l'énergie (= cases occupées du Périmètre, cf. `computeEnergyToutCasser`).
+- Graouhhh recule déjà les Titans touchés de `nombre de Titans touchés + 1`
+  (`reculDistance`, `scanGraouhhhAxis`).
+
+### Ce qui reste ouvert, dit franchement
+
+- **Choix du Titan à la sortie d'un angle** : Nikola veut choisir lui-même
+  entre les deux cases latérales quand le coin d'arrivée est bloqué (ex.
+  sortie par I1 → A9 bloquée → choix A8/B9), plutôt que le contournement
+  automatique actuel (`rentrerEnJeu`, qui prend la case libre la plus proche
+  sans distinguer une égalité). Reste à trancher : ce choix se fait-il au
+  moment de l'expulsion (l'état du plateau peut encore changer avant son
+  retour) ou au moment réel de la rentrée ?
+- **Défausse et Tout Casser qui sembleraient sauter le Ramassage** : le test
+  `defausse-passif.test.jsx` verrouille déjà le cas générique et passe.
+  Aucune anomalie retrouvée à la lecture de `advanceActionRound` /
+  `canUseRecupPassif` / `recupPool`. Faute de repro précise (quelle carte,
+  décision DIL/RAGE en attente ou non), non reproduit.
+- **2 combats Faut Pas Me Chauffer gagnés au même tour → 1 seul point de
+  Bagarre au lieu de 2** : chaque victoire incrémente indépendamment
+  `attacker.bagarre` dans `resolveFautPasMeChauffer`. Piste à vérifier : la
+  cible du second combat a-t-elle réellement été déplacée (une bagarre non
+  remportée ne rapporte rien, ruling du 15 août) ?
+- **Fin de partie à 4/25 bâtiments qui ne s'est pas comportée comme prévu**
+  en Manche 4 : le déclenchement (`checkEndGameTriggers`) n'agit qu'à la
+  frontière de Manche (`advanceManche`), jamais en plein tour, conformément
+  au livret. Le détail de ce qui a été observé (partie arrêtée trop tôt ? pas
+  arrêtée du tout ?) manque pour confirmer un défaut.
+
 ## Non publié — onzième passe du 2026-08-19 (3 parties de Nikola, 15 retours)
 
 Nikola joue trois parties et remonte quinze points. Trois d'entre eux ont
