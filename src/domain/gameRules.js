@@ -116,7 +116,13 @@ function indexerTitans(titans) {
  * Retourne `{ rentre, cellule, cout, log }` — `cout` étant le nombre de
  * déplacements consommés, à retrancher du Mouvement gratuit du tour.
  */
-function rentrerEnJeu(titanId, gameState) {
+/* `choisirAuto` : personne n'est là pour cliquer (IA, simulateur, campagnes).
+   Le choix entre les deux cases d'un coin bloqué est alors tranché ici, et
+   la fonction rend une rentrée normale. Le paramètre existe pour que la
+   règle ne vive qu'à UN endroit : sans lui, le simulateur et le contrôleur
+   auraient chacun réimplémenté le départage — c'est exactement le piège du
+   « cinquième endroit » qui a déjà coûté une campagne faussée le 18 août. */
+function rentrerEnJeu(titanId, gameState, { choisirAuto = false } = {}) {
   const { board, titans } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   if (!titan || !titan.horsPlateau) {
@@ -173,32 +179,43 @@ function rentrerEnJeu(titanId, gameState) {
       const optionColonne = rowFromIndex(rVoisin) + c0;
       const optionLigne = rowFromIndex(r0) + cVoisin;
       if (optionColonne !== voulue && optionLigne !== voulue && libre(optionColonne) && libre(optionLigne)) {
-        return {
-          rentre: false,
-          needsChoice: true,
-          options: [optionColonne, optionLigne],
-          cellule: voulue,
-          cout: 0,
-          log: [],
-        };
+        // Les deux options sont strictement equivalentes en distance : quand
+        // personne n'est la pour choisir, on prend la premiere et la partie
+        // continue, plutot que de rendre une rentree impossible.
+        if (choisirAuto) {
+          cible = optionColonne;
+        } else {
+          return {
+            rentre: false,
+            needsChoice: true,
+            options: [optionColonne, optionLigne],
+            cellule: voulue,
+            cout: 0,
+            log: [],
+          };
+        }
       }
     }
 
-    const candidats = [];
-    if (surColonne) {
-      for (let i = 0; i <= 8; i++) {
-        const cle = rowFromIndex(i) + c0;
-        if (cle !== voulue && libre(cle)) candidats.push({ cle, ecart: Math.abs(i - r0) });
+    // `cible` peut déjà être fixée juste au-dessus par `choisirAuto` : la
+    // recherche par écart ne doit pas l'écraser.
+    if (!cible) {
+      const candidats = [];
+      if (surColonne) {
+        for (let i = 0; i <= 8; i++) {
+          const cle = rowFromIndex(i) + c0;
+          if (cle !== voulue && libre(cle)) candidats.push({ cle, ecart: Math.abs(i - r0) });
+        }
       }
-    }
-    if (surLigne || !surColonne) {
-      for (let i = 1; i <= 9; i++) {
-        const cle = rowFromIndex(r0) + i;
-        if (cle !== voulue && libre(cle)) candidats.push({ cle, ecart: Math.abs(i - c0) });
+      if (surLigne || !surColonne) {
+        for (let i = 1; i <= 9; i++) {
+          const cle = rowFromIndex(r0) + i;
+          if (cle !== voulue && libre(cle)) candidats.push({ cle, ecart: Math.abs(i - c0) });
+        }
       }
+      candidats.sort((a, b) => a.ecart - b.ecart);
+      if (candidats.length > 0) cible = candidats[0].cle;
     }
-    candidats.sort((a, b) => a.ecart - b.ecart);
-    if (candidats.length > 0) cible = candidats[0].cle;
   }
 
   if (!cible) {
@@ -829,13 +846,29 @@ function getCasesRepliDebris(depuis, cible, dr, dc, { board, looseBlocks = {}, t
   } else {
     // Sortie de faille : aucune case précédente sur ce bord du plateau.
     // On écarte toute case qui progresse sur un axe du déplacement.
-    candidates = voisines(cible).filter((k) => {
+    const toutesVoisines = voisines(cible);
+    candidates = toutesVoisines.filter((k) => {
       const r = rowIndex(k[0]);
       const c = Number(k.slice(1));
       if (dr !== 0 && Math.sign(r - cr) === Math.sign(dr)) return false;
       if (dc !== 0 && Math.sign(c - cc) === Math.sign(dc)) return false;
       return true;
     });
+    /* Bug remonte par Nikola le 2026-08-24 : « il tape le batiment en I9, il
+       doit donc se placer sur H9 H8 ou I8 », et il n'a rien eu a choisir.
+
+       Sur une sortie de faille DIAGONALE, l'element ressort par un coin : les
+       trois seules voisines de ce coin progressent toutes sur au moins un des
+       deux axes, donc le filtre ci-dessus les eliminait TOUTES. Zero case
+       proposee = aucun repli emis = le moteur posait l'element tout seul, en
+       silence, alors que le ruling du 2026-08-17 donne ce choix a l'attaquant.
+
+       Le filtre garde son sens quand il laisse quelque chose (on ne franchit
+       pas l'obstacle) ; quand il ne laisse rien, c'est qu'il n'y a pas d'autre
+       cote — on revient aux voisines de la case de sortie, ce que Nikola
+       attend mot pour mot. Le filtre bâtiment/initiateur ci-dessous continue
+       de s'appliquer. */
+    if (candidates.length === 0) candidates = toutesVoisines;
   }
 
   /* La case d'origine échappe au filtre des OCCUPANTS : l'élément en vient,
@@ -886,14 +919,16 @@ function appliquerReplElement(repli, cellKey, gameState) {
   if (occupant && repli.titanId != null) {
     const dr = Math.sign(rowIndex(cellKey[0]) - rowIndex(repli.defaut[0]));
     const dc = Math.sign(Number(cellKey.slice(1)) - Number(repli.defaut.slice(1)));
-    const avant = occupant.cell;
     const bagarreSet = new Set();
     const landing = projectInDirection(cellKey[0], Number(cellKey.slice(1)), dr, dc, 1, {
       board, looseBlocks, titans, log, replis, bagarreSet,
       initiatorId: repli.initiatorId ?? null, movingTitanId: occupant.id,
     });
     if (!landing.ejecte) occupant.cell = landing.row + landing.col;
-    if (occupant.cell !== avant || landing.ejecte) bagarreSet.add(occupant.id);
+    // Ruling revise le 2026-08-24 (cf. resolveToutCasserTitans) : le repli
+    // offensif vise justement a chasser un Titan pour marquer, il marque
+    // desormais meme si sa cible est coincee.
+    bagarreSet.add(occupant.id);
     const initiateur = titans.find((t) => t.id === repli.initiatorId);
     if (initiateur && bagarreSet.size > 0) {
       initiateur.bagarre = (initiateur.bagarre || 0) + bagarreSet.size;
@@ -1667,7 +1702,33 @@ function releverPercussion(titanId, gameState, adrenalineBonus = 0) {
   return { energie, seuil4: energie >= SEUIL_4, blocs, amas };
 }
 
-function resolveToutCasserBatiments(titanId, gameState, adrenalineBonus = 0, percussion = null) {
+/* Credite les Bagarres accumulees, sauf si le Set est partage — dans ce cas
+   c'est l'appelant qui creditera, une seule fois pour toute la carte. */
+function crediterBagarre(titan, bagarreSet, log, actif = true) {
+  if (!actif || bagarreSet.size === 0) return;
+  titan.bagarre = (titan.bagarre || 0) + bagarreSet.size;
+  log.push(`+${bagarreSet.size} Bagarre (Titan ${titan.id} → ${titan.bagarre}) — ${bagarreSet.size} Titan(s) distinct(s) touché(s) (direct + chaîne, FAQ #12).`);
+}
+
+/* BAGARRE DE CHAINE — bug remonte par Nikola le 2026-08-24 : « j'ai deplace
+   un titan avec un debris en faisant Tout Casser, j'aurais du gagner 1 point
+   sur Bagarre. »
+
+   Les quatre sous-cas de Tout Casser projettent des elements, et un element
+   projete peut pousser un Titan en chaine. Seul le sous-cas TITAN transmettait
+   `bagarreSet` a projectInDirection : un Titan bouscule par un bloc de
+   batiment, un debris ou un Amas ne rapportait donc rien du tout, alors que
+   c'est la meme carte et le meme choc.
+
+   Les quatre partagent desormais UN SEUL Set, cree par resolveToutCasser, qui
+   credite une fois a la fin — sans quoi un Titan touche par deux sous-cas
+   compterait deux fois, ce que la FAQ #12 interdit.
+
+   Chaque sous-resolveur reste utilisable seul (tests, IA) : sans Set partage,
+   il en cree un et credite lui-meme, exactement comme avant. */
+function resolveToutCasserBatiments(titanId, gameState, adrenalineBonus = 0, percussion = null, bagarreSetPartage = null) {
+  const bagarreSet = bagarreSetPartage || new Set();
+  const crediteIci = !bagarreSetPartage;
   const { board, titans, looseBlocks, replis } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const titanRow = titan.cell[0];
@@ -1693,7 +1754,7 @@ function resolveToutCasserBatiments(titanId, gameState, adrenalineBonus = 0, per
     titan.destruction += 1;
     const dr = rowIndex(cell.row) - rowIndex(titanRow);
     const dc = cell.col - titanCol;
-    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, initiatorId: titanId });
+    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId });
     const landingKey = landing.row + landing.col;
 
     // Le bloc atterrit réellement sur le plateau. Chaînes de réaction
@@ -1713,12 +1774,15 @@ function resolveToutCasserBatiments(titanId, gameState, adrenalineBonus = 0, per
     }
   }
 
+  crediterBagarre(titan, bagarreSet, log, crediteIci);
   return { energie, seuil4, log };
 }
 
-function resolveToutCasserBlocs(titanId, gameState, adrenalineBonus = 0, percussion = null) {
+function resolveToutCasserBlocs(titanId, gameState, adrenalineBonus = 0, percussion = null, bagarreSetPartage = null) {
   // Sous-cas "Bloc de béton" — matrice : cond. vide = s'applique quel que
   // soit le niveau d'énergie (contrairement au Bâtiment qui exige Seuil 4).
+  const bagarreSet = bagarreSetPartage || new Set();
+  const crediteIci = !bagarreSetPartage;
   const { board, titans, looseBlocks, replis } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const titanRow = titan.cell[0];
@@ -1742,7 +1806,7 @@ function resolveToutCasserBlocs(titanId, gameState, adrenalineBonus = 0, percuss
     retirerPileVide(looseBlocks, key);
     const dr = rowIndex(cell.row) - rowIndex(titanRow);
     const dc = cell.col - titanCol;
-    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, initiatorId: titanId });
+    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId });
     const landingKey = landing.row + landing.col;
 
     if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
@@ -1753,12 +1817,14 @@ function resolveToutCasserBlocs(titanId, gameState, adrenalineBonus = 0, percuss
         (landing.hasBounced ? " (après rebond)" : "")
     );
   }
+  crediterBagarre(titan, bagarreSet, log, crediteIci);
   return { energie, log };
 }
 
-function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percussion = null) {
+function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percussion = null, bagarreSetPartage = null) {
   // Sous-cas "Titan" — déplacement physique + résolution DIL/RAGE via le
   // moteur générique de décision (§1bis du tracker).
+  const crediteIci = !bagarreSetPartage;
   const { board, titans, looseBlocks, replis } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const titanRow = titan.cell[0];
@@ -1771,7 +1837,8 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percus
 
   const log = [];
   const decisions = [];
-  const bagarreSet = new Set(); // FAQ #12 : Titans distincts déplacés (direct + chaîne), 1 seul +1 Bagarre chacun
+  // FAQ #12 : Titans distincts touchés (direct + chaîne), 1 seul +1 Bagarre chacun
+  const bagarreSet = bagarreSetPartage || new Set();
   for (const cell of perimeter) {
     if (cell.isSelf) continue;
     const key = cell.row + cell.col;
@@ -1785,12 +1852,17 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percus
     const caseAvant = target.cell;
     const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId, movingTitanId: targetId });
     target.cell = landing.row + landing.col; // mutation directe (re-render forcé côté UI)
-    // Ruling Nikola (2026-08-15) : « si je fais une bagarre mais ne la
-    // remporte pas, je n'ai pas de point de Bagarre. » Une cible coincée
-    // (trajectoire bloquée des deux côtés) reste sur sa case : la Bagarre
-    // n'est pas remportée, elle ne rapporte rien. Cohérent avec la FAQ #12,
-    // qui parle de Titans distincts DÉPLACÉS.
-    if (target.cell !== caseAvant) bagarreSet.add(targetId);
+    /* RULING REVISE PAR NIKOLA LE 2026-08-24 : « pour Bagarre, juste je
+       gagne la Bagarre, je gagne 1 case sur la piste, deplacement ou non. »
+
+       Il revient sur son ruling du 2026-08-15 (« pas de deplacement, pas de
+       point »), qui punissait l'attaquant pour une geometrie dont il n'est
+       pas responsable : une cible coincee contre un mur lui faisait perdre
+       le point alors qu'il l'avait bel et bien percutee. Toucher un Titan
+       avec une carte, c'est remporter la Bagarre — le deplacement n'entre
+       plus dans le calcul. La FAQ #12 continue de valoir pour ce qu'elle
+       dit vraiment : un Titan distinct ne rapporte qu'UNE fois, d'ou le Set. */
+    bagarreSet.add(targetId);
 
     if (seuil4) {
       if (canRage(targetId, gameState)) {
@@ -1810,19 +1882,18 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percus
         (landing.hasBounced ? " (après rebond)" : "")
     );
   }
-  if (bagarreSet.size > 0) {
-    titan.bagarre += bagarreSet.size;
-    log.push(`+${bagarreSet.size} Bagarre (Titan ${titanId} → ${titan.bagarre}) — ${bagarreSet.size} Titan(s) distinct(s) déplacé(s) (direct + chaîne, FAQ #12).`);
-  }
+  crediterBagarre(titan, bagarreSet, log, crediteIci);
   return { energie, seuil4, log, decisions };
 }
 
-function resolveToutCasserAmas(titanId, gameState, adrenalineBonus = 0, percussion = null) {
+function resolveToutCasserAmas(titanId, gameState, adrenalineBonus = 0, percussion = null, bagarreSetPartage = null) {
   // Sous-cas "Amas de béton" (Patatras) — Seuil 4 requis.
   // Amas = 2+ blocs libres empilés sur une même case (jamais un bâtiment,
   // confirmé Nikola). Éjection du haut vers le bas, direction opposée à
   // la percussion (= même direction radiale que les autres sous-cas),
   // distance = hauteur du bloc dans la pile (pas l'énergie de la carte).
+  const bagarreSet = bagarreSetPartage || new Set();
+  const crediteIci = !bagarreSetPartage;
   const { board, titans, looseBlocks, replis } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const titanRow = titan.cell[0];
@@ -1855,7 +1926,7 @@ function resolveToutCasserAmas(titanId, gameState, adrenalineBonus = 0, percussi
     for (let i = ejected.length - 1; i >= 0; i--) {
       const blockColor = ejected[i];
       const hauteur = i + 1; // position dans la pile = hauteur = distance de projection
-      const landing = projectInDirection(cell.row, cell.col, dr, dc, hauteur, { board, looseBlocks, titans, log, replis, initiatorId: titanId });
+      const landing = projectInDirection(cell.row, cell.col, dr, dc, hauteur, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId });
       const landingKey = landing.row + landing.col;
       if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
       looseBlocks[landingKey].push(blockColor);
@@ -1865,6 +1936,7 @@ function resolveToutCasserAmas(titanId, gameState, adrenalineBonus = 0, percussi
       );
     }
   }
+  crediterBagarre(titan, bagarreSet, log, crediteIci);
   return { energie, seuil4, log };
 }
 
@@ -1872,15 +1944,22 @@ function resolveToutCasser(titanId, gameState, adrenalineBonus = 0) {
   // Enchaîne les 4 sous-cas de la carte 01 · Tout Casser, tous alimentés par
   // le MÊME relevé de percussion (cf. releverPercussion) : une carte, une
   // énergie, une liste de cibles.
+  //
+  // ...et par le MÊME compteur de Bagarre : les quatre sous-cas peuvent
+  // bousculer un Titan en chaîne, mais un Titan distinct ne rapporte qu'UNE
+  // Bagarre pour toute la carte (FAQ #12). Crédité une seule fois, ici.
   const percussion = releverPercussion(titanId, gameState, adrenalineBonus);
-  const r1 = resolveToutCasserBatiments(titanId, gameState, adrenalineBonus, percussion);
-  const r2 = resolveToutCasserBlocs(titanId, gameState, adrenalineBonus, percussion);
-  const r3 = resolveToutCasserTitans(titanId, gameState, adrenalineBonus, percussion);
-  const r4 = resolveToutCasserAmas(titanId, gameState, adrenalineBonus, percussion);
+  const bagarreSet = new Set();
+  const r1 = resolveToutCasserBatiments(titanId, gameState, adrenalineBonus, percussion, bagarreSet);
+  const r2 = resolveToutCasserBlocs(titanId, gameState, adrenalineBonus, percussion, bagarreSet);
+  const r3 = resolveToutCasserTitans(titanId, gameState, adrenalineBonus, percussion, bagarreSet);
+  const r4 = resolveToutCasserAmas(titanId, gameState, adrenalineBonus, percussion, bagarreSet);
+  const logBagarre = [];
+  crediterBagarre(gameState.titans.find((t) => t.id === titanId), bagarreSet, logBagarre);
   return {
     energie: percussion.energie,
     seuil4: percussion.seuil4,
-    log: [...r1.log, ...r2.log, ...r3.log, ...r4.log],
+    log: [...r1.log, ...r2.log, ...r3.log, ...r4.log, ...logBagarre],
     decisions: [...(r3.decisions || [])],
   };
 }
@@ -1979,7 +2058,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
            blocs d'un AMAS balaye au Seuil 4 partent eux aussi a contre-sens.
            Il n'a pas demande ce cas, il n'a donc pas ete touche. */
         const below = bldg.blocks.pop();
-        const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, replis, initiatorId: titanId });
+        const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId });
         const landingKey = landing.row + landing.col;
         if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
         looseBlocks[landingKey].push(below);
@@ -2048,14 +2127,15 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
          percute en bout de course il bouge a peine. */
       {
         const occupant = titans.find((t) => t.id === occupantId);
-        const caseAvant = occupant.cell;
         // movingTitanId : c'est l'occupant qu'on projette (cf. projectInDirection).
         const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId, movingTitanId: occupantId });
         // Un Titan éjecté a déjà sa case de rentrée posée par le résolveur :
         // on ne la réécrit pas, et sa sortie du ring compte évidemment
         // comme une Bagarre remportée.
         if (!landing.ejecte) occupant.cell = landing.row + landing.col;
-        if (occupant.cell !== caseAvant || landing.ejecte) bagarreSet.add(occupantId);
+        // Ruling revise le 2026-08-24 : percuter suffit, le deplacement
+        // n'entre plus dans le calcul (cf. resolveToutCasserTitans).
+        bagarreSet.add(occupantId);
         log.push(`${key} : Titan ${occupantId} projeté vers ${occupant.cell}` + (landing.hasBounced ? " (après rebond)" : ""));
       }
 
@@ -2110,7 +2190,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
         for (let i = ejected.length - 1; i >= 0; i--) {
           const blockColor = ejected[i];
           const hauteur = i + 1;
-          const landing = projectInDirection(row, cIdx, dr, dc, hauteur, { board, looseBlocks, titans, log, replis, initiatorId: titanId });
+          const landing = projectInDirection(row, cIdx, dr, dc, hauteur, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId });
           const landingKey = landing.row + landing.col;
           if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
           looseBlocks[landingKey].push(blockColor);
@@ -2213,9 +2293,9 @@ function resolveGraouhhhMoveTitan(titanId, targetId, gameState, dr, dc, reculDis
     board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId, movingTitanId: targetId,
   });
   if (!landing.ejecte) occupant.cell = landing.row + landing.col;
-  // Ruling Nikola (2026-08-15) : pas de déplacement, pas de point de
-  // Bagarre. Un Titan touché mais coincé contre un mur ne compte pas.
-  if (occupant.cell !== caseAvant || landing.ejecte) bagarreSet.add(targetId);
+  // Ruling revise le 2026-08-24 : percuter suffit, le deplacement n'entre
+  // plus dans le calcul (cf. resolveToutCasserTitans).
+  bagarreSet.add(targetId);
   const fatigue = resolveFatigue(titanId, targetId, mancheNumber, titans);
   const dilOk = canDil(targetId, gameState);
   log.push(
@@ -2978,13 +3058,13 @@ function resolveEcroulementAmas(titanId, ecroulement, choix, gameState) {
     if (occupant && energie > 0) {
       const dr = Math.sign(rowIndex(cible[0]) - rowIndex(cellKey[0]));
       const dc = Math.sign(Number(cible.slice(1)) - Number(cellKey.slice(1)));
-      const avant = occupant.cell;
       const landing = projectInDirection(cible[0], Number(cible.slice(1)), dr, dc, energie, {
         board, looseBlocks, titans, log, bagarreSet, replis,
         initiatorId: titanId, movingTitanId: occupant.id,
       });
       if (!landing.ejecte) occupant.cell = landing.row + landing.col;
-      if (occupant.cell !== avant || landing.ejecte) bagarreSet.add(occupant.id);
+      // Ruling revise le 2026-08-24 (cf. resolveToutCasserTitans).
+      bagarreSet.add(occupant.id);
       log.push(`${cible} : Titan ${occupant.id} percuté par le débris (énergie ${energie}) → ${occupant.horsPlateau ? "sorti du ring" : occupant.cell}.`);
     }
   }
@@ -3918,8 +3998,12 @@ function resolveFautPasMeChauffer(attackerId, defenderId, nTargets, gameState, {
     movingTitanId: defenderId, // la cible ne doit pas se voir elle-même comme obstacle
   });
   defender.cell = landing.row + landing.col;
-  // Ruling Nikola : une bagarre qui n'est pas remportée ne rapporte rien.
-  if (defender.cell !== caseAvant) bagarreSet.add(defenderId);
+  /* Ruling revise le 2026-08-24 (cf. resolveToutCasserTitans). C'est ce qui
+     manquait au cas de Nikola : « j'ai gagne 2 combats Faut Pas Me Chauffer
+     au meme tour, j'aurais du avoir 2 cases sur la piste Bagarre » — le
+     second adversaire, coince, ne rapportait rien. Gagner la comparaison
+     suffit desormais. */
+  bagarreSet.add(defenderId);
 
   if (mode === "RAGE") {
     if (canRage(defenderId, gameState)) {

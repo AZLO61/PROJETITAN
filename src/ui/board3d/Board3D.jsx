@@ -551,7 +551,10 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
             if (dr === 0 && dc === 0) continue;
             const r = r0 + dr, c = c0 + dc;
             if (r < 0 || r > 8 || c < 1 || c > 9) continue;
-            addSlab(rowFromIndex(r) + c, slabColor, 0.72);
+            // Opacite baissee de 0.72 a 0.4 avec l'assombrissement de
+            // TITAN_RING_COLOR : le perimetre etait PLUS opaque que les cases
+            // d'action dessinees par-dessus (0.55), donc il les ecrasait.
+            addSlab(rowFromIndex(r) + c, slabColor, 0.4);
           }
         }
       }

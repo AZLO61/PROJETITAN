@@ -133,15 +133,18 @@ describe("02 et 07 · Faut Pas Me Chauffer, résolue par le domaine", () => {
     expect(attaquant.cell).toBe("B5");
   });
 
-  it("une cible qui ne bouge pas ne rapporte aucune Bagarre", () => {
+  it("une cible qui ne bouge pas rapporte quand même la Bagarre", () => {
     setSeed(7);
-    // Cible coincée entre un bâtiment devant et l'immunité de l'attaquant
-    // derrière : elle rebondit sur le mur, revient vers l'attaquant, et
-    // s'arrête juste avant lui — c'est-à-dire sur sa propre case.
-    //
-    // Le bord du plateau ne peut plus servir à coincer un Titan depuis le
-    // ruling du 2026-08-16 : poussé dehors, il ressort toujours de l'autre
-    // côté, donc il bouge et remporte la bagarre.
+    /* ⚠️ RULING RENVERSÉ LE 2026-08-24. Ce test verrouillait l'inverse
+       (« immobile = aucun point », ruling du 2026-08-15). Nikola : « pour
+       Bagarre, juste je gagne la Bagarre, je gagne 1 case sur la piste,
+       déplacement ou non. » C'est précisément ce cas-là qui l'a fait
+       remonter : deux combats FPMC gagnés au même tour n'en rapportaient
+       qu'un, parce que la seconde cible était coincée.
+
+       Cible coincée entre un bâtiment devant et l'immunité de l'attaquant
+       derrière : elle rebondit sur le mur, revient vers l'attaquant, et
+       s'arrête juste avant lui — c'est-à-dire sur sa propre case. */
     const attaquant = titan(1, "E4", { programmed: ["faut_pas_me_chauffer"] });
     const defenseur = titan(2, "E5", { repaire: ["bleu", "rose"] });
     const etat = {
@@ -151,8 +154,8 @@ describe("02 et 07 · Faut Pas Me Chauffer, résolue par le domaine", () => {
     };
 
     resolveFautPasMeChauffer(1, 2, 1, etat);
-    expect(defenseur.cell).toBe("E5"); // immobile
-    expect(attaquant.bagarre).toBe(0); // le point était crédité d'office
+    expect(defenseur.cell).toBe("E5"); // immobile…
+    expect(attaquant.bagarre).toBe(1); // …et la comparaison est gagnée
   });
 
   it("aucune décision DIL n'est émise sur une cible qui ne peut pas la subir", () => {

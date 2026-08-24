@@ -34,11 +34,30 @@ const TITAN_SPRITE_KEY = {
   4: "lama",
 };
 
+/* Couleur du PERIMETRE d'un Titan en vue 3D.
+
+   Bug remonte par Nikola le 2026-08-24 : « en 3D les cases de perimetre et
+   celles de deplacement sont exactement les memes visuellement ». Ce n'etait
+   pas une impression : ces valeurs etaient EXACTEMENT celles des cases
+   d'action (cf. `cellulesActives` dans RoundPanels) — 0x71dbff est la couleur
+   du deplacement, 0xfb923c celle de Tete en Avant / repli / ecroulement,
+   0x16e08c celle de Boing Boing / Je Ne Partage Pas. Un Titan 1 selectionne
+   peignait donc son perimetre dans la couleur meme du deplacement.
+
+   Consigne de Nikola : « fais une petite variante, mais que ca reste pas trop
+   loin niveau couleur. » Chaque teinte est donc CONSERVEE, seulement assombrie
+   et desaturee : on reconnait toujours la couleur du Titan, mais le perimetre
+   passe visuellement derriere les cases d'action, qui gardent leur teinte
+   vive. C'est aussi le bon sens de lecture — le perimetre est un decor
+   permanent, les cases d'action sont ce sur quoi on clique.
+
+   3D uniquement : la grille 2D n'utilise pas cette table, elle n'est pas
+   touchee. */
 const TITAN_RING_COLOR = {
-  1: 0x71dbff,
-  2: 0xfb923c,
-  3: 0x16e08c,
-  4: 0xc084fc,
+  1: 0x3f8ba8, // cyan assombri (case de deplacement : 0x71dbff)
+  2: 0xa35f22, // orange assombri (Tete en Avant / repli : 0xfb923c)
+  3: 0x0d8552, // vert assombri (Boing Boing / JNP : 0x16e08c)
+  4: 0x7350a3, // violet assombri (teleporteur : 0xb88cff)
 };
 
 const SPRITE_DATA = {

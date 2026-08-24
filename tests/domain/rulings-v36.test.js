@@ -323,13 +323,22 @@ describe("règle — aucune superposition, même en réaction en chaîne", () =>
   });
 });
 
-describe("ruling — une bagarre non remportée ne rapporte aucun point", () => {
-  // Formulation de Nikola, 2026-08-15 : « si je fais une bagarre mais ne la
-  // remporte pas, je n'ai pas de point de Bagarre. »
-  // Le crédit était donné dès qu'une cible était touchée, sans vérifier
-  // qu'elle avait effectivement bougé — et pour Tête en Avant, même en
-  // dessous du Seuil 4, où aucune projection n'a lieu du tout.
-  // Cohérent avec la FAQ #12, qui parle de Titans distincts DÉPLACÉS.
+describe("ruling — toucher un Titan suffit à remporter la Bagarre", () => {
+  /* ⚠️ RULING RENVERSÉ LE 2026-08-24. Ce bloc verrouillait l'inverse.
+
+     Ancienne règle (Nikola, 2026-08-15) : « si je fais une bagarre mais ne la
+     remporte pas, je n'ai pas de point de Bagarre » — le crédit exigeait que
+     la cible ait effectivement BOUGÉ.
+
+     Nouvelle règle (Nikola, 2026-08-24) : « pour Bagarre, juste je gagne la
+     Bagarre, je gagne 1 case sur la piste, déplacement ou non. » L'ancienne
+     punissait l'attaquant pour une géométrie dont il n'est pas responsable :
+     une cible plaquée contre un mur lui faisait perdre le point alors qu'il
+     l'avait bel et bien percutée. C'est ce qui a fait remonter le cas des
+     2 combats Faut Pas Me Chauffer gagnés pour 1 seul point.
+
+     Ce qui NE change pas : la FAQ #12 continue de valoir pour ce qu'elle dit
+     vraiment — un Titan distinct ne rapporte qu'UNE Bagarre par carte. */
   const t = (id, cell) => ({
     id, cell, repaire: [], socles: [], bagarre: 0, destruction: 0,
     adrenaline: 0, programmed: [], hand: [], repos: [],
@@ -346,12 +355,12 @@ describe("ruling — une bagarre non remportée ne rapporte aucun point", () => 
     return board;
   };
 
-  it("Tête en Avant : cible coincée, aucun point de Bagarre", () => {
+  it("Tête en Avant : cible coincée, la Bagarre est quand même remportée", () => {
     const titans = [t(1, "E4"), t(2, "E5")];
     const board = murAutour(["E6", "E7", "E3"]);
     resolveTeteEnAvant(1, 0, 1, 3, { board, looseBlocks: {}, titans });
-    expect(titans[1].cell).toBe("E5");  // la cible n'a pas bougé
-    expect(titans[0].bagarre).toBe(0);  // donc aucun point
+    expect(titans[1].cell).toBe("E5");  // la cible n'a pas bougé…
+    expect(titans[0].bagarre).toBe(1);  // …et pourtant la charge compte
   });
 
   it("Tête en Avant : cible réellement déplacée, 1 point de Bagarre", () => {
@@ -378,23 +387,23 @@ describe("ruling — une bagarre non remportée ne rapporte aucun point", () => 
     expect(titans[0].bagarre).toBeGreaterThan(0); // bagarre remportée
   });
 
-  it("Tête en Avant : une cible coincée ne rapporte toujours aucun point", () => {
-    /* La contrepartie tient toujours : pas de déplacement, pas de Bagarre.
-       Une cible plaquée contre un mur de bâtiments ne bouge pas. */
+  it("Tête en Avant sous le Seuil 4 : une cible coincée rapporte quand même", () => {
+    /* Même cas que ci-dessus mais sans Adrénaline : le Seuil 4 ne décide que
+       de RAGE contre DIL, il n'a jamais décidé de la Bagarre. */
     const titans = [t(1, "E1"), t(2, "E2")];
     titans[1].repaire = ["bleu", "rose"];
     const board = murAutour(["E3", "E4", "E5"]);
     resolveTeteEnAvant(1, 0, 1, 0, { board, looseBlocks: {}, titans });
     expect(titans[1].cell).toBe("E2");
-    expect(titans[0].bagarre).toBe(0);
+    expect(titans[0].bagarre).toBe(1);
   });
 
-  it("Graouhhh : Titan touché mais coincé, aucun point de Bagarre", () => {
+  it("Graouhhh : Titan touché mais coincé, la Bagarre est comptée", () => {
     const titans = [t(1, "E4"), t(2, "E5")];
     const board = murAutour(["E6", "E7", "E8", "E9"]);
     resolveGraouhhh(1, 0, 1, 1, { board, looseBlocks: {}, titans });
     expect(titans[1].cell).toBe("E5");
-    expect(titans[0].bagarre).toBe(0);
+    expect(titans[0].bagarre).toBe(1);
   });
 
   it("Graouhhh : Titan réellement reculé, la Bagarre est comptée", () => {

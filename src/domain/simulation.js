@@ -223,7 +223,10 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
         // paie sur son Mouvement gratuit du tour.
         let porteeMouvement = PORTEE_MOUVEMENT;
         if (titan.horsPlateau) {
-          const retour = rentrerEnJeu(id, etat);
+          // `choisirAuto` : le simulateur n'a personne pour trancher entre
+          // les deux cases d'un coin bloqué (ruling du 2026-08-24). Sans lui,
+          // `rentre` revenait à false et le Titan perdait TOUT son tour.
+          const retour = rentrerEnJeu(id, etat, { choisirAuto: true });
           if (!retour.rentre) {
             anomalies.push({ type: "rentree-impossible", manche, round, titanId: id, cellule: retour.cellule });
             continue;

@@ -805,27 +805,19 @@ export function useBoardGeneratorController() {
     if (phase !== "action" || activePlayerId == null) { setCoutRentree(null); setCornerChoice(null); return; }
     const joueur = aiTitanStateRef.current.players.find((t) => t.id === activePlayerId);
     if (!joueur?.horsPlateau) { setCoutRentree(null); setCornerChoice(null); return; }
-    const retour = rentrerEnJeu(activePlayerId, {
+    /* Coin bloqué, deux cases également proches : demandé par Nikola le
+       2026-08-24, c'est au joueur de choisir laquelle, pas au tri interne.
+       Une IA n'a personne pour cliquer — `choisirAuto` laisse le domaine
+       trancher, plutôt que de redupliquer ici la règle du départage. */
+    const estIA = titanModes[activePlayerId] === "ia";
+    const etatRentree = {
       board: aiStateRef.current.board,
       titans: aiTitanStateRef.current.players,
       looseBlocks: aiLooseBlocksRef.current,
-    });
-    // Coin bloqué, deux cases également proches : demandé par Nikola le
-    // 2026-08-24, c'est au joueur de choisir laquelle, pas au tri interne.
-    // Une IA n'a personne pour cliquer — elle tranche seule, les deux
-    // options étant strictement équivalentes en distance.
+    };
+    const retour = rentrerEnJeu(activePlayerId, etatRentree, { choisirAuto: estIA });
     if (retour.needsChoice) {
-      if (titanModes[activePlayerId] === "ia") {
-        const choix = retour.options[0];
-        joueur.horsPlateau = false;
-        joueur.cell = choix;
-        setActionLog((prev) => [...prev, `🥊 Titan ${activePlayerId} (IA) rentre sur BIG CITY par ${choix} (coin ${retour.cellule} bloqué, entre ${retour.options.join(" et ")}).`]);
-        setCoutRentree({ titanId: activePlayerId, cout: 1 });
-        setTitanState((p) => ({ ...p, players: [...p.players] }));
-        setCornerChoice(null);
-      } else {
-        setCornerChoice({ titanId: activePlayerId, options: retour.options, coinBloque: retour.cellule });
-      }
+      setCornerChoice({ titanId: activePlayerId, options: retour.options, coinBloque: retour.cellule });
       return;
     }
     setCornerChoice(null);
