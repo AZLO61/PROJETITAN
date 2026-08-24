@@ -24,6 +24,7 @@ const {
   resolveFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, resolveFautPasMeChauffer, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS,
   scoreBareme, PODIUM_POINTS, rankWithTies, countRepaireColors, computeFinalScore, classementFinal,
   pick,
+  setSeed,
   // IA : profils et choix de coup (cf. src/domain/aiEvaluation.js et aiPlanner.js)
   FORCES, FORCE_SETTINGS, TEMPERAMENTS, makeProfile, profileLabel, bestVertAssignment,
   planMovement, planCardPlay, planRecuperation, planProgrammation, choisirRepartitionEcroulement
@@ -111,6 +112,13 @@ export function useBoardGeneratorController() {
   const currentDecision = decisionQueue[0] || null;
   const currentRepli = repliQueue[0] || null;
   const [seedCount, setSeedCount] = useState(1);
+  /* GRAINE DE LA PARTIE (Nikola, 2026-08-24 : « rejouer une partie depuis sa
+     graine »). Le module RNG etait deja seme et deterministe, mais l'APPLICATION
+     ne l'appelait jamais : seul le simulateur le faisait. Une partie jouee a la
+     table n'etait donc pas rejouable, et sa graine n'etait meme pas enregistree.
+     regenerate() la fixe desormais explicitement et la retient. */
+  const [gameSeed, setGameSeed] = useState(null);
+  const [seedInput, setSeedInput] = useState("");
   const [mancheNumber, setMancheNumber] = useState(1);
   const [activePlayerId, setActivePlayerId] = useState(() => titanState.detonateur);
 
@@ -191,7 +199,17 @@ export function useBoardGeneratorController() {
   const [vertAssignments, setVertAssignments] = useState({});
   const [apocalypseThreshold, setApocalypseThreshold] = useState(5);
 
-  const regenerate = useCallback(() => {
+  const regenerate = useCallback((graineVoulue) => {
+    /* La graine est posee AVANT toute generation : le plateau, la position des
+       Titans, l'ordre de jeu, le Detonateur et les profils d'IA en dependent
+       tous. Passer `undefined` tire une graine imprevisible, comme une partie
+       normale ; passer un nombre rejoue exactement la meme partie. */
+    const graine = setSeed(
+      graineVoulue === undefined || graineVoulue === null || graineVoulue === ""
+        ? undefined
+        : Number(graineVoulue) >>> 0
+    );
+    setGameSeed(graine);
     const newState = generateBoard();
     const newTitans = placeTitans(nbJoueurs);
     setState(newState);
@@ -3002,6 +3020,76 @@ export function useBoardGeneratorController() {
   }, [phase, currentDecision, selectedTitan, phaseValidated, volDirection]);
 
   // ── ÉCRAN CONFIG ──
+  /* ── SIGNALER CE QUI VIENT DE SE PASSER (Nikola, 2026-08-24) ──
+     « Aujourd'hui tu me decris de memoire » : un retour de table arrivait sous
+     la forme « j'etais en F6 », et retrouver le cas exact demandait parfois une
+     enumeration brute de tout le plateau. Ce bouton fige l'etat complet dans un
+     fichier : avec la graine ET la position reelle de chaque element, le cas se
+     rejoue directement au lieu d'etre reconstitue.
+
+     Tout est LOCAL : le fichier est fabrique dans le navigateur et enregistre
+     par le navigateur. Rien ne part sur un serveur, il n'y en a pas. */
+  const construireRapport = useCallback(() => ({
+    version: 1,
+    genereLe: new Date().toISOString(),
+    graine: gameSeed,
+    partie: {
+      nbJoueurs, mancheNumber, phase, activePlayerId, selectedTitanId,
+      seuilApocalypse: apocalypseThreshold, evenementsActifs: eventsEnabled,
+      evenementEnCours: currentEvent, gameOver,
+    },
+    titans: titanState.players.map((t) => ({
+      id: t.id, cell: t.cell, horsPlateau: !!t.horsPlateau,
+      mode: titanModes[t.id], profil: titanProfiles[t.id] ?? null,
+      repaire: [...t.repaire], socles: [...t.socles],
+      adrenaline: t.adrenaline, bagarre: t.bagarre, destruction: t.destruction,
+      main: [...t.hand], programmees: [...t.programmed],
+      joueesCetteManche: [...t.playedThisManche],
+      defausseesCachees: [...(t.discardedHidden || [])], repos: [...t.repos],
+    })),
+    ordreJeu: [...titanState.ordreJeu],
+    detonateur: titanState.detonateur,
+    plateau: Object.fromEntries(
+      Object.entries(state.board)
+        .filter(([, b]) => b.blocks.length > 0)
+        .map(([k, b]) => [k, { blocs: [...b.blocks], socle: b.socle, teleporteur: !!b.isTeleporter }])
+    ),
+    debrisAuSol: structuredClone(looseBlocks),
+    enAttente: {
+      decision: currentDecision ? { type: currentDecision.type, carte: currentDecision.cardLabel, attaquant: currentDecision.attackerId, defenseur: currentDecision.defenderId } : null,
+      repli: currentRepli ? { cible: currentRepli.cible, cases: [...currentRepli.cases], defaut: currentRepli.defaut } : null,
+      ecroulement: ecroulement ? { case: ecroulement.cellKey } : null,
+      choixCoin: cornerChoice,
+      decisionBloquante,
+    },
+    // Les 30 dernieres lignes suffisent : au-dela on ne lit plus le tour en
+    // cours mais l'historique de la Manche, qui n'aide pas a reproduire.
+    journal: actionLog.slice(-30),
+  }), [
+    gameSeed, nbJoueurs, mancheNumber, phase, activePlayerId, selectedTitanId,
+    apocalypseThreshold, eventsEnabled, currentEvent, gameOver, titanState,
+    titanModes, titanProfiles, state, looseBlocks, currentDecision, currentRepli,
+    ecroulement, cornerChoice, decisionBloquante, actionLog,
+  ]);
+
+  const telechargerRapport = useCallback(() => {
+    const rapport = construireRapport();
+    const horodatage = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    const nom = `titan-rapport-M${mancheNumber}-graine${rapport.graine}-${horodatage}.json`;
+    const blob = new Blob([JSON.stringify(rapport, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nom;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // Liberer l'URL au tour suivant : la revoquer immediatement annule le
+    // telechargement sur certains navigateurs.
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    setActionLog((prev) => [...prev, `📋 Rapport enregistre (${nom}). Graine ${rapport.graine}.`]);
+  }, [construireRapport, mancheNumber]);
+
   if (!setupDone) {
     return (
       <div style={{
@@ -3151,8 +3239,34 @@ export function useBoardGeneratorController() {
           </div>
         </div>
 
+        {/* GRAINE — Nikola, 2026-08-24 : « rejouer une partie depuis sa
+            graine ». Laisse vide pour une partie normale ; colle la graine
+            d'un rapport de bug pour retomber exactement sur la meme partie
+            (meme plateau, memes positions, meme ordre de jeu, memes profils
+            d'IA). */}
+        <div style={{ marginBottom: 22 }}>
+          <div style={{ color: "#FFD93D", fontFamily: "'Bowlby One', sans-serif", fontSize: ".78rem", marginBottom: 8 }}>
+            🎲 Graine (facultatif)
+          </div>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10,
+            background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.15)",
+            borderRadius: 10, padding: "10px 12px",
+          }}>
+            <input
+              type="text" inputMode="numeric" value={seedInput}
+              onChange={(e) => setSeedInput(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="aléatoire"
+              style={{ width: 130, background: "rgba(255,255,255,.08)", color: "#fffaee", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "6px 8px", fontFamily: "inherit" }}
+            />
+            <span style={{ fontSize: ".74rem", color: "rgba(255,255,255,.55)" }}>
+              vide = partie normale. Une graine rejoue la même partie à l'identique.
+            </span>
+          </div>
+        </div>
+
         <button
-          onClick={() => { regenerate(); setSetupDone(true); }}
+          onClick={() => { regenerate(seedInput === "" ? undefined : seedInput); setSetupDone(true); }}
           style={{
             width: "100%", background: "linear-gradient(135deg,#16E08C,#00C97A)", border: "none",
             borderRadius: 10, color: "#0E0420", fontWeight: 700, padding: "12px 0",
@@ -3187,6 +3301,10 @@ export function useBoardGeneratorController() {
     setTitanState,
     seedCount,
     setSeedCount,
+    gameSeed,
+    seedInput,
+    setSeedInput,
+    telechargerRapport,
     mancheNumber,
     setMancheNumber,
     activePlayerId,

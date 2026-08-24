@@ -106,6 +106,16 @@ export default function DecisionPanels({ vm }) {
   // sans fin et poussait le reste de la page vers le bas, alors qu'on ne le
   // consulte que ponctuellement pour verifier ce qui vient de se passer.
   const [showLog, setShowLog] = React.useState(false);
+  /* Filtre du journal par Titan (Nikola, 2026-08-24 : « journal d'actions
+     filtrable par Titan » — tout etait melange). `null` = tout afficher.
+     Le rattachement d'une ligne a un Titan reutilise EXACTEMENT la detection
+     qui servait deja au code couleur : une seule regle, donc la couleur d'une
+     ligne et le filtre ne peuvent pas diverger. */
+  const [filtreTitan, setFiltreTitan] = React.useState(null);
+  const titanDeLaLigne = (ligne) => {
+    const m = ligne.match(/T(?:itan)?\.?\s*(\d)/);
+    return m ? m[1] : null;
+  };
   const {
     titanState,
     titanModes,
@@ -306,6 +316,42 @@ export default function DecisionPanels({ vm }) {
               </div>
             )}
           </div>
+          {showLog && (() => {
+            const compte = (id) => actionLog.filter((l) => titanDeLaLigne(l) === id).length;
+            const btn = (actif, couleur) => ({
+              background: actif ? (couleur ? couleur + "28" : "rgba(255,255,255,.14)") : "none",
+              border: "1px solid " + (actif ? (couleur || "rgba(255,255,255,.45)") : "rgba(255,255,255,.14)"),
+              color: actif ? (couleur || "#fffaee") : "rgba(255,255,255,.45)",
+              borderRadius: 6, padding: "2px 7px", cursor: "pointer",
+              fontSize: ".64rem", fontFamily: "inherit",
+            });
+            return (
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", margin: "6px 0 4px" }}>
+                <button onClick={() => setFiltreTitan(null)} style={btn(filtreTitan === null, null)}>
+                  Tous ({actionLog.length})
+                </button>
+                {titanState.players.map((t) => {
+                  const id = String(t.id);
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setFiltreTitan((prev) => (prev === id ? null : id))}
+                      style={btn(filtreTitan === id, TITAN_COLORS[id]?.accent)}
+                      title={titanDisplayName ? titanDisplayName(t.id) : "Titan " + id}
+                    >
+                      T{id} ({compte(id)})
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+          {showLog && filtreTitan !== null
+            && actionLog.filter((l) => titanDeLaLigne(l) === filtreTitan).length === 0 && (
+            <div style={{ color: "rgba(255,255,255,.35)", fontStyle: "italic", padding: "4px 0" }}>
+              Aucune ligne pour ce Titan.
+            </div>
+          )}
           {showLog && actionLog.map((line, i) => {
             // Bug #10 (tracker) : code couleur par Titan dans les logs —
             // on repère le 1er Titan mentionné ("Titan 3", "T2"…) et on
@@ -313,8 +359,8 @@ export default function DecisionPanels({ vm }) {
             // repérer d'un coup d'œil qui a fait quoi. Lignes neutres
             // (sans Titan identifié, ex. résultats de scoring globaux)
             // gardent le style gris d'origine.
-            const m = line.match(/T(?:itan)?\.?\s*(\d)/);
-            const titanId = m ? m[1] : null;
+            const titanId = titanDeLaLigne(line);
+            if (filtreTitan !== null && titanId !== filtreTitan) return null;
             const c = titanId && TITAN_COLORS[titanId] ? TITAN_COLORS[titanId].accent : null;
             return (
               <div key={i} style={{

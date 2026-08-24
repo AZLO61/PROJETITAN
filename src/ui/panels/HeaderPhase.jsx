@@ -24,6 +24,8 @@ export default function HeaderPhase({ vm }) {
     animLabel,
     undoStack,
     handleUndo,
+    gameSeed,
+    telechargerRapport,
   } = vm;
 
 
@@ -31,7 +33,15 @@ export default function HeaderPhase({ vm }) {
       {/* ── HEADER ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <h2 style={{ fontFamily: "'Bowlby One', sans-serif", color: "#FFD93D", fontSize: "1.1rem", margin: 0 }}>
-          BIG CITY <span style={{ color: "rgba(255,255,255,.4)", fontSize: ".75rem" }}>#{seedCount}</span>
+          BIG CITY{" "}
+          <span
+            title={gameSeed != null
+              ? `Partie n°${seedCount} · graine ${gameSeed} — relance une partie avec cette graine pour la rejouer à l'identique`
+              : `Partie n°${seedCount}`}
+            style={{ color: "rgba(255,255,255,.4)", fontSize: ".75rem", cursor: "help" }}
+          >
+            #{seedCount}{gameSeed != null && ` · 🎲 ${gameSeed}`}
+          </span>
         </h2>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {/* Confirmation : un clic accidentel detruisait une partie en cours
@@ -77,6 +87,17 @@ export default function HeaderPhase({ vm }) {
               Scoring et Vue 3D au repos, au lieu du plein jaune-orange. */}
           <button onClick={() => setShowRules(true)} style={btnStyle(null, null)}>
             📖 Règles du jeu
+          </button>
+          {/* SIGNALER — Nikola, 2026-08-24. Enregistre l'état complet de la
+              partie dans un fichier, graine comprise, pour que le cas se
+              rejoue au lieu d'être reconstitué de mémoire. Rien ne sort de
+              l'appareil : le fichier est fabriqué et enregistré localement. */}
+          <button
+            onClick={telechargerRapport}
+            title="Enregistre l'état exact de la partie dans un fichier, pour pouvoir rejouer ce qui vient de se passer"
+            style={btnStyle(null, null)}
+          >
+            📋 Signaler
           </button>
         </div>
       </div>
