@@ -2059,14 +2059,20 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
         log.push(`${key} : Titan ${occupantId} projeté vers ${occupant.cell}` + (landing.hasBounced ? " (après rebond)" : ""));
       }
 
-      // Bug remonte : deux Titans se retrouvaient sur la meme case (T1 et T4
-      // tous deux en H6). La cible projetee peut rebondir sur un mur et
-      // revenir exactement sur la case ou l'attaquant allait s'arreter, ou
-      // rester sur place quand sa trajectoire est bloquee. La superposition
-      // Titan + Titan etant interdite par le livret, l'attaquant recule
-      // jusqu'a la premiere case libre de son propre chemin.
+      /* L'ATTAQUANT PREND LA PLACE DE LA CIBLE (Nikola, 2026-08-24) : comme
+         Boing Boing le fait déjà en sautant sur un Titan, Tête en Avant
+         avance désormais jusqu'à la case que la cible vient de quitter,
+         au lieu de s'arrêter juste avant comme contre un mur.
+
+         Bug remonte (repris tel quel) : deux Titans se retrouvaient sur la
+         meme case (T1 et T4 tous deux en H6). La cible projetee peut
+         rebondir sur un mur et revenir exactement sur la case visee, ou
+         rester sur place quand sa trajectoire est bloquee — dans les deux
+         cas `key` est toujours occupé après le push. La superposition
+         Titan + Titan etant interdite par le livret, l'attaquant recule
+         alors jusqu'a la premiere case libre de son propre chemin. */
       const occupees = new Set(titans.filter((t) => t.id !== titanId).map((t) => t.cell));
-      let arrivee = lastFreeCell;
+      let arrivee = key;
       if (occupees.has(arrivee)) {
         // Remonte le chemin parcouru, de la plus avancee vers le depart.
         const chemin = [];
@@ -2077,7 +2083,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
           chemin.push(rowFromIndex(r) + c);
         }
         arrivee = chemin.find((cell) => !occupees.has(cell)) ?? titan.cell;
-        log.push(`${lastFreeCell} occupée par un Titan — Titan ${titanId} recule en ${arrivee}.`);
+        log.push(`${key} occupée (cible non déplacée ou revenue dessus) — Titan ${titanId} recule en ${arrivee}.`);
       }
       titan.cell = arrivee;
       log.push(`Titan ${titanId} s'arrête en ${arrivee} (collision avec Titan ${occupantId}).`);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rentrerEnJeu } from "../../src/domain/gameRules.js";
+import { rentrerEnJeu, resolveTeteEnAvant } from "../../src/domain/gameRules.js";
 
 /* Ruling du 2026-08-24, demandé par Nikola après une partie : quand un Titan
    éjecté doit rentrer par un coin (A1, A9, I1, I9) et que ce coin est occupé,
@@ -60,5 +60,22 @@ describe("Rentrée par un coin bloqué : le choix revient au joueur", () => {
 
     expect(retour.needsChoice).toBeUndefined();
     expect(retour.rentre).toBe(true);
+  });
+});
+
+describe("Tête en Avant : en percutant un Titan, l'attaquant prend sa place", () => {
+  it("avance sur la case que la cible vient de quitter, comme Boing Boing", () => {
+    // Confirmé Nikola le 2026-08-24 : Tête en Avant s'arrêtait jusqu'ici sur
+    // la case juste AVANT la cible, comme contre un mur. Boing Boing, lui,
+    // fait déjà prendre la place de la cible poussée — Tête en Avant doit se
+    // comporter pareil.
+    const titans = [
+      t(1, "E4"),
+      t(2, "E5", { repaire: ["bleu"] }), // 1 seule couleur : pas de DIL possible, aucune décision à trancher
+    ];
+    resolveTeteEnAvant(1, 0, 1, 0, { board: {}, titans, looseBlocks: {}, replis: [] });
+
+    expect(titans[1].cell).not.toBe("E5"); // la cible a bien été poussée
+    expect(titans[0].cell).toBe("E5"); // l'attaquant occupe la case qu'elle a quittée
   });
 });
