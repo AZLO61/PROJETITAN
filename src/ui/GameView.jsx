@@ -9,6 +9,7 @@ import DilRageBanner from "./panels/DilRageBanner.jsx";
 import RepoVolBanner from "./panels/RepoVolBanner.jsx";
 import RepliBanner from "./panels/RepliBanner.jsx";
 import FpmcBanner from "./panels/FpmcBanner.jsx";
+import CornerChoiceBanner from "./panels/CornerChoiceBanner.jsx";
 import DecisionPanels from "./panels/DecisionPanels.jsx";
 
 export default function GameView(vm) {
@@ -32,6 +33,7 @@ export default function GameView(vm) {
           l'ordre de la résolution réelle : ce qu'une carte a déclenché passe
           avant la carte, et la carte avant la Manche. La règle vit à un
           seul endroit, l'affichage ne fait plus que la suivre. */}
+      {vm.decisionBloquante === "coin" && <CornerChoiceBanner vm={vm} />}
       {vm.decisionBloquante === "dil" && <DilRageBanner vm={vm} />}
       {vm.decisionBloquante === "repli" && <RepliBanner vm={vm} />}
       {vm.decisionBloquante === "fpmc" && <FpmcBanner vm={vm} />}

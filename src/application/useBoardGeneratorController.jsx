@@ -466,6 +466,9 @@ export function useBoardGeneratorController() {
   // { titanId, cout } — déplacements consommés par une rentrée sur le
   // plateau, à retrancher du Mouvement gratuit de ce tour-là uniquement.
   const [coutRentree, setCoutRentree] = useState(null);
+  // { titanId, options: [cle, cle], coinBloque } — coin de rentrée bloqué,
+  // deux cases également proches : en attente du choix du joueur.
+  const [cornerChoice, setCornerChoice] = useState(null);
   const [movingTitanOverride, setMovingTitanOverride] = useState(null); // { titanId, cell } hoisted before first use
   const [selectedTitanId, setSelectedTitanId] = useState(null);
 
@@ -796,14 +799,33 @@ export function useBoardGeneratorController() {
   // dans l'ordre de déclaration, et celui qui remet à zéro aurait effacé la
   // valeur que l'autre venait d'écrire.
   useEffect(() => {
-    if (phase !== "action" || activePlayerId == null) { setCoutRentree(null); return; }
+    if (phase !== "action" || activePlayerId == null) { setCoutRentree(null); setCornerChoice(null); return; }
     const joueur = aiTitanStateRef.current.players.find((t) => t.id === activePlayerId);
-    if (!joueur?.horsPlateau) { setCoutRentree(null); return; }
+    if (!joueur?.horsPlateau) { setCoutRentree(null); setCornerChoice(null); return; }
     const retour = rentrerEnJeu(activePlayerId, {
       board: aiStateRef.current.board,
       titans: aiTitanStateRef.current.players,
       looseBlocks: aiLooseBlocksRef.current,
     });
+    // Coin bloqué, deux cases également proches : demandé par Nikola le
+    // 2026-08-24, c'est au joueur de choisir laquelle, pas au tri interne.
+    // Une IA n'a personne pour cliquer — elle tranche seule, les deux
+    // options étant strictement équivalentes en distance.
+    if (retour.needsChoice) {
+      if (titanModes[activePlayerId] === "ia") {
+        const choix = retour.options[0];
+        joueur.horsPlateau = false;
+        joueur.cell = choix;
+        setActionLog((prev) => [...prev, `🥊 Titan ${activePlayerId} (IA) rentre sur BIG CITY par ${choix} (coin ${retour.cellule} bloqué, entre ${retour.options.join(" et ")}).`]);
+        setCoutRentree({ titanId: activePlayerId, cout: 1 });
+        setTitanState((p) => ({ ...p, players: [...p.players] }));
+        setCornerChoice(null);
+      } else {
+        setCornerChoice({ titanId: activePlayerId, options: retour.options, coinBloque: retour.cellule });
+      }
+      return;
+    }
+    setCornerChoice(null);
     setActionLog((prev) => [...prev, ...retour.log]);
     // La rentrée se paie sur le Mouvement gratuit du tour : il lui reste
     // d'autant moins de cases à parcourir, et il devra peut-être dépenser
@@ -814,7 +836,22 @@ export function useBoardGeneratorController() {
     // réellement que du Titan actif et de la Phase, et le contrôle des
     // dépendances n'a plus rien à redire — la désactivation qui vivait ici
     // était devenue sans objet.
-  }, [activePlayerId, phase]);
+  }, [activePlayerId, phase, titanModes]);
+
+  // Choix du joueur entre les deux cases d'un coin bloqué (cf. l'effet
+  // ci-dessus) : résolu par un clic sur l'une des deux options proposées.
+  const chooseCornerEntry = useCallback((cellKey) => {
+    if (!cornerChoice || !cornerChoice.options.includes(cellKey)) return;
+    captureSnapshot();
+    const titan = titanState.players.find((t) => t.id === cornerChoice.titanId);
+    if (!titan) return;
+    titan.horsPlateau = false;
+    titan.cell = cellKey;
+    setActionLog((prev) => [...prev, `🥊 Titan ${cornerChoice.titanId} rentre sur BIG CITY par ${cellKey} (coin ${cornerChoice.coinBloque} bloqué — choisi).`]);
+    setCoutRentree({ titanId: cornerChoice.titanId, cout: 1 });
+    setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+    setCornerChoice(null);
+  }, [cornerChoice, titanState.players, captureSnapshot]);
 
   // ── DÉCISIONS IA ──
   // Les heuristiques à priorité fixe qui vivaient ici ont été retirées.
@@ -1854,11 +1891,12 @@ export function useBoardGeneratorController() {
       if (phase !== "action" || !selectedTitan || selectedTitan.id !== activePlayerId) return false;
       if (!selectedTitan.programmed.includes(cardId)) return false;
       if (waitingNextTitan) return false;
+      if (cornerChoice) return false;
       if (currentDecision || currentRepli || ecroulement) return false;
       if (fpmcAttackerId && (fpmcPendingIds.length > 0 || fpmcCurrent)) return false;
       return true;
     },
-    [phase, selectedTitan, activePlayerId, waitingNextTitan,
+    [phase, selectedTitan, activePlayerId, waitingNextTitan, cornerChoice,
      currentDecision, currentRepli, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcCurrent]
   );
 
@@ -1869,6 +1907,7 @@ export function useBoardGeneratorController() {
       if (selectedTitan.id !== activePlayerId) return `Pas le tour de T${selectedTitan.id}`;
       if (!selectedTitan.programmed.includes(cardId)) return `${CARD_LABEL[cardId]} non programmée.`;
       if (waitingNextTitan) return `Confirme "Titan suivant" avant de continuer.`;
+      if (cornerChoice) return `Choisis d'abord par où T${selectedTitan.id} rentre sur BIG CITY.`;
       if (selectedTitan.horsPlateau) return `T${selectedTitan.id} est hors de BIG CITY : il ne peut que défausser. Il rentrera à l'ouverture de son prochain tour.`;
       // Dire CE QU'ON ATTEND, pas seulement que c'est bloqué : sans ça la
       // carte devient grise sans raison visible au milieu d'une partie.
@@ -1878,7 +1917,7 @@ export function useBoardGeneratorController() {
       if (fpmcAttackerId && (fpmcPendingIds.length > 0 || fpmcCurrent)) return `Termine d'abord Faut Pas Me Chauffer.`;
       return "";
     },
-    [phase, selectedTitan, activePlayerId, waitingNextTitan,
+    [phase, selectedTitan, activePlayerId, waitingNextTitan, cornerChoice,
      currentDecision, currentRepli, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcCurrent]
   );
 
@@ -2828,7 +2867,9 @@ export function useBoardGeneratorController() {
      et la carte se termine avant la Manche. C'est aussi ce qui garantit le
      « Titan par Titan » sur Graouhhh — la file DIL se vide un Titan à la
      fois, et rien d'autre ne s'affiche pendant ce temps. */
-  const decisionBloquante = currentDecision
+  const decisionBloquante = cornerChoice
+    ? "coin"
+    : currentDecision
     ? "dil"
     : currentRepli
     ? "repli"
@@ -3321,6 +3362,8 @@ export function useBoardGeneratorController() {
     jouerBoingBoing,
     moveMaxRange,
     coutRentreeCeTour,
+    cornerChoice,
+    chooseCornerEntry,
     moveReachable,
     moveClassic,
     moveTeleport,

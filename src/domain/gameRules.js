@@ -153,6 +153,37 @@ function rentrerEnJeu(titanId, gameState) {
        Nikola. */
     const surColonne = c0 === 1 || c0 === 9;
     const surLigne = r0 === 0 || r0 === 8;
+
+    /* CHOIX DU JOUEUR SUR UN COIN BLOQUÉ, demandé par Nikola le 2026-08-24 :
+       « si bâtiment [...] alors A8 ou B9, c'est moi qui décide au moment de
+       l'expulsion » — précisé ensuite : le choix se fait à la RENTRÉE réelle,
+       pas à l'expulsion, puisque le plateau peut changer entre les deux (un
+       bâtiment qui bloquait le coin peut tomber avant que le Titan rejoue).
+
+       Un coin appartient à deux rebords : ses deux voisins immédiats (une
+       case sur chaque rebord) sont à égale distance. Quand les DEUX sont
+       libres, rien ne doit arbitrer à la place du joueur — l'ancien tri par
+       écart les départageait arbitrairement (le rebord de la colonne
+       gagnait toujours l'égalité). Si un seul est libre, ou si aucun ne
+       l'est, la recherche habituelle reprend la main : il n'y a pas de choix
+       réel à proposer. */
+    if (surColonne && surLigne) {
+      const rVoisin = r0 === 0 ? 1 : 7;
+      const cVoisin = c0 === 1 ? 2 : 8;
+      const optionColonne = rowFromIndex(rVoisin) + c0;
+      const optionLigne = rowFromIndex(r0) + cVoisin;
+      if (optionColonne !== voulue && optionLigne !== voulue && libre(optionColonne) && libre(optionLigne)) {
+        return {
+          rentre: false,
+          needsChoice: true,
+          options: [optionColonne, optionLigne],
+          cellule: voulue,
+          cout: 0,
+          log: [],
+        };
+      }
+    }
+
     const candidats = [];
     if (surColonne) {
       for (let i = 0; i <= 8; i++) {
