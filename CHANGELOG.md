@@ -1,5 +1,82 @@
 # Changelog
 
+## Non publié — quatorzième passe du 2026-08-24 (chasse aux bugs)
+
+Nikola : « assure-toi de régler tous les bugs, passe en mode engineer de bug ».
+Quatre défauts trouvés et corrigés, dont un qui change une règle, plus une
+régression attrapée par la campagne d'invariants avant d'avoir pu nuire.
+
+### Le ruling de la Bagarre est renversé
+
+« Pour Bagarre, juste je gagne la Bagarre, je gagne 1 case sur la piste,
+déplacement ou non. » Nikola revient sur son ruling du 2026-08-15 (« pas de
+déplacement, pas de point »), qui punissait l'attaquant pour une géométrie
+dont il n'est pas responsable : une cible plaquée contre un mur lui faisait
+perdre le point alors qu'il l'avait bel et bien percutée.
+
+Appliqué aux **six** sites qui portaient la condition : Tout Casser, Tête en
+Avant, Graouhhh, Faut Pas Me Chauffer, écroulement d'Amas, repli offensif.
+C'est ce qui répond au cas remonté : deux combats Faut Pas Me Chauffer gagnés
+au même tour valent enfin 2 cases de piste. Ce qui ne change pas : la FAQ #12
+continue de valoir pour ce qu'elle dit vraiment, un Titan distinct ne rapporte
+qu'UNE Bagarre par carte.
+
+Quatre tests existants verrouillaient l'ancienne règle. Ils ont été **réécrits
+sur la nouvelle**, pas supprimés, avec la trace de ce qui a changé et pourquoi.
+
+### La Bagarre de chaîne n'était jamais créditée sur Tout Casser
+
+« J'ai déplacé un titan avec un débris en faisant Tout Casser, j'aurais dû
+gagner 1 point sur Bagarre. » Défaut réel, et net : les sous-cas **Bâtiments,
+Blocs et Amas** ne transmettaient pas `bagarreSet` à `projectInDirection`.
+Seul le sous-cas Titan comptait. Un Titan bousculé par un bloc de bâtiment,
+un débris ou un Amas ne rapportait donc rien du tout, alors que c'est la même
+carte et le même choc. Les quatre sous-cas partagent désormais un seul Set,
+crédité une fois. Même correction sur les deux projections de Tête en Avant.
+
+### Un repli à la sortie de faille ne proposait aucun choix
+
+« Il tape le bâtiment en I9, il doit donc se placer sur H9 H8 ou I8 » — et il
+n'avait rien eu à choisir. Reproduit par brute-force sur les 81 cases × 8
+directions × 8 énergies : sur une sortie de faille **diagonale**, l'élément
+ressort par un coin, et les trois voisines de ce coin progressent toutes sur
+au moins un des deux axes du déplacement. Le filtre les éliminait donc TOUTES,
+aucun repli n'était émis, et le moteur posait l'élément en silence — alors que
+le ruling du 2026-08-17 donne ce choix à l'attaquant. Quand le filtre ne
+laisse rien, on revient aux voisines de la case de sortie : le cas de Nikola
+rend maintenant exactement H8/H9/I8.
+
+### Les couleurs de la 3D
+
+« En 3D les cases de périmètre et celles de déplacement sont exactement les
+mêmes visuellement. » Ce n'était pas une impression : `TITAN_RING_COLOR`
+contenait EXACTEMENT les couleurs des cases d'action — `0x71dbff` est celle du
+déplacement, `0xfb923c` celle de Tête en Avant, `0x16e08c` celle de Boing
+Boing. Un Titan 1 sélectionné peignait son périmètre dans la couleur même du
+déplacement. Consigne de Nikola : « une petite variante, mais que ça reste pas
+trop loin niveau couleur » — chaque teinte est donc conservée, seulement
+assombrie et désaturée, et l'opacité passe de 0,72 à 0,4 (le périmètre était
+plus opaque que les cases dessinées par-dessus). **3D uniquement**, la grille
+2D n'utilise pas cette table.
+
+### Une régression attrapée avant d'avoir nui
+
+La campagne d'invariants a sorti **333 anomalies sur 120 parties** juste après
+l'ajout du choix au coin bloqué. Cause : le SIMULATEUR — le cinquième endroit
+où vit une règle — lisait le nouveau `rentre: false` comme « rentrée
+impossible » et faisait perdre TOUT son tour au Titan. Plutôt que de
+redupliquer le départage dans le simulateur et dans le contrôleur, le choix se
+tranche dans le domaine via `choisirAuto` : la règle ne vit qu'à un endroit,
+l'IA et le simulateur l'utilisent. 150 parties sur une autre plage de graines
+repassent à zéro anomalie.
+
+### Vérifications
+
+357 tests, lint et build au vert. 150 parties de diagnostic sans une seule
+anomalie. Règle de Bagarre propagée aux **cinq** emplacements (moteur, tests,
+simulateur, livret, page Règles), et vérifiée après coup aux deux derniers.
+
+
 ## Non publié — treizième passe du 2026-08-24 (9 retours supplémentaires)
 
 Nikola continue de jouer et revient avec 9 points de plus, dont une réponse à
