@@ -32,6 +32,15 @@ tour — reste à vérifier ce qui se passe à la frontière de Manche suivante)
   bien éjecté (`horsPlateau: true`), et le journal confirme même que
   l'attaquant « prend la place » du Titan pour Boing Boing spécifiquement.
 
+### Traité après confirmation de Nikola
+
+- **Tête en Avant, "on prend sa place"** : confirmé — comme Boing Boing le
+  fait déjà en sautant sur un Titan, une charge qui percute un adversaire
+  avance désormais jusqu'à la case que la cible vient de quitter, au lieu de
+  s'arrêter juste avant comme contre un mur. Le garde-fou anti-superposition
+  (recul sur son propre chemin si la cible n'a pas pu bouger) est conservé,
+  juste déclenché sur la bonne case.
+
 ### Ouvert, faute de repro exacte ou en attente d'un arbitrage
 
 - **Choix de couleur en 3D** : le Périmètre (couleur du Titan) et les cases
@@ -41,11 +50,6 @@ tour — reste à vérifier ce qui se passe à la frontière de Manche suivante)
   et les cases de Boing Boing/Je Ne Partage Pas, et le Titan 2 (orange) et
   Tête en Avant/Repli/Écroulement. Nikola garde la main sur la direction
   artistique : pas de changement de couleur sans son feu vert.
-- **"On prend sa place" en chargeant un Titan (Tête en Avant)** : le code
-  actuel arrête l'attaquant sur la case JUSTE AVANT la cible (comme un mur),
-  jamais sur la case que la cible vient de quitter — contrairement à Boing
-  Boing, qui lui fait bien prendre la place. À confirmer : Tête en Avant
-  doit-il changer pour se comporter pareil ?
 - **Bagarre de Tout Casser sur un Titan qui cohabitait avec un débris** :
   le sous-cas Titan crédite la Bagarre uniquement si la cible a RÉELLEMENT
   bougé (ruling du 15 août) — a-t-elle bougé, ou est-ce le débris cohabitant
