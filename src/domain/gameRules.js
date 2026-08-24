@@ -745,14 +745,21 @@ function releaseSocle(cellKey, board, looseBlocks) {
    ✅ FAQ #12 (confirmée Nikola, session) : un Titan poussé en chaîne dans
    un autre Titan ne redéclenche JAMAIS un nouveau DIL/RAGE — la décision
    DIL/RAGE reste propre au 1er impact direct de la carte jouée. En
-   revanche, chaque Titan DISTINCT déplacé (direct + tous les ricochets
+   revanche, chaque Titan DISTINCT TOUCHÉ (direct + tous les ricochets
    confondus) rapporte +1 Bagarre à l'initiateur, une seule fois par
    Titan (jamais 2x le même). Plafond mécanique = (nb Titans en partie
-   − 1). ⚠️ Code EN ATTENTE (report demandé par Nikola) : ce comptage
-   n'est pas encore câblé — projectInDirection ne remonte pas la liste
-   des Titans déplacés en chaîne vers l'appelant. Les resolvers de
-   cartes n'incrémentent aujourd'hui titan.bagarre que sur l'impact
-   direct. Voir tracker, dette #2, pour le plan d'implémentation.
+   − 1).
+
+   « TOUCHÉ » et non « déplacé » depuis le ruling révisé du 2026-08-24 :
+   « juste je gagne la Bagarre, je gagne 1 case sur la piste, déplacement
+   ou non » (Nikola). Une cible plaquée contre un mur rapporte donc autant
+   qu'une cible expédiée à l'autre bout du plateau.
+
+   Ce comptage EST câblé : `projectInDirection` reçoit un `bagarreSet`
+   partagé et y inscrit les Titans bousculés en chaîne, chaque résolveur de
+   carte le créditant une fois à la fin. La note « code en attente, dette
+   #2 » qui vivait ici décrivait un état révolu, et elle a survécu à sa
+   propre implémentation.
 ============================================================ */
 
 /* ============================================================
