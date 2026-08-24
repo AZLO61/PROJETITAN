@@ -2,16 +2,34 @@
 
 ## Non publié — douzième passe du 2026-08-24 (liste de 14 retours)
 
-Nikola arrive avec une liste de 14 points. Sept sont des demandes d'interface
+Nikola arrive avec une liste de 14 points. Huit sont des demandes d'interface
 et corrections de fond traitées directement ; deux (projection de Tout Casser
 en fonction du Périmètre, recul de Graouhhh en nombre de Titans+1) étaient déjà
-conformes, vérifiés dans le code sans rien changer ; les cinq restants (choix
-du Titan à la sortie d'un angle, défausse/Tout Casser qui semblent sauter le
-Ramassage, Bagarre de Faut Pas Me Chauffer, déclenchement de fin de partie)
-demandent soit un arbitrage de Nikola, soit une reproduction plus précise —
-aucun défaut de code n'a pu être confirmé à la lecture pour ces cinq-là, et un
-test de non-régression existant (`defausse-passif.test.jsx`) couvre déjà le
-scénario le plus proche de la défausse sans échouer.
+conformes, vérifiés dans le code sans rien changer ; les quatre restants
+(défausse/Tout Casser qui semblent sauter le Ramassage, Bagarre de Faut Pas Me
+Chauffer, déclenchement de fin de partie) demandent soit un arbitrage de
+Nikola, soit une reproduction plus précise — aucun défaut de code n'a pu être
+confirmé à la lecture pour ceux-là, et un test de non-régression existant
+(`defausse-passif.test.jsx`) couvre déjà le scénario le plus proche de la
+défausse sans échouer.
+
+### Rentrée par un coin bloqué : le choix revient au joueur
+
+« Je sors de I1 je rentre en A9, si bâtiment [...] alors A8 ou B9, c'est moi
+qui décide. » Un coin appartient à deux rebords, et ses deux voisins immédiats
+(un par rebord) sont à égale distance : `rentrerEnJeu` les départageait
+arbitrairement (toujours celui de la colonne). Question posée en retour :
+le choix se fait-il à l'expulsion ou à la rentrée réelle ? Réponse de
+Nikola : à la rentrée réelle, le plateau pouvant changer entre-temps (le
+bâtiment qui bloquait le coin peut tomber avant que le Titan rejoue).
+
+Quand les DEUX voisins sont libres, la fonction ne tranche plus : elle
+retourne `needsChoice` avec les deux options, et un nouveau bandeau
+(`CornerChoiceBanner`) les propose au joueur, sur le même principe que DIL,
+Repli et FPMC — rien d'autre n'avance tant que ce n'est pas choisi. Une IA
+tranche seule (les deux options sont strictement équivalentes). Si un seul
+voisin est libre, ou si la sortie n'est pas un coin, rien ne change — pas de
+choix fictif là où il n'y en a pas de réel.
 
 ### Traités
 
@@ -45,13 +63,6 @@ scénario le plus proche de la défausse sans échouer.
 
 ### Ce qui reste ouvert, dit franchement
 
-- **Choix du Titan à la sortie d'un angle** : Nikola veut choisir lui-même
-  entre les deux cases latérales quand le coin d'arrivée est bloqué (ex.
-  sortie par I1 → A9 bloquée → choix A8/B9), plutôt que le contournement
-  automatique actuel (`rentrerEnJeu`, qui prend la case libre la plus proche
-  sans distinguer une égalité). Reste à trancher : ce choix se fait-il au
-  moment de l'expulsion (l'état du plateau peut encore changer avant son
-  retour) ou au moment réel de la rentrée ?
 - **Défausse et Tout Casser qui sembleraient sauter le Ramassage** : le test
   `defausse-passif.test.jsx` verrouille déjà le cas générique et passe.
   Aucune anomalie retrouvée à la lecture de `advanceActionRound` /
