@@ -110,30 +110,13 @@ export default function BlockStockBar({
               <span style={{ opacity: .6 }}> · seuil {apocalypseThreshold}</span>
             </span>
           )}
-        </div>
-      )}
+          {/* QUI ON ATTEND (Nikola, 2026-08-19), fusionné sur cette même
+              ligne (Nikola, 2026-08-24) : deux rangées pour une seule idée
+              d'avancement de Manche, ça n'en valait pas la peine.
 
-      {/* QUI ON ATTEND (Nikola, 2026-08-19) : « y avait une fonction de petite
-          icone carre coche pour savoir qui on attend, remets-la mais dans le
-          panneau du stock et a droite en dessous "batiment seuil", ca evite de
-          refaire un panneau et l'information est bien visible. Actualise le
-          placement des petites icones en fonction de l'ordre du tour defini. »
-
-          Les icones suivent donc l'ordre d'INITIATIVE de la Manche, celui qui
-          commence au Detonateur, et non l'ordre fige de la partie. */}
-      {ordreInitiative.length > 0 && (
-        <div style={{
-          display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-          justifyContent: "flex-end",
-          // Le libelle "Ordre du tour" a ete retire (Nikola) : les icones se
-          // suffisent. Hauteur plafonnee a 2 lignes, le debordement etant
-          // rogne plutot que de pousser le reste du panneau vers le bas.
-          maxHeight: 42, overflow: "hidden",
-          fontSize: ".66rem", color: "rgba(255,255,255,.45)",
-          paddingBottom: 7, marginBottom: 7,
-          borderBottom: "1px solid rgba(255,255,255,.08)",
-        }}>
-          {ordreInitiative.map((id, rang) => (
+              Les icones suivent l'ordre d'INITIATIVE de la Manche, celui
+              qui commence au Detonateur, et non l'ordre fige de la partie. */}
+          {ordreInitiative.length > 0 && ordreInitiative.map((id, rang) => (
             <span
               key={id}
               title={

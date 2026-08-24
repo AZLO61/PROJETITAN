@@ -522,6 +522,9 @@ export function useBoardGeneratorController() {
   const [graouMode, setGraouMode] = useState(false);
   const [jnpMode, setJnpMode] = useState(false);
   const [jnpSelected, setJnpSelected] = useState([]);
+  // Nombre de blocs à ramasser (2, ou 3 en Lanterne Rouge), figé à l'engagement
+  // de la carte — cf. le commentaire de jnpNbToPick plus bas.
+  const [jnpNbToPickFrozen, setJnpNbToPickFrozen] = useState(2);
   const [bbMode, setBbMode] = useState(false);
   const [bbAdrenaline, setBbAdrenaline] = useState(0);
   // Chemin cliqué case par case (demande Nikola, 2026-08-18 : « je dois
@@ -2563,9 +2566,19 @@ export function useBoardGeneratorController() {
 
   // Le compte vient du moteur : l'interface le recopiait, ce qui faisait deux
   // endroits a corriger le jour ou la Lanterne Rouge changerait.
-  const jnpNbToPick = selectedTitanId
+  //
+  // Bug remonte par Nikola le 2026-08-24 : « j'etais Lanterne Rouge, bien
+  // indique, mais je n'ai pas pu prendre mon 3e bloc ». Le compte etait
+  // recalcule EN DIRECT a chaque rendu, sur le Repaire courant — or chaque
+  // bloc ramasse fait justement grossir ce Repaire. Des le 2e bloc pris, son
+  // proprietaire pouvait ne plus etre le moins dote, la Lanterne Rouge
+  // s'eteignait d'elle-meme et le compte retombait a 2 en plein ramassage.
+  // Comme le recul de Graouhhh ou les cibles de FPMC, ce nombre doit etre
+  // FIGE au moment ou la carte s'engage, pas recalcule a chaque bloc pris.
+  const jnpNbToPickLive = selectedTitanId
     ? getJeNePartagePasCount(selectedTitanId, { titans: titanState.players })
     : 2;
+  const jnpNbToPick = jnpMode ? jnpNbToPickFrozen : jnpNbToPickLive;
   const jnpPool = useMemo(
     () => (selectedTitanId
       ? new Set(getJeNePartagePasPool(selectedTitanId, { titans: titanState.players, looseBlocks }))
@@ -2573,9 +2586,16 @@ export function useBoardGeneratorController() {
     [selectedTitanId, titanState.players, looseBlocks]
   );
   const toggleJnpMode = useCallback(() => {
-    setJnpMode((m) => { const next = !m; if (next) { setTeaMode(false); setGraouMode(false); setBbMode(false); setBbPath([]); setBbSurvol([]); } return next; });
+    setJnpMode((m) => {
+      const next = !m;
+      if (next) {
+        setTeaMode(false); setGraouMode(false); setBbMode(false); setBbPath([]); setBbSurvol([]);
+        setJnpNbToPickFrozen(jnpNbToPickLive);
+      }
+      return next;
+    });
     setJnpSelected([]);
-  }, []);
+  }, [jnpNbToPickLive]);
   /* Ruling Nikola du 2026-08-19 (WIP) : le ramassage se resout ELEMENT PAR
      ELEMENT. Le clic ne coche donc plus une case en attendant une validation
      globale, il ramasse pour de bon, et le Titan se deplace aussitot si la
