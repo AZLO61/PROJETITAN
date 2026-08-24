@@ -271,27 +271,37 @@ export function appliquerDecisions(decisions, etat) {
     if (d.type === "DIL") {
       // Livret : l'attaquant désigne 2 couleurs DIFFÉRENTES, la cible
       // choisit laquelle elle perd, ou paie 1 Adrénaline pour annuler.
-      // L'attaquant a donc intérêt à proposer la paire dont le MOINS
-      // coûteux des deux termes est le plus cher possible : c'est un
-      // maximin, la cible prendra toujours l'option la plus douce.
+      // La cible, elle, ne pense qu'à SON moindre mal (elle prend toujours
+      // l'option la plus douce pour elle) — mais l'attaquant, en choisissant
+      // la PAIRE à désigner, doit maximiser ce qu'il en retire lui-même, pas
+      // seulement ce qu'il fait perdre. Sur les cartes dont le bloc perdu va
+      // au Repaire de l'attaquant (cf. DESTINATION_BLOC_PERDU), un DIL qui
+      // coûte moins cher à la cible mais lui rapporte davantage peut valoir
+      // mieux qu'un DIL qui coûte plus cher à la cible sans rien lui donner.
       const presentes = COULEURS_SCORABLES.filter((c) => compteCouleur(defenseur.repaire, c) > 0);
       if (presentes.length < 2) continue; // DIL structurellement impossible
 
+      const gagneAttaquant = d.destination === "repaire";
+
       let couleurPerdue = null;
-      let meilleurMinimum = -Infinity;
+      let meilleurGainNet = -Infinity;
       for (let i = 0; i < presentes.length; i++) {
         for (let j = i + 1; j < presentes.length; j++) {
           const a = perteSiRetire(defenseur.repaire, presentes[i]);
           const b = perteSiRetire(defenseur.repaire, presentes[j]);
+          // La cible arbitre seule, sur SA perte : elle ignore ce que
+          // l'attaquant en tirera.
           const choixDeLaCible = a <= b ? presentes[i] : presentes[j];
           const coutSubi = Math.min(a, b);
-          if (coutSubi > meilleurMinimum) {
-            meilleurMinimum = coutSubi;
+          const gainNet = coutSubi + (gagneAttaquant ? gainSiAjoute(attaquant.repaire, choixDeLaCible) : 0);
+          if (gainNet > meilleurGainNet) {
+            meilleurGainNet = gainNet;
             couleurPerdue = choixDeLaCible;
           }
         }
       }
       if (!couleurPerdue) continue;
+      const meilleurMinimum = perteSiRetire(defenseur.repaire, couleurPerdue);
 
       // La cible paie plutôt que d'encaisser si la perte dépasse la
       // valeur d'une Adrénaline.
@@ -301,6 +311,11 @@ export function appliquerDecisions(decisions, etat) {
       }
       const idx = defenseur.repaire.indexOf(couleurPerdue);
       if (idx !== -1) defenseur.repaire.splice(idx, 1);
+      // Cf. DESTINATION_BLOC_PERDU (gameRules.js) : sur Faut Pas Me Chauffer,
+      // le bloc perdu en DIL rejoint le Repaire de l'attaquant, pas le sol.
+      // Sans ce transfert, le modèle simplifié de l'IA perdait purement et
+      // simplement le bloc, faussant ensuite sa lecture de son propre Repaire.
+      if (gagneAttaquant) attaquant.repaire.push(couleurPerdue);
     }
   }
 }

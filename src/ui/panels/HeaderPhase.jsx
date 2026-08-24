@@ -1,7 +1,5 @@
 import React from "react";
 import TitanResourceBand from "../titans/TitanResourceBand.jsx";
-import { TitanIcon } from "../titans/TitanVisuals.jsx";
-import { TITAN_COLORS } from "../titans/constants.js";
 import { btnStyle, cancelBtn } from "../styles.js";
 
 export default function HeaderPhase({ vm }) {
@@ -10,14 +8,9 @@ export default function HeaderPhase({ vm }) {
   const [confirmNouvelle, setConfirmNouvelle] = React.useState(false);
   const {
     eventsEnabled,
-    titanState,
     seedCount,
     mancheNumber,
     activePlayerId,
-    titanModes,
-    titanDisplayName,
-    aiPlaying,
-    aiStepLabel,
     phase,
     currentEvent,
     showScoring,
@@ -31,7 +24,6 @@ export default function HeaderPhase({ vm }) {
     animLabel,
     undoStack,
     handleUndo,
-    endGameReasons,
   } = vm;
 
 
@@ -155,61 +147,8 @@ export default function HeaderPhase({ vm }) {
             Les coches et le bouton Valider vivent desormais dans la bande des
             Titans, sur l'encart de chacun : on voit qui a valide en regardant
             le Titan, et on valide au meme endroit. */}
-        {/* Bandeau Titan actif — bien visible */}
-        {phase === "action" && activePlayerId != null && (() => {
-          const atc = TITAN_COLORS[activePlayerId];
-          const isAi = titanModes[activePlayerId] === "ia";
-          return (
-            <div style={{
-              background: atc ? `linear-gradient(90deg, ${atc.accent}33 0%, ${atc.accent}11 100%)` : "rgba(22,224,140,.1)",
-              border: `1px solid ${atc ? atc.accent : "#16E08C"}`,
-              borderTop: "none",
-              borderRadius: "0 0 10px 10px",
-              padding: "7px 12px",
-              display: "flex", alignItems: "center", gap: 10,
-            }}>
-              <TitanIcon titanId={activePlayerId} size={26} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "'Bowlby One', sans-serif", fontSize: ".82rem", color: atc?.accent }}>
-                  {isAi ? "🤖 IA — " : "👤 "}{titanDisplayName(activePlayerId)} joue
-                  {isAi && aiPlaying && aiStepLabel && (
-                    <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.6)", marginLeft: 8, fontStyle: "italic" }}>{aiStepLabel}</span>
-                  )}
-                </div>
-                {!isAi && (() => {
-                  const activeTitan = titanState.players.find(t => t.id === activePlayerId);
-                  const cardsLeft = activeTitan?.programmed.length ?? 0;
-                  // Seul endroit qui dit quoi faire pendant la Phase Action :
-                  // la consigne generale se tait desormais dans cette phase
-                  // pour ne pas repeter ce bandeau. La sequence du tour est
-                  // rappelee ici, la ou le joueur actif regarde deja.
-                  const hint = cardsLeft > 0
-                    ? `1 deplacement avant ta carte · joue ou defausse 1 carte · 1 ramassage apres`
-                    : `Plus de cartes — clique "▶ Titan suivant" (le passage est automatique, pas de "Valider ma Phase" en Phase Action)`;
-                  return (
-                    <div style={{ fontSize: ".68rem", color: "rgba(255,255,255,.6)", marginTop: 2 }}>
-                      {hint}
-                    </div>
-                  );
-                })()}
-                {isAi && (
-                  <div style={{ fontSize: ".68rem", color: "rgba(255,255,255,.45)" }}>
-                    {titanState.players.find(t => t.id === activePlayerId)?.programmed.length ?? 0} carte(s) restante(s)
-                  </div>
-                )}
-              </div>
-              {isAi && aiPlaying && (
-                <div style={{
-                  marginLeft: "auto", width: 20, height: 20,
-                  border: `2px solid ${atc?.accent}`,
-                  borderTop: "2px solid transparent",
-                  borderRadius: "50%",
-                  animation: "spin 0.8s linear infinite",
-                }} />
-              )}
-            </div>
-          );
-        })()}
+        {/* Bandeau "Titan X joue" supprimé (Nikola) : le Titan actif est deja
+            visible sur son encart (bordure lumineuse + "▶" dans TitanResourceBand). */}
         {phase === "action" && activePlayerId == null && (
           <div style={{
             background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.1)",
@@ -263,23 +202,11 @@ export default function HeaderPhase({ vm }) {
           seul, une fois la Manche terminée (cf. `gameOver`).
 
           L'encart passe d'un pavé à une seule ligne : le motif du
-          déclenchement, qu'on ne lit qu'une fois, va dans l'infobulle. */}
-      {endGameReasons.length > 0 && (
-        <div
-          title={endGameReasons.join("\n")}
-          style={{
-            display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
-            background: "rgba(227,35,71,.1)", border: "1px solid rgba(227,35,71,.45)",
-            borderRadius: 8, padding: "5px 10px", marginBottom: 8,
-            fontSize: ".72rem", cursor: "help",
-          }}
-        >
-          <strong style={{ color: "#ff8fa3", whiteSpace: "nowrap" }}>🛑 Dernière Manche</strong>
-          <span style={{ color: "rgba(255,255,255,.6)" }}>
-            la partie s'arrête à la fin de la Manche {mancheNumber}.
-          </span>
-        </div>
-      )}
+          déclenchement, qu'on ne lit qu'une fois, va dans l'infobulle.
+
+          Panneau supprimé (Nikola) : l'information "dernière Manche" vit
+          desormais uniquement dans le panneau de stock (BlockStockBar),
+          collee au compteur de Manche qu'elle qualifie. */}
 
       {/* ── TITANS ÉJECTÉS HORS DU RING ──
           Ce panneau vivait ici. Il est remplacé par une icône 🥊 posée sur

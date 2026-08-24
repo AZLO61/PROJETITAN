@@ -602,65 +602,24 @@ export default function DecisionPanels({ vm }) {
                   <tr style={{ background: "rgba(255,217,61,.1)", fontWeight: 700 }}>
                     <td style={{ padding: "5px 8px", color: "#FFD93D" }}>TOTAL</td>
                     {(() => {
-                      // Retour de Nikola : le total seul suffit pour se
-                      // repérer en cours de partie, à condition de porter
-                      // lui-même la médaille — plus besoin du bloc Classement
-                      // séparé pour ça (lui ne reste qu'en fin de partie, où
-                      // le départage du livret a un enjeu réel).
-                      const meilleur = Math.max(...titanState.players.map((t) => finalScoreResult.totals[t.id].total));
+                      // Retour de Nikola : le bloc "Classement final" séparé
+                      // prenait trop de place pendant le placement des Verts.
+                      // Fusionné dans cette ligne TOTAL : la médaille (or,
+                      // argent, bronze) suit le classement départagé du
+                      // livret (Adrénaline, puis Socle le plus haut, puis
+                      // Force des cartes non jouées), sans texte en plus.
+                      const rangParId = {};
+                      (classementFinalPartie || []).forEach((ligne) => { rangParId[ligne.id] = ligne.rang; });
+                      const medaille = { 1: "🥇 ", 2: "🥈 ", 3: "🥉 " };
                       return titanState.players.map((t) => (
                         <td key={t.id} style={{ padding: "5px 8px", color: "#FFD93D", textAlign: "center" }}>
-                          {finalScoreResult.totals[t.id].total === meilleur ? "🥇 " : ""}{finalScoreResult.totals[t.id].total}
+                          {medaille[rangParId[t.id]] || ""}{finalScoreResult.totals[t.id].total}
                         </td>
                       ));
                     })()}
                   </tr>
                 </tbody>
               </table>
-            </div>
-          )}
-
-          {/* ── CLASSEMENT ET VAINQUEUR ──
-              Le tableau ci-dessus donne les totaux, colonne par colonne,
-              sans jamais dire qui gagne. Le classement applique le
-              départage du livret : Adrénaline restante, puis Socle de plus
-              haute valeur, puis Force des cartes non jouées. Une égalité
-              qui résiste aux trois est annoncée comme telle.
-
-              Retour de Nikola : en cours de partie, ce départage ne sert à
-              rien — le total et une médaille suffisent, et les deux vivent
-              déjà dans le tableau ci-dessus (ligne TOTAL). Le classement ne
-              s'affiche donc plus qu'en fin de partie, où le départage a un
-              enjeu réel. */}
-          {gameOver && classementFinalPartie && scoresReveles && (
-            <div style={{ marginTop: 14 }}>
-              <div style={{ color: "#FFD93D", fontSize: ".74rem", fontWeight: 700, marginBottom: 6 }}>
-                🏆 Classement final
-              </div>
-              {classementFinalPartie.map((ligne) => (
-                <div key={ligne.id} style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  padding: "5px 8px", fontSize: ".76rem",
-                  background: ligne.rang === 1 ? "rgba(255,217,61,.14)" : "transparent",
-                  borderBottom: "1px solid rgba(255,255,255,.06)",
-                }}>
-                  <span style={{ width: 26, color: "#FFD93D", fontWeight: 700 }}>
-                    {ligne.rang === 1 ? "🥇" : `${ligne.rang}e`}
-                  </span>
-                  <TitanIcon titanId={ligne.id} size={20} variant="plain" />
-                  <span style={{ flex: 1, color: "#fffaee" }}>
-                    {titanDisplayName(ligne.id)}
-                    {ligne.exAequo && (
-                      <span style={{ color: "rgba(255,255,255,.5)", fontSize: ".68rem", marginLeft: 6 }}>
-                        ex aequo — départage impossible
-                      </span>
-                    )}
-                  </span>
-                </div>
-              ))}
-              <div style={{ color: "rgba(255,255,255,.45)", fontSize: ".66rem", marginTop: 6 }}>
-                Égalité départagée par : Adrénaline restante, puis Socle de plus haute valeur, puis Force des cartes non jouées.
-              </div>
             </div>
           )}
 

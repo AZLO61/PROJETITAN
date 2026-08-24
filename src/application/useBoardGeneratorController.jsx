@@ -2869,7 +2869,13 @@ export function useBoardGeneratorController() {
           // pas au clic sur "+" alors que la résolution réelle (jouerToutCasser)
           // en tenait déjà compte : le joueur ne voyait jamais l'effet de son
           // Adrénaline avant de valider la carte.
-          Math.min(Number(tcAdrenaline) || 0, selectedTitan.adrenaline || 0)
+          Math.min(Number(tcAdrenaline) || 0, selectedTitan.adrenaline || 0),
+          // Bug remonté par Nikola : l'aperçu ignorait ce 5e argument et
+          // retombait sur le défaut `{}`, donc ne comptait ni les débris ni
+          // les Socles au sol — le badge Énergie/Seuil affichait 3 quand la
+          // résolution réelle (qui, elle, passe `gameState.looseBlocks`)
+          // appliquait déjà l'effet du Seuil 4 sur une énergie de 4 ou plus.
+          looseBlocks
         )
     : 0;
 

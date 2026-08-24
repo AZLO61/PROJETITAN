@@ -39,10 +39,10 @@ export default function RoundPanels({ vm }) {
      le pointeur quitte la case et ne pose aucun voile, sans quoi le plateau
      deviendrait injouable a la souris. */
   const [hoverSource, setHoverSource] = React.useState(null);
-  /* Deux secondes d'arret volontaire avant que la fiche d'un batiment ne
-     s'ouvre au survol. Le minuteur vit dans une ref : le redemarrer ne doit
-     pas provoquer de rendu. */
-  const DELAI_SURVOL_MS = 2000;
+  /* Une seconde d'arret volontaire avant que la fiche d'un batiment ne
+     s'ouvre au survol (Nikola : 2s etait trop long). Le minuteur vit dans
+     une ref : le redemarrer ne doit pas provoquer de rendu. */
+  const DELAI_SURVOL_MS = 1000;
   const survolTimerRef = React.useRef(null);
   const annulerAttenteSurvol = React.useCallback(() => {
     if (survolTimerRef.current) {

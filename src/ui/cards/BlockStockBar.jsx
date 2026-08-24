@@ -125,11 +125,14 @@ export default function BlockStockBar({
         <div style={{
           display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
           justifyContent: "flex-end",
+          // Le libelle "Ordre du tour" a ete retire (Nikola) : les icones se
+          // suffisent. Hauteur plafonnee a 2 lignes, le debordement etant
+          // rogne plutot que de pousser le reste du panneau vers le bas.
+          maxHeight: 42, overflow: "hidden",
           fontSize: ".66rem", color: "rgba(255,255,255,.45)",
           paddingBottom: 7, marginBottom: 7,
           borderBottom: "1px solid rgba(255,255,255,.08)",
         }}>
-          <span style={{ marginRight: "auto" }}>Ordre du tour</span>
           {ordreInitiative.map((id, rang) => (
             <span
               key={id}
