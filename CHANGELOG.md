@@ -1,5 +1,68 @@
 # Changelog
 
+## Non publié — treizième passe du 2026-08-24 (9 retours supplémentaires)
+
+Nikola continue de jouer et revient avec 9 points de plus, dont une réponse à
+une question posée en retour : la partie était bien encore jouable à 4/25
+bâtiments en Manche 4 (le déclenchement ne s'est donc pas fait au milieu d'un
+tour — reste à vérifier ce qui se passe à la frontière de Manche suivante).
+
+### Traités
+
+- **Icônes "qui on attend" fusionnées** avec la ligne Manche/Détonateur/
+  Bâtiments du panneau de stock — une seule ligne au lieu de deux.
+- **Bug de fond, Lanterne Rouge de Je Ne Partage Pas** : « j'étais Lanterne
+  Rouge, bien indiqué, mais je n'ai pas pu prendre mon 3e bloc. » Le compte à
+  ramasser était recalculé EN DIRECT à chaque bloc pris — or chaque bloc
+  ramassé grossit le Repaire de l'acteur, exactement ce qui détermine la
+  Lanterne Rouge. Dès le 2e bloc, elle pouvait s'éteindre d'elle-même et le
+  3e devenait injouable en plein ramassage. Figé à l'engagement de la carte,
+  comme le recul de Graouhhh ou les cibles de FPMC. Verrouillé par un test.
+
+### Vérifié par reproduction directe, comportement déjà correct
+
+- **Ramassage après un DIL tranché** : reproduit précisément le scénario
+  décrit (charge sur un Titan qui cohabitait avec un débris, DIL résolu) —
+  le débris reste ramassable, `canUseRecupPassif` et `recupPool` sont
+  corrects juste après la résolution. Si le panneau ne s'affiche vraiment
+  pas à la table, la cause est ailleurs (rendu, timing d'une animation) et
+  demande une reproduction encore plus précise.
+- **Boing Boing, poussée d'un Titan hors du plateau** : reproduit un push de
+  3 cases depuis H8 plein sud (hors plateau dès le 2e pas) — l'occupant est
+  bien éjecté (`horsPlateau: true`), et le journal confirme même que
+  l'attaquant « prend la place » du Titan pour Boing Boing spécifiquement.
+
+### Ouvert, faute de repro exacte ou en attente d'un arbitrage
+
+- **Choix de couleur en 3D** : le Périmètre (couleur du Titan) et les cases
+  de déplacement peuvent être visuellement identiques — `TITAN_RING_COLOR`
+  du Titan 1 (`0x71dbff`) est EXACTEMENT la couleur utilisée pour les cases
+  de déplacement en 3D, et il y a la même collision entre le Titan 3 (vert)
+  et les cases de Boing Boing/Je Ne Partage Pas, et le Titan 2 (orange) et
+  Tête en Avant/Repli/Écroulement. Nikola garde la main sur la direction
+  artistique : pas de changement de couleur sans son feu vert.
+- **"On prend sa place" en chargeant un Titan (Tête en Avant)** : le code
+  actuel arrête l'attaquant sur la case JUSTE AVANT la cible (comme un mur),
+  jamais sur la case que la cible vient de quitter — contrairement à Boing
+  Boing, qui lui fait bien prendre la place. À confirmer : Tête en Avant
+  doit-il changer pour se comporter pareil ?
+- **Bagarre de Tout Casser sur un Titan qui cohabitait avec un débris** :
+  le sous-cas Titan crédite la Bagarre uniquement si la cible a RÉELLEMENT
+  bougé (ruling du 15 août) — a-t-elle bougé, ou est-ce le débris cohabitant
+  qui a été projeté à sa place (sous-cas Blocs, indépendant) ?
+- **Repli d'un débris : cases proposées incohérentes avec l'obstacle
+  annoncé** (G8/H7/H8 proposées, alors que l'obstacle touché semble avoir
+  été un bâtiment en I9, ce qui donnerait H9/H8/I8). Signe possible d'un
+  rebond intermédiaire non recalculé. Repro plus précise nécessaire (carte
+  jouée, position de départ, direction).
+- **2 combats Faut Pas Me Chauffer gagnés au même tour → 1 seul point de
+  Bagarre** : chaque victoire incrémente indépendamment `attacker.bagarre`.
+  La cible du second combat a-t-elle vraiment été déplacée ?
+- **Fin de partie à 4/25 bâtiments** : confirmé encore jouable en cours de
+  Manche (normal, le livret dit "jamais en plein tour"). Reste à vérifier
+  si le seuil configuré était bien atteint et si la partie s'est arrêtée à
+  la frontière de Manche suivante.
+
 ## Non publié — douzième passe du 2026-08-24 (liste de 14 retours)
 
 Nikola arrive avec une liste de 14 points. Huit sont des demandes d'interface
