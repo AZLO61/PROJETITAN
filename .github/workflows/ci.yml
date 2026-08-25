@@ -41,8 +41,7 @@ jobs:
         run: |
           set -o pipefail
           npx vitest run --reporter=default 2>&1 | tee /tmp/test.log || {
-            echo "::error::$(tail -n 60 /tmp/test.log | sed -z 's/
-/%0A/g')"
+            echo "::error::$(tail -n 60 /tmp/test.log | sed -z 's/\n/%0A/g')"
             exit 1
           }
 
