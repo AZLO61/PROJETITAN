@@ -24,7 +24,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 22 et non 20 : jsdom 30 charge undici, qui appelle
+          # `webidl.util.markAsUncloneable`, absent de Node 20. Sous Node 20
+          # la suite meurt au demarrage — 33 erreurs, aucun test execute, en
+          # 3 secondes. Reproduit en local sous node@20 puis verifie vert
+          # sous node@22. Vite 7 demande de toute facon ^20.19 || >=22.12.
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
