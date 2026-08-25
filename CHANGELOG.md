@@ -1,5 +1,76 @@
 # Changelog
 
+## Non publié — quinzième passe du 2026-08-24 (outils de test, et mise en ligne)
+
+Cinq outils demandés par Nikola pour rendre les tests à la table plus
+efficaces, puis le rattachement du dossier local au dépôt GitHub.
+
+### Cinq outils
+
+- **Graine de partie.** L'application n'appelait JAMAIS `setSeed` : le module
+  RNG était semé et déterministe depuis longtemps, mais seul le simulateur
+  s'en servait. Une partie jouée à la table n'était donc pas rejouable, et sa
+  graine n'était même pas enregistrée. Elle est désormais fixée avant toute
+  génération (plateau, positions, ordre de jeu, Détonateur et profils d'IA en
+  dépendent tous), affichée dans l'en-tête, et saisissable à la configuration.
+- **Bouton « Signaler ».** Fige l'état complet dans un fichier : graine,
+  plateau, débris, Titans, décisions en attente, 30 dernières lignes de
+  journal. Tout est local, rien ne part sur un serveur.
+- **Journal filtrable par Titan.** Le rattachement ligne → Titan RÉUTILISE la
+  regex qui servait déjà au code couleur, au lieu d'en dupliquer une : la
+  couleur d'une ligne et le filtre ne peuvent pas diverger.
+- **Animation de la trajectoire.** `projectInDirection` construisait déjà la
+  trace du trajet pour ses garde-fous ; elle porte donc exactement ce qu'il
+  faut pour rejouer le vol, rebond et traversée de faille compris — ce
+  qu'aucun calcul après coup ne saurait reconstituer. Collectée sur le modèle
+  partagé de `replis`, rejouée en parallèle, visible en 2D et en 3D, effacée
+  par un « Annuler ». Purement visuel : la résolution reste inchangée.
+- **Pulsation des cases d'action.** 2,4 s par cycle, 6 % d'amplitude, sur les
+  seules cases cliquables. « On teste mais pas sûr » : le retrait tient en une
+  ligne, documentée sur place.
+
+### Le dépôt est enfin en ligne
+
+Le dossier local n'avait aucun remote : quinze passes de travail ne vivaient
+que sur le disque, pendant que GitHub portait un instantané du 12 août
+téléversé à la main. **Fusion plutôt que `push --force`** : les 12 commits
+publiés sont conservés, le contenu local l'emporte sur les fichiers communs,
+et les workflows GitHub Actions — qui n'existaient QUE sur le distant et font
+vivre la page — sont récupérés.
+
+Écartés du dépôt au passage : `ScoringPanel.jsx` et `TitanPanel.jsx`, que la
+fusion avait fait revenir alors qu'ils avaient été supprimés volontairement le
+18 août ; les deux `.bat`, lanceurs Windows qui restent sur le disque de
+Nikola mais n'ont pas leur place sur un dépôt que GitHub Actions construit ;
+et `.codegraph/`, artefact d'outillage.
+
+### Le CI, et trois hypothèses dont deux fausses
+
+Le premier passage en CI a échoué alors que tout était vert en local. Deux
+hypothèses successives se sont révélées fausses : le budget de temps des
+tests (relevé quand même de 30 s à 120 s — un seul test consommait 98 % des
+30 s) et la casse des imports Windows → Linux (auditée, saine).
+
+La vraie cause a été trouvée en REPRODUISANT l'environnement plutôt qu'en
+devinant : sous Node 20, jsdom 30 charge undici, qui appelle
+`webidl.util.markAsUncloneable`, absente de Node 20. La suite mourait au
+démarrage — 33 erreurs, aucun test exécuté, en 3 secondes. Ce qui explique
+les deux indices qui ne collaient pas : un job de 23 s (trop court pour un
+timeout) et aucune annotation d'échec de Vitest (aucun test ne tombait).
+
+Vérifié vert sous `node@22`. Les deux workflows passent à Node 22, et
+`engines.node` passe de `>=20` à `>=22` pour que l'exigence soit écrite
+plutôt que redécouverte.
+
+**Leçon de méthode :** l'environnement se reproduit, il ne se devine pas.
+`npx -p node@20` a donné la réponse en une commande, après deux corrections
+inutiles poussées sur la foi d'un raisonnement.
+
+### Vérifications
+
+360 tests, lint et build au vert. CI et déploiement GitHub Actions au vert,
+page en ligne (HTTP 200).
+
 ## Non publié — quatorzième passe du 2026-08-24 (chasse aux bugs)
 
 Nikola : « assure-toi de régler tous les bugs, passe en mode engineer de bug ».
