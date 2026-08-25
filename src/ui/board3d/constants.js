@@ -1,3 +1,4 @@
+import { eclaircirNombre, ECLAT_3D, BLOC_SANS_RETOUCHE } from "../theme.js";
 // Couleurs des blocs en 3D, eclaircies de 30% par rapport aux teintes 2D :
 // sous l'eclairage de la scene, les faces laterales assombries rendaient les
 // blocs nettement plus sombres que leurs equivalents sur la grille.
@@ -6,13 +7,27 @@
 // L'orange garde sa saturation : eclairci vers le jaune pale, il devenait
 // fade et ne correspondait plus a l'icone du stock.
 //   vert   #22C55E -> #2CFF7A
-const COLOR_HEX_3D = {
+/* Nikola a trouvé ces couleurs sous-exposées d'un cran de plus que la 2D.
+   Le réglage passe donc par ECLAT_3D, dans theme.js, à côté de celui de la
+   2D : les deux vues montrent les MÊMES blocs, et leurs expositions n'ont pas
+   le droit de dériver l'une de l'autre au fil des retouches.
+
+   Le Vert est hors réglage, ici comme en 2D : c'est déjà la plus lumineuse
+   des cinq, la pousser encore la ferait baver sur ses voisines. */
+const COLOR_HEX_3D_BASE = {
   bleu: 0x3ab7ff,
   rose: 0xff5ec7,
   orange: 0xffa042,
   rouge: 0xff5959,
   vert: 0x2cff7a,
 };
+
+const COLOR_HEX_3D = Object.fromEntries(
+  Object.entries(COLOR_HEX_3D_BASE).map(([nom, valeur]) => [
+    nom,
+    BLOC_SANS_RETOUCHE.has(nom) ? valeur : eclaircirNombre(valeur, ECLAT_3D),
+  ])
+);
 
 const CELL = 1;
 const GAP = 0.096;

@@ -41,6 +41,20 @@ tient tout le reste, et elle se vérifie élément par élément :
 | `--sig-move` | `#71dbff` | passif, déplacement, portée |
 | `--sig-tele` | `#b88cff` | téléporteur, Zone Repos |
 
+**Le mot de la Phase porte la couleur de sa phase** : cyan pour la
+Programmation qui prépare, jaune pour l'Action où l'on joue, violet pour
+l'Événement qui vient de dehors, vert pour le Repos qui rend les cartes, rouge
+quand la partie est finie. On sait où on en est sans lire.
+
+Ces jetons valent `var(--…)`, donc ils se peignent mais ne se **calculent**
+pas. `HEX` (theme.js) en garde les valeurs littérales, pour que `encrePour`
+puisse décider d'une encre claire ou sombre — sans elle, toute touche colorée
+retombait sur le blanc, d'où le Scoring jaune illisible.
+
+Un bouton qui ne fait qu'**ouvrir un panneau** n'emprunte aucune de ces
+couleurs : c'est un interrupteur, son état actif se dit par le cerne et le
+texte allumés, jamais par un aplat.
+
 Un élément qui n'encode rien reste dans les gris teintés (`--text-dim`,
 `--text-faint`), tirés du violet du fond et jamais du gris neutre : un gris
 franc sur un fond coloré se lit comme une tache morte.
@@ -165,6 +179,11 @@ peine plus claire pour qu'on lise encore la trame des îlots. La rue avait
 d'abord été creusée en noir pour détacher la ville du fond ; elle rendait le
 plateau beaucoup trop sombre, et c'est aux bâtiments seuls de porter le
 contraste.
+
+L'exposition des blocs vit dans `theme.js` (`ECLAT_2D`, `ECLAT_3D`), pour les
+deux vues à la fois : elles montrent les mêmes blocs et leurs réglages n'ont
+pas le droit de dériver l'un de l'autre. Le **Vert en est exclu** — c'est déjà
+la plus lumineuse des cinq.
 
 Les bâtiments gardent la couleur de leur bloc du haut — c'est une donnée de
 jeu — **assombrie de 20 %** (`assombrir()` dans `RoundPanels.jsx`) : ils

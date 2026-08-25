@@ -19,7 +19,7 @@ import Icon from "./icons.jsx";
    l'arrière, et juste dessous l'afficheur : où on en est. C'est la première
    chose lue depuis l'autre bout de la table, donc c'est la seule chose de
    cette taille sur tout l'écran. */
-function Marquee({ mancheNumber, totalManches, phaseLabel, detonateurNom }) {
+function Marquee({ mancheNumber, totalManches, phase, detonateurNom }) {
   return (
     /* Ce bandeau était plus haut de moitié : le titre montait à 2,6 rem et
        chaque bloc portait sa propre ligne de libellé. Retour de Nikola : « je
@@ -61,7 +61,7 @@ function Marquee({ mancheNumber, totalManches, phaseLabel, detonateurNom }) {
         </span>
         <span style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2 }}>
           <span style={label(T.faint)}>Phase</span>
-          <span style={{ ...marquee("0.95rem", T.go), whiteSpace: "nowrap" }}>{phaseLabel}</span>
+          <span style={{ ...marquee("0.95rem", phase.couleur), whiteSpace: "nowrap" }}>{phase.mot}</span>
         </span>
       </div>
     </header>
@@ -69,16 +69,27 @@ function Marquee({ mancheNumber, totalManches, phaseLabel, detonateurNom }) {
 }
 
 export default function GameView(vm) {
-  /* Le libellé de phase vivait dans un panneau supprimé depuis. Il revient
-     ici, au seul endroit où il ne coûte pas une ligne d'écran : dans
-     l'afficheur du fronton, à côté du numéro de Manche qu'il qualifie. */
+  /* CHAQUE PHASE A SA COULEUR (demande de Nikola).
+
+     Le mot était toujours vert, donc il ne disait que « il y a une phase ».
+     Il porte maintenant l'information : on sait où on en est dans la Manche
+     sans lire, à la couleur seule, depuis l'autre bout de la table.
+
+     Les couleurs ne sont pas décoratives, elles reprennent le sens que le
+     signal a déjà partout ailleurs dans le jeu : le cyan du passif pour la
+     Programmation, qui prépare ; le jaune du tour pour l'Action, où l'on
+     joue ; le violet du téléporteur pour l'Événement, qui vient de dehors ;
+     le vert du disponible pour le Repos, qui rend les cartes ; le rouge du
+     blocage quand la partie est finie. */
   const PHASES = {
-    programmation: "Programmation",
-    action: "Action",
-    evenement: "Événement",
-    repos: "Repos",
+    programmation: { mot: "Programmation", couleur: T.move },
+    action: { mot: "Action", couleur: T.you },
+    evenement: { mot: "Événement", couleur: T.tele },
+    repos: { mot: "Repos", couleur: T.go },
   };
-  const phaseLabel = vm.gameOver ? "Terminée" : PHASES[vm.phase] || vm.phase;
+  const phaseCourante = vm.gameOver
+    ? { mot: "Terminée", couleur: T.stop }
+    : PHASES[vm.phase] || { mot: vm.phase, couleur: T.dim };
   const detonateurNom = vm.titanState?.detonateur
     ? vm.titanDisplayName(vm.titanState.detonateur)
     : null;
@@ -102,7 +113,7 @@ export default function GameView(vm) {
         <Marquee
           mancheNumber={vm.mancheNumber}
           totalManches={vm.manchesMaxPartie}
-          phaseLabel={phaseLabel}
+          phase={phaseCourante}
           detonateurNom={detonateurNom}
         />
 

@@ -307,153 +307,11 @@ export default function DecisionPanels({ vm }) {
   };
 
   return <>
-      {/* ── JOURNAL D'ACTIONS ──
-          Retour de Nikola : « comprendre ce qui vient de se passer » est l'une
-          des quatre frictions de la partie. Le journal les cumulait toutes :
-
-          · il se lisait du PLUS ANCIEN au plus récent, dans une boîte à
-            défilement de 220 px — pour voir ce qui venait d'arriver il fallait
-            l'ouvrir, puis descendre jusqu'en bas ;
-          · replié, il ne montrait rien du tout, alors que la chaîne de
-            réaction qu'on veut relire vient de se produire trois secondes plus
-            tôt.
-
-          Il se lit désormais à l'envers, du plus récent au plus ancien, et les
-          trois dernières lignes restent visibles en permanence. On voit ce qui
-          vient de se passer sans rien ouvrir ; on ouvre pour remonter le
-          temps. */}
-      {actionLog.length > 0 && (() => {
-        const lignes = actionLog.map((line, i) => ({
-          line,
-          i,
-          titanId: titanDeLaLigne(line),
-        }));
-        const visibles = filtreTitan === null
-          ? lignes
-          : lignes.filter((l) => l.titanId === filtreTitan);
-        // Du plus récent au plus ancien : c'est le sens dans lequel on
-        // consulte un journal de partie.
-        const recentesDabord = [...visibles].reverse();
-        const apercu = recentesDabord.slice(0, 3);
-        const compte = (id) => lignes.filter((l) => l.titanId === id).length;
-
-        return (
-          <div style={{
-            background: "rgba(0,0,0,.34)",
-            border: `2px solid ${T.edge}`,
-            borderRadius: T.rPlate,
-            padding: "9px 12px 4px",
-            marginBottom: 12,
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <button
-                onClick={() => setShowLog((v) => !v)}
-                aria-expanded={showLog}
-                style={{
-                  display: "flex", alignItems: "center", gap: 7,
-                  background: "none", border: "none", padding: 0, cursor: "pointer",
-                  textAlign: "left", ...label(T.dim, T.micro),
-                }}
-              >
-                <Icon
-                  name="next"
-                  size={11}
-                  style={{ transform: showLog ? "rotate(90deg)" : "none", transition: "transform 160ms ease" }}
-                />
-                Journal
-                <span style={readout("0.6rem", T.faint)}>{actionLog.length}</span>
-              </button>
-              {/* FERMER N'EST PAS VIDER — Nikola, 2026-08-18 : « j'aimerais
-                  pouvoir fermer les logs d'action sans les vider ». Le seul
-                  bouton du bandeau était une croix qui EFFAÇAIT tout
-                  l'historique. Les deux gestes sont distincts et nommés, et le
-                  plus destructeur n'est plus celui qui porte la croix. */}
-              {showLog && (
-                <button
-                  onClick={() => setActionLog([])}
-                  title="Effacer définitivement l'historique de la partie"
-                  style={{ ...cancelBtn(), color: T.faint, borderColor: T.rule }}
-                >
-                  Vider
-                </button>
-              )}
-            </div>
-
-            {/* Filtre par Titan (Nikola, 2026-08-24 : « journal d'actions
-                filtrable par Titan »). Le rattachement d'une ligne à un Titan
-                réutilise EXACTEMENT la détection qui sert au code couleur :
-                une seule règle, donc le filtre et la couleur ne peuvent pas
-                diverger. */}
-            {showLog && (
-              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", margin: "9px 0 2px" }}>
-                <button
-                  onClick={() => setFiltreTitan(null)}
-                  style={{
-                    ...cancelBtn(),
-                    borderColor: filtreTitan === null ? T.text : T.rule,
-                    color: filtreTitan === null ? T.text : T.faint,
-                  }}
-                >
-                  Tous
-                </button>
-                {titanState.players.map((t) => {
-                  const id = String(t.id);
-                  const actif = filtreTitan === id;
-                  return (
-                    <button
-                      key={id}
-                      onClick={() => setFiltreTitan((prev) => (prev === id ? null : id))}
-                      title={titanDisplayName ? titanDisplayName(t.id) : "Titan " + id}
-                      style={{
-                        ...cancelBtn(),
-                        gap: 5,
-                        borderColor: actif ? TITAN_COLORS[id]?.accent : T.rule,
-                        color: actif ? TITAN_COLORS[id]?.accent : T.faint,
-                      }}
-                    >
-                      <TitanIcon titanId={t.id} size={14} variant="plain" />
-                      {compte(id)}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            {visibles.length === 0 && (
-              <div style={{ ...prose(T.faint, T.micro), padding: "8px 0" }}>
-                Aucune ligne pour ce Titan.
-              </div>
-            )}
-
-            {/* Replié : les trois dernières lignes, toujours là.
-                Déplié : tout, du plus récent au plus ancien. */}
-            <div style={{
-              maxHeight: showLog ? 300 : undefined,
-              overflowY: showLog ? "auto" : "visible",
-              marginTop: 2,
-            }}>
-              {(showLog ? recentesDabord : apercu).map((l, rang) => (
-                <LigneJournal key={l.i} line={l.line} titanId={l.titanId} recente={rang === 0} />
-              ))}
-            </div>
-
-            {!showLog && visibles.length > 3 && (
-              <button
-                onClick={() => setShowLog(true)}
-                style={{
-                  ...label(T.faint, "0.68rem"),
-                  background: "none", border: "none", padding: "6px 0",
-                  cursor: "pointer", width: "100%", textAlign: "left",
-                }}
-              >
-                + {visibles.length - 3} ligne{visibles.length - 3 > 1 ? "s" : ""} plus tôt
-              </button>
-            )}
-          </div>
-        );
-      })()}
-
-
+      {/* Le décompte passe AVANT le journal : sur grand écran les deux vivent
+          dans la colonne de droite, qui défile pour elle-même, et le journal
+          repoussait sous la ligne de flottaison le panneau qu'on venait tout
+          juste d'ouvrir (Nikola : « je dois défiler vers le bas pour voir le
+          score »). Ce qu'on demande s'affiche en premier. */}
       {/* ── SCORING FINAL ── */}
       {showScoring && (
         <div style={{
@@ -466,31 +324,12 @@ export default function DecisionPanels({ vm }) {
               {gameOver ? "Décompte final" : "Décompte — aperçu"}
             </h2>
           </div>
-          {/* Le décompte ne commence pas tant que chaque Vert n'a pas trouvé
-              sa catégorie : c'est le dernier geste de la partie, et il était
-              invisible tant que l'écran restait enterré sous le plateau. */}
-          {gameOver && (
-            <div style={{
-              background: vertsRestants > 0 ? "rgba(34,197,94,.14)" : "rgba(255,217,61,.12)",
-              border: `1.5px solid ${vertsRestants > 0 ? "#22C55E" : "rgba(255,217,61,.5)"}`,
-              borderRadius: 10, padding: "8px 12px", marginBottom: 12,
-              fontSize: ".78rem", color: "rgba(255,255,255,.8)",
-            }}>
-              {vertsRestants > 0
-                ? <>🟢 <strong style={{ color: "#7ef2a8" }}>Partie terminée.</strong> Il reste {vertsRestants} Bloc{vertsRestants > 1 ? "s" : ""} Vert{vertsRestants > 1 ? "s" : ""} à placer. <strong>Les scores restent cachés</strong> jusqu'à ce que tout le monde ait choisi.</>
-                : <>🏁 <strong style={{ color: "#FFD93D" }}>Partie terminée.</strong> Tous les Blocs Verts sont placés, le décompte ci-dessous est définitif.</>}
-            </div>
-          )}
-          {!gameOver && (
-            <div style={{
-              background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.15)",
-              borderRadius: 10, padding: "8px 12px", marginBottom: 12,
-              fontSize: ".74rem", color: "rgba(255,255,255,.6)",
-            }}>
-              Partie en cours : les Blocs Verts ne sont pas encore placés et ne comptent donc nulle part.
-              Ce tableau dit où en est chacun, pas qui gagnera.
-            </div>
-          )}
+          {/* Les deux pavés qui expliquaient ici le sort des Blocs Verts ont
+              été retirés (Nikola) : ils poussaient le tableau — la seule chose
+              qu'on vient chercher — sous la ligne de flottaison du panneau. La
+              règle qu'ils énonçaient reste appliquée et reste dite, mais là où
+              on agit : le décompte se masque tout seul tant qu'un Vert n'est
+              pas placé, et c'est le placeur lui-même qui l'annonce. */}
 
           {/* ── PLACEMENT SECRET DES BLOCS VERTS ──
               Il n'est proposé qu'à la FIN de la partie. Il s'ouvrait jusqu'ici
@@ -789,5 +628,150 @@ export default function DecisionPanels({ vm }) {
         </div>
       )}
 
+      {/* ── JOURNAL D'ACTIONS ──
+          Retour de Nikola : « comprendre ce qui vient de se passer » est l'une
+          des quatre frictions de la partie. Le journal les cumulait toutes :
+
+          · il se lisait du PLUS ANCIEN au plus récent, dans une boîte à
+            défilement de 220 px — pour voir ce qui venait d'arriver il fallait
+            l'ouvrir, puis descendre jusqu'en bas ;
+          · replié, il ne montrait rien du tout, alors que la chaîne de
+            réaction qu'on veut relire vient de se produire trois secondes plus
+            tôt.
+
+          Il se lit désormais à l'envers, du plus récent au plus ancien, et les
+          trois dernières lignes restent visibles en permanence. On voit ce qui
+          vient de se passer sans rien ouvrir ; on ouvre pour remonter le
+          temps. */}
+      {actionLog.length > 0 && (() => {
+        const lignes = actionLog.map((line, i) => ({
+          line,
+          i,
+          titanId: titanDeLaLigne(line),
+        }));
+        const visibles = filtreTitan === null
+          ? lignes
+          : lignes.filter((l) => l.titanId === filtreTitan);
+        // Du plus récent au plus ancien : c'est le sens dans lequel on
+        // consulte un journal de partie.
+        const recentesDabord = [...visibles].reverse();
+        const apercu = recentesDabord.slice(0, 3);
+        const compte = (id) => lignes.filter((l) => l.titanId === id).length;
+
+        return (
+          <div style={{
+            background: "rgba(0,0,0,.34)",
+            border: `2px solid ${T.edge}`,
+            borderRadius: T.rPlate,
+            padding: "9px 12px 4px",
+            marginBottom: 12,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <button
+                onClick={() => setShowLog((v) => !v)}
+                aria-expanded={showLog}
+                style={{
+                  display: "flex", alignItems: "center", gap: 7,
+                  background: "none", border: "none", padding: 0, cursor: "pointer",
+                  textAlign: "left", ...label(T.dim, T.micro),
+                }}
+              >
+                <Icon
+                  name="next"
+                  size={11}
+                  style={{ transform: showLog ? "rotate(90deg)" : "none", transition: "transform 160ms ease" }}
+                />
+                Journal
+                <span style={readout("0.6rem", T.faint)}>{actionLog.length}</span>
+              </button>
+              {/* FERMER N'EST PAS VIDER — Nikola, 2026-08-18 : « j'aimerais
+                  pouvoir fermer les logs d'action sans les vider ». Le seul
+                  bouton du bandeau était une croix qui EFFAÇAIT tout
+                  l'historique. Les deux gestes sont distincts et nommés, et le
+                  plus destructeur n'est plus celui qui porte la croix. */}
+              {showLog && (
+                <button
+                  onClick={() => setActionLog([])}
+                  title="Effacer définitivement l'historique de la partie"
+                  style={{ ...cancelBtn(), color: T.faint, borderColor: T.rule }}
+                >
+                  Vider
+                </button>
+              )}
+            </div>
+
+            {/* Filtre par Titan (Nikola, 2026-08-24 : « journal d'actions
+                filtrable par Titan »). Le rattachement d'une ligne à un Titan
+                réutilise EXACTEMENT la détection qui sert au code couleur :
+                une seule règle, donc le filtre et la couleur ne peuvent pas
+                diverger. */}
+            {showLog && (
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", margin: "9px 0 2px" }}>
+                <button
+                  onClick={() => setFiltreTitan(null)}
+                  style={{
+                    ...cancelBtn(),
+                    borderColor: filtreTitan === null ? T.text : T.rule,
+                    color: filtreTitan === null ? T.text : T.faint,
+                  }}
+                >
+                  Tous
+                </button>
+                {titanState.players.map((t) => {
+                  const id = String(t.id);
+                  const actif = filtreTitan === id;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setFiltreTitan((prev) => (prev === id ? null : id))}
+                      title={titanDisplayName ? titanDisplayName(t.id) : "Titan " + id}
+                      style={{
+                        ...cancelBtn(),
+                        gap: 5,
+                        borderColor: actif ? TITAN_COLORS[id]?.accent : T.rule,
+                        color: actif ? TITAN_COLORS[id]?.accent : T.faint,
+                      }}
+                    >
+                      <TitanIcon titanId={t.id} size={14} variant="plain" />
+                      {compte(id)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {visibles.length === 0 && (
+              <div style={{ ...prose(T.faint, T.micro), padding: "8px 0" }}>
+                Aucune ligne pour ce Titan.
+              </div>
+            )}
+
+            {/* Replié : les trois dernières lignes, toujours là.
+                Déplié : tout, du plus récent au plus ancien. */}
+            <div style={{
+              maxHeight: showLog ? 300 : undefined,
+              overflowY: showLog ? "auto" : "visible",
+              marginTop: 2,
+            }}>
+              {(showLog ? recentesDabord : apercu).map((l, rang) => (
+                <LigneJournal key={l.i} line={l.line} titanId={l.titanId} recente={rang === 0} />
+              ))}
+            </div>
+
+            {!showLog && visibles.length > 3 && (
+              <button
+                onClick={() => setShowLog(true)}
+                style={{
+                  ...label(T.faint, "0.68rem"),
+                  background: "none", border: "none", padding: "6px 0",
+                  cursor: "pointer", width: "100%", textAlign: "left",
+                }}
+              >
+                + {visibles.length - 3} ligne{visibles.length - 3 > 1 ? "s" : ""} plus tôt
+              </button>
+            )}
+          </div>
+        );
+      })()}
   </>;
 }

@@ -220,3 +220,68 @@ export const hairline = {
   border: "none",
   margin: `${T.s3} 0`,
 };
+
+/* ── LES VALEURS LITTÉRALES DES SIGNAUX ────────────────────
+   `T.you` et compagnie valent `"var(--sig-you)"` : parfait pour peindre,
+   inutilisable pour CALCULER. `encrePour` (styles.js) doit décider si une
+   touche prend une encre claire ou sombre selon la luminance de son aplat —
+   or elle recevait une chaîne `var(…)`, qu'elle ne savait pas lire, et
+   retombait sur le blanc à chaque fois.
+
+   D'où le bouton Scoring jaune à écriture blanche, illisible. Et le même
+   défaut, invisible, sur toutes les autres touches colorées : elles n'ont
+   jamais eu leur encre calculée, elles ont juste eu de la chance.
+
+   Cette table est la seule copie des valeurs. Elle doit rester alignée sur
+   les jetons de `index.css` — c'est le prix à payer pour pouvoir calculer
+   avec, en attendant `getComputedStyle` qui n'est pas disponible au moment
+   où un style en ligne est fabriqué. */
+export const HEX = {
+  "var(--sig-you)": "#ffd93d",
+  "var(--sig-go)": "#16e08c",
+  "var(--sig-warn)": "#fb923c",
+  "var(--sig-stop)": "#f44336",
+  "var(--sig-move)": "#71dbff",
+  "var(--sig-tele)": "#b88cff",
+  "var(--text)": "#fffaee",
+  "var(--text-dim)": "#c0b6d8",
+  "var(--text-faint)": "#8c82a8",
+  "var(--ink-plate)": "#221a45",
+  "var(--ink-plate-hi)": "#2f2459",
+  "var(--ink-bezel)": "#3d2775",
+};
+
+/** Rend une valeur calculable : un `var(--x)` connu devient son hex. */
+export function versHex(valeur) {
+  if (typeof valeur !== "string") return valeur;
+  return HEX[valeur] || valeur;
+}
+
+/* ── ÉCLAT DES BLOCS ───────────────────────────────────────
+   Les cinq couleurs de blocs sont des DONNÉES DE JEU : on ne les remplace
+   pas, on règle seulement leur exposition à l'écran. Les deux vues ont leur
+   propre réglage parce qu'elles n'ont pas le même fond ni le même éclairage —
+   la 2D est un aplat sur un sol clair, la 3D est une face éclairée par trois
+   lampes.
+
+   LE VERT EST HORS RÉGLAGE (demande de Nikola). C'est déjà la plus lumineuse
+   et la plus saturée des cinq : la pousser encore la fait baver sur ses
+   voisines et lui fait perdre son chiffre de Socle. */
+export const BLOC_SANS_RETOUCHE = new Set(["vert"]);
+export const ECLAT_2D = 1.2;
+export const ECLAT_3D = 1.1;
+
+/** Éclaircit un `#rrggbb`. Le facteur est relatif, le résultat est borné. */
+export function eclaircir(hex, facteur) {
+  if (typeof hex !== "string" || hex[0] !== "#" || hex.length !== 7) return hex;
+  const canal = (i) => Math.min(255, Math.round(parseInt(hex.slice(i, i + 2), 16) * facteur));
+  const h = (n) => n.toString(16).padStart(2, "0");
+  return `#${h(canal(1))}${h(canal(3))}${h(canal(5))}`;
+}
+
+/** La même chose sur un entier 0xrrggbb, la forme qu'attend Three.js. */
+export function eclaircirNombre(num, facteur) {
+  const canal = (decalage) =>
+    Math.min(255, Math.round(((num >> decalage) & 0xff) * facteur));
+  return (canal(16) << 16) | (canal(8) << 8) | canal(0);
+}

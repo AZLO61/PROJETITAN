@@ -11,7 +11,7 @@ import { COLOR_HEX, ROWS, isBuildingCell, isSocleMarker, socleValue } from "../.
 import { BLOCK_NAME } from "../blockNames.js";
 import { btnStyle, cancelBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
-import { T, readout } from "../theme.js";
+import { T, readout, eclaircir, ECLAT_2D, BLOC_SANS_RETOUCHE } from "../theme.js";
 
 /* ── LE SOL DE BIG CITY ────────────────────────────────────
    Un seul matériau pour la rue et pour la parcelle rasée : c'est le même sol,
@@ -21,14 +21,17 @@ import { T, readout } from "../theme.js";
 const SOL_RUE = "rgba(255,250,238,.075)";
 const SOL_PARCELLE = "rgba(255,250,238,.115)";
 
-/* Les bâtiments sont assombris de 20 % (demande de Nikola). Ils gardent leur
-   couleur de bloc — c'est une donnée de jeu — mais cessent de vibrer sur le
-   sol clair, et les chiffres blancs de Socle redeviennent lisibles dessus. */
-function assombrir(hex, facteur = 0.8) {
-  if (!hex || hex[0] !== "#" || hex.length !== 7) return hex;
-  const c = (i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * facteur);
-  const h = (n) => n.toString(16).padStart(2, "0");
-  return `#${h(c(1))}${h(c(3))}${h(c(5))}`;
+/* ÉCLAT DES BÂTIMENTS. Ils ont d'abord été assombris de 20 % pour cesser de
+   vibrer sur le sol clair ; à l'essai suivant, Nikola les a trouvés « 20 %
+   pas assez illuminés ». Ils reprennent donc ce cran.
+
+   Le réglage vit dans theme.js, avec celui de la 3D : les deux vues montrent
+   les MÊMES blocs, et leurs expositions n'ont pas le droit de dériver l'une
+   de l'autre. Le Vert en est exclu — c'est déjà la plus lumineuse des cinq,
+   la pousser encore lui ferait perdre son chiffre de Socle. */
+function eclatBloc(couleur) {
+  const hex = COLOR_HEX[couleur];
+  return BLOC_SANS_RETOUCHE.has(couleur) ? hex : eclaircir(hex, ECLAT_2D);
 }
 
 export default function RoundPanels({ vm }) {
@@ -550,8 +553,8 @@ export default function RoundPanels({ vm }) {
               } else if (inPerimeter) {
                 if (isBldg && topBlock) {
                   // Bâtiment dans le périmètre : couleur du bloc seule, sans
-                  // overlay Titan — assombrie comme partout ailleurs.
-                  cellBg = assombrir(COLOR_HEX[topBlock]);
+                  // overlay Titan — même exposition que partout ailleurs.
+                  cellBg = eclatBloc(topBlock);
                 } else if (isBldg) {
                   cellBg = `${perimAccent}22`;
                 } else {
@@ -561,7 +564,7 @@ export default function RoundPanels({ vm }) {
                 // Une parcelle de bâtiment vidée reste une PARCELLE : elle ne
                 // doit pas se confondre avec la rue, sinon on ne voit plus la
                 // trame de la ville et on perd le repère du Périmètre.
-                cellBg = topBlock ? assombrir(COLOR_HEX[topBlock]) : SOL_PARCELLE;
+                cellBg = topBlock ? eclatBloc(topBlock) : SOL_PARCELLE;
               } else {
                 /* LA RUE PREND LE MÊME SOL QUE LES PARCELLES.
                    Elle avait d'abord été creusée à `rgba(0,0,0,.42)` pour

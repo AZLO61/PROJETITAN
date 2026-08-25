@@ -6,7 +6,7 @@ import Icon from "../icons.jsx";
 /* Une commande du meuble : icône dessinée + libellé, jamais un émoji. Toutes
    au même gabarit, pour que la rangée se lise comme une rangée de touches et
    pas comme une collection de boutons de tailles différentes. */
-function Commande({ onClick, disabled, title, icon, children, tone = null, badge = null, nomComplet = null }) {
+function Commande({ onClick, disabled, title, icon, children, tone = null, badge = null, nomComplet = null, enfonce = false }) {
   return (
     <button
       onClick={onClick}
@@ -22,6 +22,11 @@ function Commande({ onClick, disabled, title, icon, children, tone = null, badge
         cursor: disabled ? "not-allowed" : "pointer",
         fontSize: T.micro,
         padding: "9px 12px",
+        // Interrupteur allumé : le cerne et le texte prennent la couleur, pas
+        // l'aplat. Un aplat clair sous un libellé court se lit moins bien
+        // qu'un contour, et n'entre pas en concurrence avec les vraies
+        // actions du tour, qui sont pleines.
+        ...(enfonce ? { borderColor: T.you, color: T.you } : null),
       }}
     >
       <Icon name={icon} size={15} />
@@ -92,15 +97,24 @@ export default function HeaderPhase({ vm }) {
         >
           Annuler
         </Commande>
-        {/* Le vert dit « disponible, validé » partout ailleurs dans le jeu :
-            sur un bouton d'affichage, il annonçait une action réussie qui
-            n'existe pas. Le décompte est le trophée de fin de partie, donc le
-            jaune — la même couleur que la lanterne qu'il porte et que l'écran
-            de décompte lui-même. */}
+        {/* SCORING : UN INTERRUPTEUR D'AFFICHAGE, PAS UNE ACTION.
+
+            Il a été vert, puis jaune, et aucun des deux n'allait. Le vert dit
+            « disponible, validé » partout ailleurs : sur un bouton qui ne fait
+            qu'ouvrir un panneau, il annonçait une réussite qui n'existe pas.
+            Le jaune, lui, est la couleur de l'action primaire du tour — et il
+            arrivait en plus avec du texte blanc dessus, illisible (le vrai
+            défaut était dans `encrePour`, corrigé depuis).
+
+            La bonne réponse était ailleurs : Scoring est un interrupteur, au
+            même titre que Vue 3D et Règles, qui n'ont jamais porté de couleur
+            de remplissage. Son état actif se dit donc comme celui d'un
+            interrupteur — cerne et texte allumés, aplat éteint — au lieu
+            d'emprunter une couleur qui veut dire autre chose. */}
         <Commande
           onClick={() => setShowScoring((s) => !s)}
           icon="lantern"
-          tone={showScoring ? T.you : null}
+          enfonce={showScoring}
           title="Afficher ou masquer le décompte des points"
         >
           Scoring

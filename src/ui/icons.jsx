@@ -49,25 +49,30 @@ const P = {
      jeu (`public/assets/rules/adrenaline.png`), via `<AdrenalineIcon>` plus
      bas. C'est un dessin du livret, il vaut mieux que ma paraphrase. */
 
-  /* Bagarre : le poing, de profil, en blocs. Deux versions ont échoué avant
-     celle-ci — un poing à quatre tracés imbriqués qui se refermait en pâté à
-     13 px, puis deux chevrons qui se lisaient comme une paire de ciseaux.
-     Le poing en blocs tient parce qu'il n'a que des formes pleines et un
-     poignet : à n'importe quelle taille, il reste un poing. */
+  /* Bagarre : le gant de boxe (demande de Nikola). Trois tentatives ont
+     précédé — un poing à quatre tracés imbriqués qui se refermait en pâté à
+     13 px, deux chevrons qui se lisaient comme une paire de ciseaux, puis un
+     poing en blocs qu'on prenait pour une prise électrique. Le gant a une
+     silhouette que personne ne confond : mitaine ronde, pouce sur le côté,
+     poignet net en dessous. */
   brawl: (
     <>
-      <path d="M3 8h10a3 3 0 0 1 3 3v3a3 3 0 0 1-3 3H3z" />
-      <path d="M7 8v10M11 8v10" />
-      <path d="M16 11h5v4h-5" />
+      <path d="M7 4h7a5 5 0 0 1 5 5v3a4 4 0 0 1-4 4H7z" />
+      <path d="M7 8H5a2.5 2.5 0 0 0 0 5h2" />
+      <path d="M7 16h11v3a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z" />
     </>
   ),
-  /* Destruction : un bloc fendu de haut en bas. L'escalier descendant qui
-     servait ici se lisait comme un graphique en marches, pas comme une
-     démolition — c'est la FÊLURE qui dit que le bâtiment est cassé. */
+  /* Destruction : l'explosion (demande de Nikola). L'escalier descendant se
+     lisait comme un graphique en marches, le bloc fendu comme un colis. Une
+     étoile à pointes irrégulières ne se lit que d'une seule façon.
+
+     Elle est proche du pictogramme de Tout Casser, et c'est cohérent : cette
+     carte est le principal pourvoyeur de Destruction. Tout Casser rayonne
+     depuis un centre vide (l'onde qui part du Titan), l'explosion est une
+     masse pleine (ce qui reste du bâtiment). */
   wreck: (
     <>
-      <path d="M4 21V4h16v17z" />
-      <path d="M12 4l-3 7h5l-3 10" />
+      <path d="M12 2l2.4 5.2L20 4.6l-1.6 5.3 5.1 1.9-5.1 2 1.6 5.2-5.6-2.6L12 22l-2.4-5.6L4 19l1.6-5.2-5.1-2 5.1-1.9L4 4.6l5.6 2.6z" />
     </>
   ),
   // Bloc de béton.

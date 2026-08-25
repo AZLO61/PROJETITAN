@@ -15,13 +15,20 @@
    existent pour que le reste de l'application hérite du monde sans être
    réécrit ligne à ligne.
 ============================================================ */
-import { T } from "./theme.js";
+import { T, versHex } from "./theme.js";
 
 /* Une couleur d'aplat clair demande une encre sombre, et l'inverse. Le
    calcul est fait sur la luminance perçue, pas sur la moyenne des canaux :
    le jaune #FFD93D et le bleu #2D8DF5 ont des moyennes proches et des
    luminances qui n'ont rien à voir. */
-function encrePour(hex) {
+function encrePour(couleur) {
+  /* BUG DU BOUTON JAUNE À ÉCRITURE BLANCHE (Nikola).
+     Les appelants passent des jetons — `T.you` vaut `"var(--sig-you)"` — et
+     cette fonction ne lisait que les `#rrggbb`. Toute couleur en `var(…)`
+     tombait donc dans le repli blanc, quelle que soit sa luminance : sur le
+     jaune, texte blanc sur fond clair, illisible. Le défaut valait pour
+     TOUTES les touches colorées, il ne se voyait juste que sur celle-là. */
+  const hex = versHex(couleur);
   if (!hex || typeof hex !== "string" || hex[0] !== "#") return T.text;
   const h = hex.length === 4
     ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`
