@@ -107,6 +107,7 @@ export default function RoundPanels({ vm }) {
     bbDestIsBuilding,
     moveMode,
     recupMode,
+    traceVol,
     waitingNextTitan,
     titanProfiles,
     profilsReveles,
@@ -203,6 +204,10 @@ export default function RoundPanels({ vm }) {
   const cellulesActives = (() => {
     const out = [];
     const add = (key, couleur, opacite) => out.push({ key, couleur, opacite });
+    /* La trace de vol se dessine dans les DEUX vues : elle est ajoutee en
+       PREMIER pour que les cases d'action, ajoutees ensuite, restent visibles
+       par-dessus si les deux se superposent. */
+    if (traceVol && traceVol.length > 0) traceVol.forEach((k) => add(k, 0xffd93d, 0.7));
     if (currentRepli) {
       currentRepli.cases.forEach((k) =>
         add(k, 0xfb923c, k === currentRepli.defaut ? 0.75 : 0.45));
@@ -487,8 +492,17 @@ export default function RoundPanels({ vm }) {
               // Fond de la case dans le périmètre :
               // bâtiment → teinte du Titan en overlay sur la couleur du bloc du dessus
               // case vide → teinte légère
+              /* TRACE DE VOL (Nikola, 2026-08-24). Les cases que l'element
+                 vient de traverser, rejouees case par case juste apres la
+                 resolution. Testee en premier : c'est un evenement bref, il
+                 doit passer par-dessus les surlignages permanents, sinon il
+                 disparait derriere le perimetre du Titan actif. */
+              const dansLaTrace = traceVol && traceVol.includes(key);
+
               let cellBg;
-              if (repliCible) {
+              if (dansLaTrace) {
+                cellBg = "rgba(255,217,61,.45)"; // jaune vif, le temps du vol
+              } else if (repliCible) {
                 cellBg = "rgba(239,68,68,.22)"; // la case qu'il n'a pas pu atteindre
               } else if (repliDefaut) {
                 cellBg = "rgba(251,146,60,.34)"; // là où il se poserait sans choix
@@ -532,6 +546,11 @@ export default function RoundPanels({ vm }) {
                 // en retrait des cases bâtiment tout en restant lisible.
                 cellBg = "rgba(255,255,255,.07)";
               }
+
+              // Cases sur lesquelles un clic declenche une ACTION (selectionner
+              // un Titan n'en est pas une).
+              const estActionnable = repliSelectable || jnpSelectable || bbSelectable
+                || teaSelectable || moveSelectable || recupSelectable || ecroulSelectable;
 
               return (
                 <div
@@ -596,6 +615,17 @@ export default function RoundPanels({ vm }) {
                     // empêchait la case de suivre une colonne plus étroite sur
                     // téléphone et débordait la grille.
                     minWidth: 0, aspectRatio: "1 / 1", borderRadius: 4, position: "relative",
+                    /* PULSATION DES CASES D'ACTION (Nikola, 2026-08-24, « on
+                       teste mais pas sûr »). Volontairement TRES discrete :
+                       2,4 s par cycle et 6 % d'amplitude, la ou une pulsation
+                       marquee fatiguerait l'oeil sur une partie d'1 h 30 —
+                       c'est exactement le motif pour lequel l'ancienne
+                       animation "titanPulse" avait ete retiree. Elle ne touche
+                       QUE les cases cliquables, jamais le perimetre.
+
+                       Pour la retirer : supprimer cette ligne et le bloc
+                       "@keyframes pulseAction" en bas du composant. */
+                    animation: estActionnable ? "pulseAction 2.4s ease-in-out infinite" : undefined,
                     zIndex: hoverCell === key ? 55 : undefined,
                     cursor: repliSelectable || jnpSelectable || bbSelectable || bbInPath || teaSelectable || moveSelectable || recupSelectable || titansByCell[key] ? "pointer" : "default",
                     background: cellBg,
@@ -741,6 +771,10 @@ export default function RoundPanels({ vm }) {
             <Gouttiere cle={`${r}9`} zone="droite" />
           </React.Fragment>
         ))}
+        {/* Amplitude volontairement faible : la case reste lisible en
+            permanence, la pulsation ne fait que la signaler du coin de
+            l'oeil. Voir la propriete "animation" sur la case, plus haut. */}
+        <style>{"@keyframes pulseAction { 0%, 100% { opacity: 1; } 50% { opacity: .94; } }"}</style>
         {/* Gouttière basse : attente sous la ligne I */}
         <div /><div />
         {[1,2,3,4,5,6,7,8,9].map((c) => <Gouttiere key={`bas${c}`} cle={`I${c}`} zone="bas" />)}

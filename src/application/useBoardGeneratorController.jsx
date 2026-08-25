@@ -597,7 +597,56 @@ export function useBoardGeneratorController() {
   const [recupMode, setRecupMode] = useState(false);
   const [passifUsed, setPassifUsed] = useState({});
   // Animation timing: case/case = 1s, action complète = 5s
+  /* TRACE DE VOL (Nikola, 2026-08-24 : « animation de la trajectoire »).
+     Les cases traversees par le dernier element projete, rejouees a l'ecran
+     apres coup. La resolution, elle, reste synchrone et inchangee : on ne
+     defere rien, on ne fait que MONTRER ou les choses sont passees — c'est
+     ce qui rend cette animation sans risque pour le moteur.
+
+     Un rebond ou une traversee de faille se voient donc enfin : ils etaient
+     jusqu'ici deduits du seul point d'arrivee. */
+  const [traceVol, setTraceVol] = useState([]);
+  const traceTimersRef = useRef([]);
   const [animating, setAnimating] = useState(false);
+
+  /* Rejoue les trajectoires collectees. Toutes en PARALLELE (pas l'une apres
+     l'autre) : un Tout Casser projette jusqu'a huit elements a la fois, et
+     c'est bien ce qui se passe au meme instant dans la fiction du jeu. La
+     duree totale reste donc courte quel que soit le nombre d'elements.
+
+     Les minuteurs vivent dans une ref pour pouvoir etre annules : sans quoi
+     une trace en cours se superposerait a la carte suivante, ou survivrait a
+     un « Annuler ». */
+  const arreterTrace = useCallback(() => {
+    traceTimersRef.current.forEach(clearTimeout);
+    traceTimersRef.current = [];
+    setTraceVol([]);
+  }, []);
+
+  const animerTrajectoires = useCallback((trajectoires) => {
+    arreterTrace();
+    if (!trajectoires || trajectoires.length === 0) return;
+    // La case de depart n'est pas une case traversee : on l'ecarte.
+    const vols = trajectoires
+      .map((t) => (t.cases || []).slice(1))
+      .filter((cases) => cases.length > 0);
+    if (vols.length === 0) return;
+
+    const PAS_MS = 110;
+    const TENUE_MS = 650; // temps de lecture une fois la trace complete
+    const longueurMax = Math.max(...vols.map((v) => v.length));
+
+    for (let i = 0; i < longueurMax; i++) {
+      const casesDuPas = vols.map((v) => v[Math.min(i, v.length - 1)]);
+      traceTimersRef.current.push(setTimeout(() => {
+        // Cumul : la trace s'allonge derriere l'element au lieu de sauter de
+        // case en case, ce qui rend le rebond lisible.
+        setTraceVol((prev) => [...prev, ...casesDuPas.filter((k) => !prev.includes(k))]);
+      }, i * PAS_MS));
+    }
+    traceTimersRef.current.push(setTimeout(arreterTrace, longueurMax * PAS_MS + TENUE_MS));
+  }, [arreterTrace]);
+
   const [animLabel, setAnimLabel] = useState("");
 
   // ── TOUR PAR TOUR (Phase Action) ──
@@ -745,6 +794,7 @@ export function useBoardGeneratorController() {
     setPhase(snap.phase);
     setPassifUsed(structuredClone(snap.passifUsed));
     setActionLog([...snap.actionLog]);
+    arreterTrace(); // la trace decrirait un vol que l'annulation vient d'effacer
     setMoveMode(false); setRecupMode(false); setBbMode(false); setBbPath([]); setBbSurvol([]);
     setJnpMode(false); setJnpSelected([]); setGraouMode(false);
     /* Les files en attente sont RESTAURÉES, plus vidées. Les vider défaisait
@@ -790,7 +840,7 @@ export function useBoardGeneratorController() {
     setAnimating(false); setAnimLabel("");
     setUndoTick((n) => n + 1);
     setUndoStack((prev) => prev.slice(0, -1));
-  }, [undoStack]);
+  }, [undoStack, arreterTrace]);
 
   useEffect(() => {
     if (activePlayerId == null) return;
@@ -2157,19 +2207,21 @@ export function useBoardGeneratorController() {
     const attacker = titanState.players.find((t) => t.id === selectedTitanId);
     const actuallyUseAdrenaline = Math.min(teaAdrenaline, attacker.adrenaline || 0);
     const replis = [];
+    const trajectoires = [];
     const result = resolveTeteEnAvant(selectedTitanId, dir.dr, dir.dc, actuallyUseAdrenaline, {
-      board: state.board, titans: titanState.players, looseBlocks, replis,
+      board: state.board, titans: titanState.players, looseBlocks, replis, trajectoires,
     });
     if (actuallyUseAdrenaline) attacker.adrenaline -= actuallyUseAdrenaline;
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
     enqueueReplis(replis);
+    animerTrajectoires(trajectoires);
     markCardPlayed(selectedTitanId, "tete_en_avant");
     setTeaMode(false);
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, teaTargets, teaAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, teaTargets, teaAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, animerTrajectoires, canPlayCard, markCardPlayed, captureSnapshot]);
 
   // `compensateFatiguedRounds` vivait ici. Il rattrapait le compteur de
   // rounds quand la Fatigue volait une carte ENCORE PROGRAMMÉE, laissant sa
@@ -2344,13 +2396,15 @@ export function useBoardGeneratorController() {
     const attacker = titanState.players.find((t) => t.id === selectedTitanId);
     const actuallyUseAdrenaline = Math.min(bbAdrenaline, attacker.adrenaline || 0);
     const replis = [];
+    const trajectoires = [];
     const result = resolveBoingBoing(selectedTitanId, bbDest, actuallyUseAdrenaline, mancheNumber, {
-      board: state.board, titans: titanState.players, looseBlocks, replis,
+      board: state.board, titans: titanState.players, looseBlocks, replis, trajectoires,
     });
     if (result.applied && actuallyUseAdrenaline) attacker.adrenaline -= actuallyUseAdrenaline;
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
     enqueueReplis(replis);
+    animerTrajectoires(trajectoires);
     /* Atterrissage sur un Amas : la carte est jouée, mais la répartition des
        débris revient au joueur, case par case (ruling Nikola du 2026-08-16).
 
@@ -2384,7 +2438,7 @@ export function useBoardGeneratorController() {
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, bbDest, bbDestIsBuilding, bbAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, bbDest, bbDestIsBuilding, bbAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, animerTrajectoires, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
 
   // Le Mouvement gratuit vaut 2 cases, +1 par Adrénaline dépensée, MOINS ce
   // qu'a coûté une éventuelle rentrée sur le plateau ce tour-ci. C'est ce
@@ -2473,19 +2527,21 @@ export function useBoardGeneratorController() {
     if (!ecroulement || ecroulement.choix.length !== ecroulement.blocs.length) return;
     captureSnapshot();
     const replis = [];
+    const trajectoires = [];
     const result = resolveEcroulementAmas(
       activePlayerId,
       { cellKey: ecroulement.cellKey, blocs: ecroulement.blocs, energie: ecroulement.energie },
       ecroulement.choix,
-      { board: state.board, titans: titanState.players, looseBlocks, replis }
+      { board: state.board, titans: titanState.players, looseBlocks, replis, trajectoires }
     );
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueReplis(replis);
+    animerTrajectoires(trajectoires);
     setEcroulement(null);
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [ecroulement, activePlayerId, state.board, titanState.players, looseBlocks, enqueueReplis, captureSnapshot]);
+  }, [ecroulement, activePlayerId, state.board, titanState.players, looseBlocks, enqueueReplis, animerTrajectoires, captureSnapshot]);
   const { reachable: moveReachable, classic: moveClassic, teleport: moveTeleport } = selectedTitan
     ? getMovementReachable(selectedTitan.cell, moveMaxRange, state.board, titansByCell, looseBlocks)
     : { reachable: new Set(), classic: new Set(), teleport: new Set() };
@@ -2746,8 +2802,9 @@ export function useBoardGeneratorController() {
     // « bagarre non remportée = aucun point ». Le contrôleur ne fait plus
     // que ce qui lui revient : débiter les mises et rafraîchir l'affichage.
     const replis = [];
+    const trajectoires = [];
     const result = resolveFautPasMeChauffer(fpmcAttackerId, cur.defenderId, fpmcNTargets, {
-      board: state.board, titans: titanState.players, looseBlocks, replis,
+      board: state.board, titans: titanState.players, looseBlocks, replis, trajectoires,
     }, { attackerBid: cur.attackerBid, defenderBid: cur.defenderBid });
 
     attacker.adrenaline = Math.max(0, (attacker.adrenaline || 0) - cur.attackerBid);
@@ -2755,11 +2812,12 @@ export function useBoardGeneratorController() {
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
     enqueueReplis(replis);
+    animerTrajectoires(trajectoires);
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setFpmcCurrent(null);
-  }, [fpmcCurrent, fpmcAttackerId, fpmcNTargets, titanState.players, state.board, looseBlocks, enqueueDecisions, enqueueReplis, captureSnapshot]);
+  }, [fpmcCurrent, fpmcAttackerId, fpmcNTargets, titanState.players, state.board, looseBlocks, enqueueDecisions, enqueueReplis, animerTrajectoires, captureSnapshot]);
 
   const jouerToutCasser = useCallback(() => {
     if (!selectedTitanId || !canPlayCard("tout_casser")) return;
@@ -2771,16 +2829,18 @@ export function useBoardGeneratorController() {
     const bonus = Math.min(Number(tcAdrenaline) || 0, attacker.adrenaline || 0);
     if (bonus > 0) attacker.adrenaline -= bonus;
     const replis = [];
-    const result = resolveToutCasser(selectedTitanId, { board: state.board, titans: titanState.players, looseBlocks, replis }, bonus);
+    const trajectoires = [];
+    const result = resolveToutCasser(selectedTitanId, { board: state.board, titans: titanState.players, looseBlocks, replis, trajectoires }, bonus);
     setActionLog((prev) => [...prev, ...result.log]);
     enqueueDecisions(result.decisions);
     enqueueReplis(replis);
+    animerTrajectoires(trajectoires);
     markCardPlayed(selectedTitanId, "tout_casser");
     setTcAdrenaline(0); // état numérique : `false` y était écrit par erreur
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, tcAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, tcAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, animerTrajectoires, canPlayCard, markCardPlayed, captureSnapshot]);
 
   const getVertCount = useCallback((titan) => titan.repaire.filter((c) => c === "vert").length, []);
 
@@ -3436,6 +3496,7 @@ export function useBoardGeneratorController() {
     animating,
     setAnimating,
     animLabel,
+    traceVol,
     setAnimLabel,
     cardsPlayedCountRef,
     pendingCardConfirm,

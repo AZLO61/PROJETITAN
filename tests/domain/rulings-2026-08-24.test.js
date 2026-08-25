@@ -173,3 +173,42 @@ describe("Bagarre : toucher suffit, le déplacement n'entre plus dans le calcul"
     expect(titans[0].bagarre).toBe(1);
   });
 });
+
+describe("Trajectoires : le trajet reellement emprunte est collecte pour l'animation", () => {
+  /* Nikola, 2026-08-24 : « animation de la trajectoire ». Le chemin ne peut
+     pas etre recalcule apres coup — il rebondit, traverse la faille, et seul
+     le moteur sait ou l'element est reellement passe. `projectInDirection`
+     construisait deja cette trace pour ses garde-fous ; elle est desormais
+     collectee, sur le meme modele partage que `replis`. */
+
+  it("collecte le chemin case par case, depart compris", () => {
+    const trajectoires = [];
+    projectInDirection("E", 4, 0, 1, 3, {
+      board: {}, looseBlocks: {}, titans: [t(1, "E4")], log: [], trajectoires, initiatorId: 1,
+    });
+
+    expect(trajectoires).toHaveLength(1);
+    expect(trajectoires[0].cases[0]).toBe("E4"); // la case de depart ouvre le trajet
+    expect(trajectoires[0].cases.length).toBeGreaterThan(1);
+    // Le trajet finit la ou l'element s'immobilise.
+    expect(trajectoires[0].cases.at(-1)).toBe(trajectoires[0].arrivee);
+  });
+
+  it("collecte AUSSI les trajets des reactions en chaine", () => {
+    // Le debris projete percute un Titan, qui part a son tour : deux vols.
+    const trajectoires = [];
+    const titans = [t(1, "E4"), t(2, "E6")];
+    projectInDirection("E", 5, 0, 1, 3, {
+      board: {}, looseBlocks: {}, titans, log: [], trajectoires, initiatorId: 1,
+    });
+
+    expect(trajectoires.length).toBeGreaterThan(1);
+  });
+
+  it("ne collecte rien quand l'appelant ne fournit pas de collecteur", () => {
+    // Un appelant qui ignore le champ garde exactement le comportement d'avant.
+    expect(() => projectInDirection("E", 4, 0, 1, 3, {
+      board: {}, looseBlocks: {}, titans: [t(1, "E4")], log: [], initiatorId: 1,
+    })).not.toThrow();
+  });
+});

@@ -917,7 +917,7 @@ function appliquerReplElement(repli, cellKey, gameState) {
   const log = [];
   if (!repli || !cellKey || cellKey === repli.defaut) return { log, applied: false };
 
-  const { board, titans = [], looseBlocks = {}, replis } = gameState;
+  const { board, titans = [], looseBlocks = {}, replis, trajectoires } = gameState;
 
   // 1. L'occupant éventuel dégage AVANT que l'élément prenne sa place.
   const occupant = titans.find(
@@ -928,7 +928,7 @@ function appliquerReplElement(repli, cellKey, gameState) {
     const dc = Math.sign(Number(cellKey.slice(1)) - Number(repli.defaut.slice(1)));
     const bagarreSet = new Set();
     const landing = projectInDirection(cellKey[0], Number(cellKey.slice(1)), dr, dc, 1, {
-      board, looseBlocks, titans, log, replis, bagarreSet,
+      board, looseBlocks, titans, log, replis, bagarreSet, trajectoires,
       initiatorId: repli.initiatorId ?? null, movingTitanId: occupant.id,
     });
     if (!landing.ejecte) occupant.cell = landing.row + landing.col;
@@ -1661,6 +1661,32 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
     });
   }
 
+  /* TRAJECTOIRE POUR L'ANIMATION (Nikola, 2026-08-24).
+
+     `chemin` existait deja : il sert aux deux garde-fous ci-dessus, qui
+     remontent le trajet reellement emprunte quand la case d'arrivee se
+     revele occupee. Il porte donc exactement ce qu'il faut pour REJOUER le
+     vol a l'ecran — rebond et traversee de faille compris, ce qu'aucun
+     calcul apres coup ne saurait reconstituer.
+
+     Collecte sur le meme modele que `ctx.replis` : un tableau partage, que
+     le `{ ...ctx }` des reactions en chaine transmet aux appels recursifs.
+     Un ricochet ou une poussee en cascade y depose donc sa propre
+     trajectoire, dans l'ordre ou elle s'est produite.
+
+     Purement VISUEL : la resolution reste synchrone et inchangee, on ne fait
+     qu'enregistrer ou les choses sont passees. Un appelant qui ignore ce
+     champ se comporte exactement comme avant. */
+  if (Array.isArray(ctx.trajectoires) && chemin.length > 1) {
+    ctx.trajectoires.push({
+      cases: [...chemin],
+      arrivee,
+      // Un Titan projete et un debris projete ne se dessinent pas pareil.
+      titanId: ctx.movingTitanId ?? null,
+      initiatorId: ctx.initiatorId ?? null,
+    });
+  }
+
   return { row: rowFromIndex(r), col: c, energyLeft: remaining, hasBounced, log, repliOptions };
 }
 
@@ -1736,7 +1762,7 @@ function crediterBagarre(titan, bagarreSet, log, actif = true) {
 function resolveToutCasserBatiments(titanId, gameState, adrenalineBonus = 0, percussion = null, bagarreSetPartage = null) {
   const bagarreSet = bagarreSetPartage || new Set();
   const crediteIci = !bagarreSetPartage;
-  const { board, titans, looseBlocks, replis } = gameState;
+  const { board, titans, looseBlocks, replis, trajectoires } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const titanRow = titan.cell[0];
   const titanCol = Number(titan.cell.slice(1));
@@ -1761,7 +1787,7 @@ function resolveToutCasserBatiments(titanId, gameState, adrenalineBonus = 0, per
     titan.destruction += 1;
     const dr = rowIndex(cell.row) - rowIndex(titanRow);
     const dc = cell.col - titanCol;
-    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId });
+    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId });
     const landingKey = landing.row + landing.col;
 
     // Le bloc atterrit réellement sur le plateau. Chaînes de réaction
@@ -1790,7 +1816,7 @@ function resolveToutCasserBlocs(titanId, gameState, adrenalineBonus = 0, percuss
   // soit le niveau d'énergie (contrairement au Bâtiment qui exige Seuil 4).
   const bagarreSet = bagarreSetPartage || new Set();
   const crediteIci = !bagarreSetPartage;
-  const { board, titans, looseBlocks, replis } = gameState;
+  const { board, titans, looseBlocks, replis, trajectoires } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const titanRow = titan.cell[0];
   const titanCol = Number(titan.cell.slice(1));
@@ -1813,7 +1839,7 @@ function resolveToutCasserBlocs(titanId, gameState, adrenalineBonus = 0, percuss
     retirerPileVide(looseBlocks, key);
     const dr = rowIndex(cell.row) - rowIndex(titanRow);
     const dc = cell.col - titanCol;
-    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId });
+    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId });
     const landingKey = landing.row + landing.col;
 
     if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
@@ -1832,7 +1858,7 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percus
   // Sous-cas "Titan" — déplacement physique + résolution DIL/RAGE via le
   // moteur générique de décision (§1bis du tracker).
   const crediteIci = !bagarreSetPartage;
-  const { board, titans, looseBlocks, replis } = gameState;
+  const { board, titans, looseBlocks, replis, trajectoires } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const titanRow = titan.cell[0];
   const titanCol = Number(titan.cell.slice(1));
@@ -1857,7 +1883,7 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percus
     const dc = cell.col - titanCol;
     // movingTitanId : c'est la cible qu'on projette (cf. projectInDirection).
     const caseAvant = target.cell;
-    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId, movingTitanId: targetId });
+    const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId, movingTitanId: targetId });
     target.cell = landing.row + landing.col; // mutation directe (re-render forcé côté UI)
     /* RULING REVISE PAR NIKOLA LE 2026-08-24 : « pour Bagarre, juste je
        gagne la Bagarre, je gagne 1 case sur la piste, deplacement ou non. »
@@ -1901,7 +1927,7 @@ function resolveToutCasserAmas(titanId, gameState, adrenalineBonus = 0, percussi
   // distance = hauteur du bloc dans la pile (pas l'énergie de la carte).
   const bagarreSet = bagarreSetPartage || new Set();
   const crediteIci = !bagarreSetPartage;
-  const { board, titans, looseBlocks, replis } = gameState;
+  const { board, titans, looseBlocks, replis, trajectoires } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const titanRow = titan.cell[0];
   const titanCol = Number(titan.cell.slice(1));
@@ -1933,7 +1959,7 @@ function resolveToutCasserAmas(titanId, gameState, adrenalineBonus = 0, percussi
     for (let i = ejected.length - 1; i >= 0; i--) {
       const blockColor = ejected[i];
       const hauteur = i + 1; // position dans la pile = hauteur = distance de projection
-      const landing = projectInDirection(cell.row, cell.col, dr, dc, hauteur, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId });
+      const landing = projectInDirection(cell.row, cell.col, dr, dc, hauteur, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId });
       const landingKey = landing.row + landing.col;
       if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
       looseBlocks[landingKey].push(blockColor);
@@ -2008,7 +2034,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
   // 3) Titan adverse touché → "ça fait les 2" : effet Repaire (DIL/RAGE) ET
   //    arrêt physique (superposition Titan+Titan interdite), résolu via le
   //    moteur générique de décision (§1bis).
-  const { board, titans, looseBlocks, replis } = gameState;
+  const { board, titans, looseBlocks, replis, trajectoires } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const titansByCell = indexerTitans(titans);
 
@@ -2065,7 +2091,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
            blocs d'un AMAS balaye au Seuil 4 partent eux aussi a contre-sens.
            Il n'a pas demande ce cas, il n'a donc pas ete touche. */
         const below = bldg.blocks.pop();
-        const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId });
+        const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId });
         const landingKey = landing.row + landing.col;
         if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
         looseBlocks[landingKey].push(below);
@@ -2135,7 +2161,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
       {
         const occupant = titans.find((t) => t.id === occupantId);
         // movingTitanId : c'est l'occupant qu'on projette (cf. projectInDirection).
-        const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId, movingTitanId: occupantId });
+        const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId, movingTitanId: occupantId });
         // Un Titan éjecté a déjà sa case de rentrée posée par le résolveur :
         // on ne la réécrit pas, et sa sortie du ring compte évidemment
         // comme une Bagarre remportée.
@@ -2197,7 +2223,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
         for (let i = ejected.length - 1; i >= 0; i--) {
           const blockColor = ejected[i];
           const hauteur = i + 1;
-          const landing = projectInDirection(row, cIdx, dr, dc, hauteur, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId });
+          const landing = projectInDirection(row, cIdx, dr, dc, hauteur, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId });
           const landingKey = landing.row + landing.col;
           if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
           looseBlocks[landingKey].push(blockColor);
@@ -2291,13 +2317,13 @@ function scanGraouhhhAxis(titanId, gameState, dr, dc) {
 // case de percussion (`caseAvant`) est donc lue par l'appelant AVANT cet
 // appel, jamais recalculée ici.
 function resolveGraouhhhMoveTitan(titanId, targetId, gameState, dr, dc, reculDistance, mancheNumber) {
-  const { titans, board, looseBlocks, replis } = gameState;
+  const { titans, board, looseBlocks, replis, trajectoires } = gameState;
   const occupant = titans.find((x) => x.id === targetId);
   const caseAvant = occupant.cell;
   const log = [];
   const bagarreSet = new Set();
   const landing = projectInDirection(caseAvant[0], Number(caseAvant.slice(1)), dr, dc, reculDistance, {
-    board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId, movingTitanId: targetId,
+    board, looseBlocks, titans, log, replis, bagarreSet, trajectoires, initiatorId: titanId, movingTitanId: targetId,
   });
   if (!landing.ejecte) occupant.cell = landing.row + landing.col;
   // Ruling revise le 2026-08-24 : percuter suffit, le deplacement n'entre
@@ -2792,7 +2818,7 @@ function boingBoingStepCost(fromKey, toKey, fromIsOrigin, { board, looseBlocks =
 }
 
 function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameState) {
-  const { board, titans, looseBlocks, replis } = gameState;
+  const { board, titans, looseBlocks, replis, trajectoires } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const originRowIdx = rowIndex(titan.cell[0]);
   const originCol = Number(titan.cell.slice(1));
@@ -2846,7 +2872,7 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
     const dirC = Math.sign(destCol - originCol);
     const bagarreSet = new Set([occupantId]); // FAQ #12 : Titans distincts déplacés (direct + chaîne)
     // movingTitanId : c'est l'occupant qu'on projette (cf. projectInDirection).
-    const landing = projectInDirection(destRow, destCol, dirR, dirC, energie, { board, looseBlocks, titans, log, replis, bagarreSet, initiatorId: titanId, movingTitanId: occupantId });
+    const landing = projectInDirection(destRow, destCol, dirR, dirC, energie, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId, movingTitanId: occupantId });
     let landingKey = landing.row + landing.col;
     // Ruling confirmée Nikola (session) : si l'occupant est coincé (rebond
     // avant ET arrière tous deux bloqués par un mur/bord — projectInDirection
@@ -3027,7 +3053,7 @@ function getEcroulementCells(cellKey, gameState, dejaServies = []) {
  * déjà bougé quand le second arrive.
  */
 function resolveEcroulementAmas(titanId, ecroulement, choix, gameState) {
-  const { board, titans, looseBlocks, replis } = gameState;
+  const { board, titans, looseBlocks, replis, trajectoires } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const log = [];
   const decisions = [];
@@ -3066,7 +3092,7 @@ function resolveEcroulementAmas(titanId, ecroulement, choix, gameState) {
       const dr = Math.sign(rowIndex(cible[0]) - rowIndex(cellKey[0]));
       const dc = Math.sign(Number(cible.slice(1)) - Number(cellKey.slice(1)));
       const landing = projectInDirection(cible[0], Number(cible.slice(1)), dr, dc, energie, {
-        board, looseBlocks, titans, log, bagarreSet, replis,
+        board, looseBlocks, titans, log, bagarreSet, replis, trajectoires,
         initiatorId: titanId, movingTitanId: occupant.id,
       });
       if (!landing.ejecte) occupant.cell = landing.row + landing.col;
@@ -3973,7 +3999,7 @@ function getFPMCTargets(titanId, gameState) {
    sont LUES ici, jamais débitées — la déduction reste à l'appelant.
 ============================================================ */
 function resolveFautPasMeChauffer(attackerId, defenderId, nTargets, gameState, { attackerBid = 0, defenderBid = 0 } = {}) {
-  const { board, titans, looseBlocks, replis } = gameState;
+  const { board, titans, looseBlocks, replis, trajectoires } = gameState;
   const attacker = titans.find((t) => t.id === attackerId);
   const defender = titans.find((t) => t.id === defenderId);
   const log = [];
@@ -4000,7 +4026,7 @@ function resolveFautPasMeChauffer(attackerId, defenderId, nTargets, gameState, {
   const bagarreSet = new Set(); // FAQ #12 : Titans distincts DÉPLACÉS (direct + chaîne)
   const caseAvant = defender.cell;
   const landing = projectInDirection(defender.cell[0], Number(defender.cell.slice(1)), dr, dc, nTargets + 1, {
-    board, looseBlocks, titans, log, bagarreSet, replis,
+    board, looseBlocks, titans, log, bagarreSet, replis, trajectoires,
     initiatorId: attackerId,   // immunité de l'initiateur
     movingTitanId: defenderId, // la cible ne doit pas se voir elle-même comme obstacle
   });
