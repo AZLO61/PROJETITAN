@@ -1989,6 +1989,24 @@ export function useBoardGeneratorController() {
   // (discardCurrentCard, session) : dans les deux cas, 1 carte a été
   // désignée pour ce round et le tour doit passer au Titan suivant selon
   // les mêmes règles (1 carte/Titan/round, 3 rounds/Manche).
+  /* Fermeture de la Phase Action, en un seul exemplaire.
+     Elle était écrite en ligne dans `advanceActionRound`, au moment même où
+     la 3e carte du dernier Titan était jouée — donc AVANT que ce Titan ait
+     eu son tour complet. Elle est extraite ici pour pouvoir être déclenchée
+     au VRAI bout du tour : tout de suite pour une IA, à « Titan suivant »
+     pour un humain (cf. `passerAuTitanSuivant`). */
+  const cloturerPhaseAction = useCallback(() => {
+    const { ordreJeu } = aiTitanStateRef.current;
+    aiNextPlayerRef.current = null; // évite une relecture stale par finishAiTurn
+    setWaitingNextTitan(false);
+    setActivePlayerId(null);
+    setPhaseValidated((prev) => {
+      const updated = { ...prev };
+      ordreJeu.forEach((id) => { updated[id] = true; });
+      return updated;
+    });
+  }, []);
+
   const advanceActionRound = useCallback((titanId) => {
     const { ordreJeu } = aiTitanStateRef.current;
     const prevCount = cardsPlayedCountRef.current;
@@ -2012,15 +2030,30 @@ export function useBoardGeneratorController() {
         // de l'ordre de jeu figé.
         next = aiTitanStateRef.current.detonateur ?? ordreJeu[0];
       } else {
-        // 3 rounds terminés → fin de phase action
-        aiNextPlayerRef.current = null; // aucun Titan suivant : évite une relecture stale par finishAiTurn
-        setActivePlayerId(null);
-        setPhaseValidated((prev) => {
-          const updated = { ...prev };
-          ordreJeu.forEach((id) => { updated[id] = true; });
-          return updated;
-        });
-        return;
+        /* 3 rounds terminés → fin de Phase Action.
+
+           BUG REMONTÉ PLUSIEURS FOIS PAR NIKOLA : « j'ai sauté sur un débris,
+           je l'ai ramassé automatiquement, mais je n'ai pas pu ramasser celui
+           d'à côté — c'est passé directement au Titan suivant. »
+
+           La phase se fermait ICI, dans la seconde où la dernière carte du 3e
+           round était jouée : `activePlayerId` tombait à null et la
+           Programmation de la Manche suivante s'ouvrait par-dessus. Le Titan
+           qui venait de jouer perdait donc son passif Récupération — le seul
+           des quatre à le perdre, et un Titan différent à chaque Manche
+           puisque le round démarre sur le Détonateur, qui pivote. D'où un bug
+           qui semblait aléatoire alors qu'il tombait à tous les coups.
+
+           Une IA n'a pas de tour à finir à l'écran : elle se ferme tout de
+           suite. Un humain garde la main jusqu'à « Titan suivant », qui
+           appellera `cloturerPhaseAction` à sa place. */
+        aiNextPlayerRef.current = null;
+        if (aiTitanModesRef.current[titanId] === "ia") {
+          cloturerPhaseAction();
+          return;
+        }
+        // Humain : on retombe dans le flux normal ci-dessous, `next` restant
+        // null — le tour s'affiche, Ramassage compris, et se termine au clic.
       }
     }
 
@@ -2033,7 +2066,18 @@ export function useBoardGeneratorController() {
     // chaque tour"). Le passif "Récupération" était déjà correctement
     // remis à false ici ; on aligne "move" sur le même cycle.
     setPassifUsed((prev) => ({ ...prev, [titanId]: { ...(prev[titanId] || {}), recup: false, move: false } }));
-  }, []);
+  }, [cloturerPhaseAction]);
+
+  /* Fin du tour d'un Titan humain, en un seul exemplaire lui aussi. Le bouton
+     « Titan suivant » existe à deux endroits du panneau (fin de tour, et à
+     côté du Ramassage) et faisait à chaque fois son `setActivePlayerId` en
+     ligne — sans jamais savoir refermer la Phase Action quand il n'y a plus
+     de Titan suivant. */
+  const passerAuTitanSuivant = useCallback(() => {
+    if (aiNextPlayerRef.current == null) { cloturerPhaseAction(); return; }
+    setWaitingNextTitan(false);
+    setActivePlayerId(aiNextPlayerRef.current);
+  }, [cloturerPhaseAction]);
 
   const markCardPlayed = useCallback(
     (titanId, cardId) => {
@@ -2548,8 +2592,19 @@ export function useBoardGeneratorController() {
 
   const toggleMoveMode = useCallback(() => {
     if (!moveMode && !canUseMovePassif(selectedTitanId)) return;
-    setMoveMode((m) => !m);
-  }, [moveMode, canUseMovePassif, selectedTitanId]);
+    // Bug remonté par Nikola : une carte restée sélectionnée (teaMode/bbMode/
+    // jnpMode) avant de rouvrir le Mouvement gratuit ("← Me déplacer
+    // finalement") empêchait tout clic sur le plateau — clicCase teste ces
+    // modes AVANT moveMode et retourne sans jamais l'atteindre. Les quatre
+    // autres toggles (Graouhhh/Tête en Avant/Boing Boing/Je Ne Partage Pas)
+    // se désactivent déjà mutuellement ; moveMode était le seul absent de
+    // cette symétrie.
+    setMoveMode((m) => {
+      const next = !m;
+      if (next) closeAllCardModes();
+      return next;
+    });
+  }, [moveMode, canUseMovePassif, selectedTitanId, closeAllCardModes]);
 
   const jouerMouvementGratuit = useCallback(
     (destKey) => {
@@ -3503,6 +3558,7 @@ export function useBoardGeneratorController() {
     setPendingCardConfirm,
     waitingNextTitan,
     setWaitingNextTitan,
+    passerAuTitanSuivant,
     undoStack,
     undoTick,
     setUndoStack,

@@ -396,7 +396,7 @@ export default function RoundPanels({ vm }) {
               title={`${titanDisplayName(t.id)} attend hors de BIG CITY — rentre par ${cle} au début de son tour`}
               style={{ display: "grid", placeItems: "center", opacity: 0.5 }}
             >
-              <TitanIcon titanId={t.id} size={20} />
+              <TitanIcon titanId={t.id} size={26} />
             </div>
           );
         };

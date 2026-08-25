@@ -128,7 +128,7 @@ export default function BoardPanel({ vm }) {
     setPendingCardConfirm,
     waitingNextTitan,
     setWaitingNextTitan,
-    aiNextPlayerRef,
+    passerAuTitanSuivant,
     canUseMovePassif,
     canUseRecupPassif,
     toggleProgCard,
@@ -333,10 +333,7 @@ export default function BoardPanel({ vm }) {
                 </div>
               )}
               <button
-                onClick={() => {
-                  setWaitingNextTitan(false);
-                  setActivePlayerId(aiNextPlayerRef.current);
-                }}
+                onClick={passerAuTitanSuivant}
                 style={{
                   ...smallBtn(true, "#FFD93D", "#F59E0B"),
                   fontSize: ".95rem", fontWeight: 700,
@@ -473,10 +470,7 @@ export default function BoardPanel({ vm }) {
                         ▶ Ramasser {recupPool.size === 0 ? "(rien à portée)" : `(${recupPool.size} case${recupPool.size > 1 ? "s" : ""})`}
                       </button>
                       <button
-                        onClick={() => {
-                          setWaitingNextTitan(false);
-                          setActivePlayerId(aiNextPlayerRef.current);
-                        }}
+                        onClick={passerAuTitanSuivant}
                         style={{ ...smallBtn(true, "#FFD93D", "#F59E0B"), fontWeight: 700, marginLeft: "auto" }}
                       >
                         ▶ Titan suivant
