@@ -29,8 +29,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Reporter "github-actions" en plus du reporter normal : Vitest emet
+      # alors des annotations que GitHub attache au commit, et un echec de CI
+      # devient lisible sans avoir a ouvrir les logs bruts. Le premier echec
+      # apres le rattachement du depot n'a donne qu'un « exit code 1 ».
       - name: Test
-        run: npm run test
+        run: npx vitest run --reporter=default --reporter=github-actions
 
       - name: Build
         run: npm run build
