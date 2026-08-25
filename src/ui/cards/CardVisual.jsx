@@ -1,76 +1,172 @@
 import React from "react";
+import { T, marquee, readout, label } from "../theme.js";
+import Icon, { CARD_ICON } from "../icons.jsx";
+
+/* Les six couleurs de cartes sont des données de jeu, pas un choix
+   décoratif : ce sont elles qu'on cherche des yeux dans une main. Elles ne
+   bougent pas. Ce qui change ici, c'est la matière — l'aplat franc cerné de
+   la borne, à la place du dégradé translucide. */
 const CARD_CONFIG = {
-  tout_casser:       { label: "Tout Casser",       force: 1, color1: "#FF6B1A", color2: "#FF2E63", icon: "💥" },
-  tete_en_avant:     { label: "Tête en Avant",     force: 2, color1: "#9333EA", color2: "#5421A0", icon: "🏃" },
-  graouhhh:          { label: "Graouhhh",           force: 2, color1: "#2DD4BF", color2: "#0E7C7B", icon: "😤" },
-  boing_boing:       { label: "Boing Boing",        force: 2, color1: "#FFD93D", color2: "#FF6B1A", icon: "🦘" },
-  faut_pas_me_chauffer: { label: "Faut Pas Me Chauffer", force: 3, color1: "#F44336", color2: "#C2185B", icon: "🔥" },
-  je_ne_partage_pas: { label: "Je Ne Partage Pas", force: 3, color1: "#2D8DF5", color2: "#1E3A8A", icon: "🤐" },
+  tout_casser: { label: "Tout Casser", force: 1, color: "#FF6B1A" },
+  tete_en_avant: { label: "Tête en Avant", force: 2, color: "#9333EA" },
+  graouhhh: { label: "Graouhhh", force: 2, color: "#2DD4BF" },
+  boing_boing: { label: "Boing Boing", force: 2, color: "#FFD93D" },
+  faut_pas_me_chauffer: { label: "Faut Pas Me Chauffer", force: 3, color: "#F44336" },
+  je_ne_partage_pas: { label: "Je Ne Partage Pas", force: 3, color: "#2D8DF5" },
 };
-export default function CardVisual({ cardId, selected, selectable, played, inRepos, onClick, size = "normal", accentColor }) {
+
+/* ── LA CARTE ──────────────────────────────────────────────
+   Une carte d'arcade se lit à trois niveaux, dans cet ordre : sa couleur
+   (repérage), son pictogramme (ce qu'elle fait), son nom (confirmation). Le
+   nom passait avant tout le reste et occupait deux lignes sur trois ; il
+   descend en pied, où il confirme au lieu d'annoncer.
+
+   La Force n'est plus « ⚡ F2 » posé en petit : c'est le chiffre de
+   l'afficheur, en haut à droite, à la place où une borne met toujours son
+   compteur. */
+export default function CardVisual({
+  cardId,
+  selected,
+  selectable,
+  played,
+  inRepos,
+  onClick,
+  size = "normal",
+  accentColor,
+}) {
   const cfg = CARD_CONFIG[cardId];
   if (!cfg) return null;
+
   const isSmall = size === "small";
-  const w = isSmall ? 72 : 100;
-  const h = isSmall ? 96 : 134;
-  const opacity = played ? 0.35 : inRepos ? 0.45 : selectable === false ? 0.4 : 1;
-  // Bug remonté : la bordure/glow d'une carte sélectionnée en phase
-  // Programmation était toujours vert fixe (#16E08C), sans lien avec le
-  // Titan qui joue. accentColor (couleur du Titan actif) est maintenant
-  // utilisée si fournie ; #16E08C reste le repli par défaut pour les
-  // écrans qui n'ont pas encore de contexte Titan (ex. Repos).
-  const selColor = accentColor || "#16E08C";
-  const border = selected
-    ? `2.5px solid ${selColor}`
-    : selectable
-    ? "2px solid rgba(255,255,255,.45)"
-    : "1.5px solid rgba(255,255,255,.12)";
-  const boxShadow = selected
-    ? `0 0 14px ${selColor}cc`
-    : selectable
-    ? "0 2px 8px rgba(0,0,0,.4)"
-    : "none";
+  const w = isSmall ? 84 : 112;
+  const h = isSmall ? 112 : 150;
+  const indisponible = played || inRepos;
+  const cliquable = selectable !== false && !played;
+
+  /* La bordure de sélection prend la couleur du TITAN qui joue, pas un vert
+     fixe : c'est ce qui dit « c'est TA carte » quand l'appareil circule
+     autour de la table. */
+  const selColor = accentColor || T.you;
 
   return (
     <div
-      onClick={selectable !== false && !played ? onClick : undefined}
+      onClick={cliquable ? onClick : undefined}
+      role={cliquable ? "button" : undefined}
+      tabIndex={cliquable ? 0 : undefined}
+      onKeyDown={
+        cliquable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick?.();
+              }
+            }
+          : undefined
+      }
+      aria-label={`${cfg.label}, Force ${cfg.force}${played ? ", déjà jouée" : inRepos ? ", en Zone Repos" : ""}`}
+      aria-pressed={cliquable ? Boolean(selected) : undefined}
       title={`${cfg.label} — Force ${cfg.force}${played ? " (jouée)" : inRepos ? " (Repos)" : ""}`}
       style={{
-        width: w, height: h, borderRadius: 10, cursor: selectable !== false && !played ? "pointer" : "default",
-        background: `linear-gradient(160deg, ${cfg.color1}22, ${cfg.color2}44)`,
-        border, boxShadow, opacity,
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between",
-        padding: isSmall ? "6px 4px" : "8px 6px",
-        position: "relative", transition: "box-shadow .15s, border-color .15s",
+        position: "relative",
+        width: w,
+        height: h,
+        flexShrink: 0,
+        cursor: cliquable ? "pointer" : "default",
+        /* Aplat franc dans la couleur de la carte, assombri : la couleur
+           reste identifiable sans que le texte blanc devienne illisible
+           dessus. Aucun dégradé. */
+        background: indisponible ? "rgba(255,250,238,.05)" : `color-mix(in srgb, ${cfg.color} 26%, ${T.screen})`,
+        border: `${T.edgeW} solid ${selected ? selColor : indisponible ? T.rule : T.edge}`,
+        borderRadius: T.rChip,
+        boxShadow: selected
+          ? `0 0 0 3px ${selColor}, 0 6px 0 -1px ${T.edge}, 0 12px 24px rgba(0,0,0,.5)`
+          : cliquable
+            ? `0 3px 0 ${T.edge}`
+            : "none",
+        transform: selected ? "translateY(-3px)" : "none",
+        transition: `transform 140ms ${T.easeSnap}, box-shadow 140ms ${T.easeOut}, border-color 140ms linear`,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
         userSelect: "none",
+        opacity: indisponible ? 0.5 : 1,
       }}
     >
-      <div style={{
-        fontSize: isSmall ? ".55rem" : ".65rem", fontFamily: "'Bowlby One', sans-serif",
-        color: "#fff", textAlign: "center", lineHeight: 1.2, textShadow: "0 1px 3px rgba(0,0,0,.7)",
-      }}>
+      {/* Bandeau de couleur : la carte se repère à ça, de loin. */}
+      <div
+        style={{
+          height: 6,
+          background: cfg.color,
+          flexShrink: 0,
+        }}
+      />
+
+      {/* Force, dans le coin de l'afficheur. */}
+      <div
+        style={{
+          position: "absolute",
+          top: 12,
+          right: 8,
+          ...readout(isSmall ? "0.7rem" : "0.85rem", cfg.color),
+        }}
+      >
+        {cfg.force}
+      </div>
+
+      {/* Le pictogramme, au centre et en grand : c'est lui qui dit ce que la
+          carte FAIT. */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: cfg.color,
+        }}
+      >
+        <Icon name={CARD_ICON[cardId]} size={isSmall ? 34 : 46} strokeWidth={2} />
+      </div>
+
+      {/* Le nom, en pied : il confirme, il n'annonce plus. */}
+      <div
+        style={{
+          ...marquee(isSmall ? "0.6rem" : "0.72rem", T.text),
+          padding: "0 6px 8px",
+          textAlign: "center",
+          lineHeight: 1.15,
+          hyphens: "auto",
+        }}
+      >
         {cfg.label}
       </div>
-      <div style={{ fontSize: isSmall ? "1.6rem" : "2.2rem" }}>{cfg.icon}</div>
-      <div style={{
-        fontSize: isSmall ? ".5rem" : ".6rem", color: "rgba(255,255,255,.7)",
-        fontFamily: "'Outfit', sans-serif", textAlign: "center",
-      }}>
-        ⚡ F{cfg.force}
-      </div>
-      {played && <div style={{
-        position: "absolute", inset: 0, borderRadius: 10,
-        background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: ".68rem", color: "rgba(255,255,255,.7)", fontWeight: 700,
-      }}>JOUÉE</div>}
-      {inRepos && <div style={{
-        position: "absolute", inset: 0, borderRadius: 10,
-        background: "rgba(0,0,0,.5)", display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: ".68rem", color: "#FFD93D", fontWeight: 700, textAlign: "center", padding: "0 4px",
-      }}>REPOS</div>}
+
+      {/* Un état indisponible se dit en toutes lettres, en travers, comme un
+          tampon — pas par une simple opacité qu'on peut prendre pour un bug
+          d'affichage. */}
+      {indisponible && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(5,6,13,.55)",
+          }}
+        >
+          <span
+            style={{
+              ...label(played ? T.faint : T.you, T.micro),
+              transform: "rotate(-11deg)",
+              border: `2px solid ${played ? T.faint : T.you}`,
+              padding: "3px 8px",
+              background: "rgba(5,6,13,.8)",
+            }}
+          >
+            {played ? "Jouée" : "Repos"}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
-
-// ============================================================
-// BANDEAU RESSOURCES TITAN

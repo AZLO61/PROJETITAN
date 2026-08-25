@@ -16,9 +16,53 @@
     <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="theme-color" content="#5421A0" />
+    <meta name="theme-color" content="#0d0a1c" />
+
+    <!-- ── LES POLICES N'ÉTAIENT JAMAIS CHARGÉES ──
+         Tout le code déclarait `'Bowlby One'`, `'Bangers'`, `'Titan One'`,
+         `'Outfit'`… et aucune de ces familles n'était servie : ni <link>, ni
+         @font-face, ni @import nulle part dans le dépôt. Chaque déclaration
+         retombait donc en silence sur le `sans-serif` du système, et l'écran
+         n'a jamais montré la typographie que le code décrit. C'est la raison
+         la plus directe pour laquelle l'interface avait l'air générique.
+
+         Trois familles, trois rôles distincts, comme sur une borne d'arcade :
+         · Bowlby One   — le fronton. Titres, nom du jeu, noms de carte.
+         · Press Start 2P — l'afficheur du jeu. Chiffres et compteurs, à petite
+                            dose : c'est une police bitmap, large et lente à
+                            lire en paragraphe.
+         · Archivo      — le bandeau sérigraphié de la borne. Tout le reste :
+                          libellés, phrases de règle, boutons. Excellente en
+                          petit corps, chiffres tabulaires disponibles. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,400..800;1,400..700&family=Bowlby+One&family=Press+Start+2P&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
+    <!--
+      THESIS: Projet Titan est un jeu de kaijus qui cassent une ville sur une
+      grille — sa borne d'arcade, pas un tableau de bord SaaS sombre. Refuse le
+      panneau translucide générique à halo néon que tout produit sombre livre.
+      OWN-WORLD: tube cathodique en encre plate — aplats francs cernés de noir,
+      arêtes dures (0–4px), lignes de balayage, jauges à segments durs, jamais
+      un dégradé décoratif. Fronton Bowlby One, afficheur Press Start 2P,
+      bandeau Archivo. Couleurs de jeu inchangées ; chaque couleur code une
+      règle, aucune ne décore.
+      STORY: le joueur voit d'un coup d'œil à qui est le tour, ce qu'il peut
+      faire, et ce qui vient de se passer — depuis l'autre bout de la table.
+      FIRST VIEWPORT: fronton du jeu et compteur de Manche en haut ; sous lui la
+      plaque du Titan actif, seule à être en relief, les autres en retrait ; puis
+      l'étape du tour en cours, une seule, avec son action primaire en jaune
+      d'arcade.
+      FORM: borne d'arcade CRT, candidat 1 de la liste, épinglé par l'auteur
+      contre l'assignation 4 du tirage. Seed 4fedcfd7.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with
+      the finish review, the verdict, DESIGN.md, and every shipping raster
+      carrying its provenance.
+    -->
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

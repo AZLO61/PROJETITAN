@@ -11,9 +11,17 @@ import BoardGenerator from "../../src/BoardGenerator.jsx";
 describe("rendu de l'application", () => {
   afterEach(cleanup);
 
+  /* Repère de l'écran de configuration : le champ de nom du premier Titan.
+     Le titre de l'écran servait de repère jusqu'ici ; c'est une chaîne
+     décorative, qui a changé avec la refonte visuelle alors que l'écran
+     faisait toujours exactement son travail. Un champ nommé, lui, ne peut
+     pas disparaître sans que la fonction disparaisse avec. */
+  const champDeNom = () => screen.queryByLabelText(/Nom du Titan 1/);
+
   it("affiche l'écran de configuration au démarrage", () => {
     render(<BoardGenerator />);
-    expect(screen.getByText(/PROJET TITAN — Configuration/)).toBeTruthy();
+    expect(champDeNom()).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Lancer la partie/ })).toBeTruthy();
   });
 
   it("passe en écran de jeu sans casser l'ordre des hooks", async () => {
@@ -24,7 +32,7 @@ describe("rendu de l'application", () => {
 
     // L'écran de configuration a laissé place au plateau : si l'ordre des
     // hooks avait changé entre les deux rendus, React aurait levé ici.
-    expect(screen.queryByText(/PROJET TITAN — Configuration/)).toBeNull();
+    expect(champDeNom()).toBeNull();
   });
 
   it("ouvre et referme les Règles sans perdre la partie en cours", async () => {
@@ -37,7 +45,15 @@ describe("rendu de l'application", () => {
     const avant = screen.getByText(/BIG CITY/).textContent;
 
     await user.click(screen.getByRole("button", { name: /Règles du jeu/ }));
-    expect(await screen.findByRole("dialog", { name: /Règles du jeu/ })).toBeTruthy();
+    /* La page Règles est en import dynamique derrière un Suspense : son
+       arrivée dépend de la résolution d'un module, pas d'un rendu React. Le
+       délai par défaut d'une seconde suffit quand ce fichier tourne seul,
+       mais pas quand toute la campagne de tests tourne en parallèle — d'où un
+       échec qui n'apparaissait qu'en suite complète. On attend le chargement,
+       pas une durée arbitraire. */
+    expect(
+      await screen.findByRole("dialog", { name: /Règles du jeu/ }, { timeout: 8000 })
+    ).toBeTruthy();
 
     await user.click(screen.getByRole("button", { name: /Retour à la partie/ }));
     expect(screen.queryByRole("dialog", { name: /Règles du jeu/ })).toBeNull();

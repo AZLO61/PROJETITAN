@@ -6,6 +6,56 @@ import { TitanIcon } from "../titans/TitanVisuals.jsx";
 import { TITAN_COLORS } from "../titans/constants.js";
 import { CARD_LABEL, PHASE_LABELS } from "../../domain/index.js";
 import { smallBtn, cancelBtn } from "../styles.js";
+import { T, marquee, readout, label, prose } from "../theme.js";
+import Icon from "../icons.jsx";
+
+/* ── UNE ÉTAPE DU TOUR ─────────────────────────────────────
+   Le tour suit son ordre réel — se déplacer, jouer, ramasser — et une seule
+   étape est visible à la fois. Ce cadre est leur forme commune : un numéro
+   d'ordre, un titre, ce que l'étape permet, et ses commandes.
+
+   Le numéro n'est pas là pour décorer : la séquence EST l'information. Un
+   joueur qui découvre le jeu doit voir qu'il en est à 1 sur 3, et qu'il ne
+   peut pas jouer sa carte avant d'avoir tranché son déplacement. */
+function Step({ n, titre, quand, accent, ouvert, children }) {
+  return (
+    <section
+      style={{
+        background: ouvert ? "rgba(0,0,0,.32)" : "transparent",
+        border: `2px solid ${ouvert ? accent : T.rule}`,
+        borderRadius: T.rPlate,
+        padding: "11px 13px",
+        marginBottom: 10,
+        transition: `border-color 180ms linear, background 180ms linear`,
+      }}
+    >
+      <header style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 8 }}>
+        <span
+          aria-hidden="true"
+          style={{
+            ...readout("0.7rem", ouvert ? "#0d0a1c" : T.faint),
+            background: ouvert ? accent : "transparent",
+            border: `2px solid ${ouvert ? accent : T.rule}`,
+            width: 22,
+            height: 22,
+            display: "grid",
+            placeItems: "center",
+            flexShrink: 0,
+          }}
+        >
+          {n}
+        </span>
+        <h3 style={marquee("0.95rem", ouvert ? accent : T.dim)}>{titre}</h3>
+        {quand && (
+          <span style={{ ...label(T.faint), marginLeft: "auto", whiteSpace: "nowrap" }}>
+            {quand}
+          </span>
+        )}
+      </header>
+      {children}
+    </section>
+  );
+}
 
 // Selecteur d'Adrenaline : le livret dit « +1 par Adrenaline depensee », donc
 // un Titan qui en a plusieurs peut toutes les investir. Une case a cocher ne
@@ -244,12 +294,12 @@ export default function BoardPanel({ vm }) {
           // Panneau d'actions (cartes/passifs) : reste neutre — la
           // surbrillance "c'est ton tour" ne vit que sur le panneau
           // ressources (TitanResourceBand), pas ici, pour éviter que
-          // l'œil hésite entre deux zones en glow simultanément.
-          background: tcSel ? `${tcSel.accent}14` : "rgba(255,255,255,.04)",
-          border: tcSel ? `1.5px solid ${tcSel.accent}55` : "1.5px solid rgba(255,255,255,.1)",
-          boxShadow: "none",
-          borderRadius: 14, padding: "12px 14px", marginBottom: 12,
-          transition: "all .2s",
+          // l'œil hésite entre deux zones en relief simultanément.
+          background: T.plate,
+          border: `2px solid ${tcSel ? tcSel.accent : T.edge}`,
+          borderRadius: T.rPlate,
+          padding: "12px 14px",
+          marginBottom: 12,
         }}>
           {/* En-tête Titan — nom, case, couleur et Adrénaline vivent déjà sur
               la carte du Titan dans le bandeau juste au-dessus, en
@@ -257,12 +307,14 @@ export default function BoardPanel({ vm }) {
               deux valeurs qu'on ne lit nulle part ailleurs : le Périmètre et
               l'Énergie, qui changent à chaque déplacement et décident du
               Seuil 4. */}
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 10, flexWrap: "wrap" }}>
+          {/* Les deux seules valeurs qu'on ne lit nulle part ailleurs, et
+              qui décident de tout : le Périmètre change à chaque déplacement,
+              et l'Énergie qui en découle décide du Seuil 4. Elles vont donc
+              sur l'afficheur, en grand, avant les étapes. */}
+          <div style={{ display: "flex", alignItems: "flex-end", gap: 22, marginBottom: 12, flexWrap: "wrap" }}>
             <div title="Cases occupées autour de ton Titan" style={{ cursor: "help" }}>
-              <span style={{ fontSize: ".7rem", color: "rgba(255,255,255,.55)" }}>Périmètre </span>
-              <strong style={{ fontSize: ".9rem", color: "#fffaee", fontVariantNumeric: "tabular-nums" }}>
-                {perimeterCells.length}
-              </strong>
+              <div style={label(T.faint)}>Périmètre</div>
+              <div style={{ ...readout("1.15rem", T.text), marginTop: 5 }}>{perimeterCells.length}</div>
             </div>
             <div
               title={
@@ -274,22 +326,25 @@ export default function BoardPanel({ vm }) {
               }
               style={{ cursor: "help" }}
             >
-              <span style={{ fontSize: ".7rem", color: "rgba(255,255,255,.55)" }}>Énergie </span>
+              <div style={label(T.faint)}>Énergie</div>
               {/* Retour de Nikola (répété) : le chiffre lui-même reste en
                   jaune, y compris au Seuil 4 — l'avertissement rouge vit
                   déjà dans le badge "Seuil 4" juste à côté, pas besoin de
                   répéter la couleur sur les deux. */}
-              <strong style={{
-                fontSize: "1.05rem", color: "#FFD93D",
-                fontVariantNumeric: "tabular-nums",
-              }}>
-                {energie}
-              </strong>
-              {energie >= 4 && (
-                <span style={{ fontSize: ".7rem", color: "#FF2E63", fontWeight: 700, marginLeft: 5 }}>
-                  Seuil 4
-                </span>
-              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}>
+                <span style={readout("1.15rem", T.you)}>{energie}</span>
+                {energie >= 4 && (
+                  <span
+                    style={{
+                      ...label(T.stop, "0.66rem"),
+                      border: `1.5px solid ${T.stop}`,
+                      padding: "2px 5px",
+                    }}
+                  >
+                    Seuil 4
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -307,16 +362,13 @@ export default function BoardPanel({ vm }) {
 
           {finDeTour && (
             <div style={{
-              background: "rgba(255,217,61,.12)", border: "2px solid rgba(255,217,61,.5)",
-              borderRadius: 12, padding: "16px 18px", marginBottom: 10, textAlign: "center",
+              background: "rgba(0,0,0,.32)", border: `2px solid ${T.you}`,
+              borderRadius: T.rPlate, padding: "18px", marginBottom: 10, textAlign: "center",
             }}>
-              <div style={{
-                fontFamily: "'Bowlby One', sans-serif", fontSize: "1rem",
-                color: "#FFD93D", marginBottom: 4,
-              }}>
+              <div style={{ ...marquee(T.h3, T.you), marginBottom: 5 }}>
                 Tour terminé
               </div>
-              <div style={{ fontSize: ".76rem", color: "rgba(255,255,255,.6)", marginBottom: 12 }}>
+              <div style={{ ...prose(T.dim, T.small), margin: "0 auto 14px" }}>
                 Passe l'appareil au Titan suivant.
               </div>
               {/* POURQUOI LE RAMASSAGE N'EST PAS PROPOSÉ.
@@ -328,19 +380,24 @@ export default function BoardPanel({ vm }) {
                   ramasser. Périmètre vide, aucun panneau, et rien à l'écran
                   ne disait que le tour n'avait rien sauté. On le dit. */}
               {!passifUsed[selectedTitan.id]?.recup && recupPool.size === 0 && (
-                <div style={{ fontSize: ".72rem", color: "rgba(255,255,255,.45)", marginBottom: 12 }}>
-                  🤲 Ramassage : aucun débris dans ton Périmètre, il n'y avait rien à prendre.
+                <div style={{
+                  display: "inline-flex", alignItems: "center", gap: 7,
+                  marginBottom: 14, color: T.faint, ...prose(T.faint, T.micro),
+                }}>
+                  <Icon name="grab" size={14} />
+                  Ramassage : aucun débris dans ton Périmètre, il n'y avait rien à prendre.
                 </div>
               )}
               <button
                 onClick={passerAuTitanSuivant}
                 style={{
-                  ...smallBtn(true, "#FFD93D", "#F59E0B"),
-                  fontSize: ".95rem", fontWeight: 700,
-                  padding: "12px 28px", minHeight: 48, width: "100%", maxWidth: 320,
+                  ...smallBtn(true, "#FFD93D"),
+                  fontSize: T.lead,
+                  padding: "14px 28px", minHeight: 52, width: "100%", maxWidth: 340,
                 }}
               >
-                ▶ Titan suivant
+                <Icon name="next" size={16} />
+                Titan suivant
               </button>
             </div>
           )}
@@ -352,21 +409,10 @@ export default function BoardPanel({ vm }) {
               deplacement, puis carte, puis ramassage. Chaque etape disparait
               quand elle est faite ou passee. */}
           {titanModes[selectedTitan.id] !== "ia" && stepMove && (
-              <div style={{
-                background: moveMode ? "rgba(113,219,255,.12)" : "rgba(113,219,255,.07)",
-                border: `1px solid ${moveMode ? "#71dbff" : "rgba(113,219,255,.3)"}`,
-                borderRadius: 10, padding: "9px 11px", marginBottom: 10,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: moveMode ? 0 : 5 }}>
-                  <span style={{ fontSize: ".78rem" }}>🦶</span>
-                  <strong style={{ fontSize: ".76rem", color: "#71dbff" }}>1 · Te déplacer ?</strong>
-                  <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.4)", marginLeft: "auto" }}>
-                    avant ta carte
-                  </span>
-                </div>
+              <Step n={1} titre="Te déplacer ?" quand="avant ta carte" accent={T.move} ouvert={moveMode}>
                 {!moveMode && (
                   <>
-                    <div style={{ fontSize: ".7rem", color: "rgba(255,255,255,.5)", marginBottom: 7 }}>
+                    <div style={{ ...prose(T.dim, T.small), marginBottom: 9 }}>
                       Jusqu'à {moveMaxRange} case{moveMaxRange > 1 ? "s" : ""}. C'est facultatif, et ça change ton Périmètre donc ton Énergie.
                     </div>
                     {/* CE QUE COÛTE UNE RENTRÉE — remonté par Nikola le
@@ -378,30 +424,35 @@ export default function BoardPanel({ vm }) {
                         simplement « jusqu'à 1 case » et croyait à un bug. */}
                     {vm.coutRentreeCeTour > 0 && (
                       <div style={{
-                        fontSize: ".7rem", color: "#ff8fa3", marginBottom: 7,
-                        background: "rgba(255,46,99,.1)", border: "1px solid rgba(255,46,99,.3)",
-                        borderRadius: 8, padding: "5px 8px",
+                        display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 9,
+                        border: `2px solid ${T.stop}`, padding: "7px 9px",
+                        ...prose(T.text, T.micro),
                       }}>
-                        🥊 Tu rentres de hors de BIG CITY : ta rentrée a coûté {vm.coutRentreeCeTour} déplacement
-                        {vm.coutRentreeCeTour > 1 ? "s" : ""} sur ton Mouvement gratuit. Dépense une Adrénaline pour retrouver de la marge.
+                        <Icon name="ringout" size={15} style={{ color: T.stop, marginTop: 2 }} />
+                        <span>
+                          Tu rentres de hors de BIG CITY : ta rentrée a coûté {vm.coutRentreeCeTour} déplacement
+                          {vm.coutRentreeCeTour > 1 ? "s" : ""} sur ton Mouvement gratuit. Dépense une Adrénaline pour retrouver de la marge.
+                        </span>
                       </div>
                     )}
-                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
                       <button
                         onClick={toggleMoveMode}
                         disabled={!canUseMovePassif(selectedTitan.id)}
-                        style={smallBtn(canUseMovePassif(selectedTitan.id), "#71dbff", "#2D8DF5")}
+                        style={smallBtn(canUseMovePassif(selectedTitan.id), "#71dbff")}
                       >
-                        ▶ Se déplacer
+                        <Icon name="move" size={14} />
+                        Se déplacer
                       </button>
                       {/* Bouton mis en avant : tant qu'il n'est pas clique,
                           les cartes ne s'affichent pas. Un joueur qui ne le
                           voyait pas restait bloque tout son tour. */}
                       <button
                         onClick={() => setMoveSkipped(true)}
-                        style={{ ...smallBtn(true, "#FFD93D", "#F59E0B"), fontWeight: 700 }}
+                        style={smallBtn(true, "#FFD93D")}
                       >
-                        Passer aux cartes →
+                        Passer aux cartes
+                        <Icon name="next" size={13} />
                       </button>
                       <AdrenalinePicker
                         value={moveAdrenaline}
@@ -413,49 +464,45 @@ export default function BoardPanel({ vm }) {
                   </>
                 )}
                 {moveMode && (
-                  <div style={{ marginTop: 4 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-                      <span style={{ fontSize: ".7rem", color: "#71dbff", fontWeight: 600 }}>
-                        👆 Clique une case ({moveReachable.size} dispo)
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 8, flexWrap: "wrap" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, ...label(T.move, T.small) }}>
+                        <Icon name="pointer" size={14} />
+                        Clique une case ({moveReachable.size} dispo)
                       </span>
-                      <button onClick={toggleMoveMode} style={{ ...cancelBtn(), fontSize: ".68rem" }}>✕ Annuler</button>
+                      <button onClick={toggleMoveMode} style={{ ...cancelBtn(), marginLeft: "auto" }}>
+                        <Icon name="close" size={12} /> Annuler
+                      </button>
                     </div>
-                    <div style={{ display: "flex", gap: 10, fontSize: ".68rem" }}>
-                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ width: 12, height: 12, borderRadius: 2, background: "rgba(113,219,255,.25)", border: "2px solid #71dbff", display: "inline-block" }} />
-                        <span style={{ color: "rgba(255,255,255,.6)" }}>Classique ({moveClassic.size})</span>
+                    {/* La légende dit ce que peignent les cases du plateau.
+                        Les pastilles reprennent EXACTEMENT le traitement de la
+                        grille, sinon la légende ment. */}
+                    <div style={{ display: "flex", gap: 14, flexWrap: "wrap", ...label(T.dim, T.micro) }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <span style={{ width: 13, height: 13, background: "rgba(113,219,255,.25)", border: `2px solid ${T.move}`, display: "inline-block" }} />
+                        Classique ({moveClassic.size})
                       </span>
                       {moveTeleport.size > 0 && (
-                        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          <span style={{ width: 12, height: 12, borderRadius: 2, background: "rgba(113,219,255,.15)", border: "2px dashed #b88cff", display: "inline-block" }} />
-                          <span style={{ color: "rgba(255,255,255,.6)" }}>🌀 Téléporteur ({moveTeleport.size})</span>
+                        <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <span style={{ width: 13, height: 13, background: "rgba(113,219,255,.15)", border: `2px dashed ${T.tele}`, display: "inline-block" }} />
+                          <Icon name="teleport" size={12} style={{ color: T.tele }} />
+                          Téléporteur ({moveTeleport.size})
                         </span>
                       )}
                     </div>
                   </div>
                 )}
-              </div>
+              </Step>
           )} {/* fin étape 1 */}
 
           {/* ── ÉTAPE 3 · RAMASSAGE ──
               Apparaît seulement une fois la carte du round jouée ou
               défaussée, et disparaît une fois le ramassage fait. */}
           {titanModes[selectedTitan.id] !== "ia" && stepRecup && (
-              <div style={{
-                background: recupMode ? "rgba(22,224,140,.14)" : "rgba(22,224,140,.07)",
-                border: `1px solid ${recupMode ? "#16E08C" : "rgba(22,224,140,.3)"}`,
-                borderRadius: 10, padding: "9px 11px", marginBottom: 10,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: recupMode ? 0 : 5 }}>
-                  <span style={{ fontSize: ".78rem" }}>🤲</span>
-                  <strong style={{ fontSize: ".76rem", color: "#16E08C" }}>3 · Ramasser ?</strong>
-                  <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.4)", marginLeft: "auto" }}>
-                    après ta carte
-                  </span>
-                </div>
+              <Step n={3} titre="Ramasser ?" quand="après ta carte" accent={T.go} ouvert={recupMode}>
                 {!recupMode && (
                   <>
-                    <div style={{ fontSize: ".7rem", color: "rgba(255,255,255,.5)", marginBottom: 7 }}>
+                    <div style={{ ...prose(T.dim, T.small), marginBottom: 9 }}>
                       1 Bloc ou 1 Socle au choix dans ton Périmètre. Une case entièrement vidée t'oblige à t'y déplacer.
                     </div>
                     {/* Le passage au Titan suivant vit ici tant que le
@@ -465,57 +512,73 @@ export default function BoardPanel({ vm }) {
                       <button
                         onClick={toggleRecupMode}
                         disabled={recupPool.size === 0}
-                        style={smallBtn(recupPool.size > 0, "#16E08C", "#00C97A")}
+                        style={smallBtn(recupPool.size > 0, "#16E08C")}
                       >
-                        ▶ Ramasser {recupPool.size === 0 ? "(rien à portée)" : `(${recupPool.size} case${recupPool.size > 1 ? "s" : ""})`}
+                        <Icon name="grab" size={14} />
+                        Ramasser {recupPool.size === 0 ? "(rien à portée)" : `(${recupPool.size} case${recupPool.size > 1 ? "s" : ""})`}
                       </button>
                       <button
                         onClick={passerAuTitanSuivant}
-                        style={{ ...smallBtn(true, "#FFD93D", "#F59E0B"), fontWeight: 700, marginLeft: "auto" }}
+                        style={{ ...smallBtn(true, "#FFD93D"), marginLeft: "auto" }}
                       >
-                        ▶ Titan suivant
+                        <Icon name="next" size={13} />
+                        Titan suivant
                       </button>
                     </div>
                   </>
                 )}
                 {recupMode && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: ".72rem", color: "#16E08C", fontWeight: 600 }}>
-                      👆 Clique une case jaune ({recupPool.size} dispo)
+                  <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, ...label(T.go, T.small) }}>
+                      <Icon name="pointer" size={14} />
+                      Clique une case en surbrillance ({recupPool.size} dispo)
                     </span>
-                    <button onClick={toggleRecupMode} style={cancelBtn()}>✕ Annuler</button>
+                    <button onClick={toggleRecupMode} style={{ ...cancelBtn(), marginLeft: "auto" }}>
+                      <Icon name="close" size={12} /> Annuler
+                    </button>
                   </div>
                 )}
-              </div>
+              </Step>
           )} {/* fin étape 3 */}
 
           {/* ── ÉTAPE 2 · TA CARTE ── */}
           {titanModes[selectedTitan.id] !== "ia" && !cartesVisibles && phase === "action" && (
             <div style={{
-              background: "rgba(255,255,255,.04)", border: "1px dashed rgba(255,255,255,.2)",
-              borderRadius: 10, padding: "12px 14px", marginBottom: 10,
-              fontSize: ".76rem", color: "rgba(255,255,255,.5)", textAlign: "center",
+              border: `2px dashed ${T.rule}`,
+              borderRadius: T.rPlate, padding: "16px 14px", marginBottom: 10,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
+              textAlign: "center", color: T.faint,
             }}>
-              🔒 Jeu caché — les cartes de {titanDisplayName(selectedTitan.id)} ne sont
-              visibles que pendant son tour.
+              <Icon name="lock" size={16} />
+              <span style={prose(T.faint, T.small)}>
+                Jeu caché — les cartes de {titanDisplayName(selectedTitan.id)} ne sont
+                visibles que pendant son tour.
+              </span>
             </div>
           )}
           {titanModes[selectedTitan.id] !== "ia" && cartesVisibles && stepCarte && (
           <div style={{ marginBottom: 8 }}>
             {phase === "action" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 7, flexWrap: "wrap" }}>
-                <span style={{ fontSize: ".78rem" }}>🃏</span>
-                <strong style={{ fontSize: ".76rem", color: "#FFD93D" }}>
-                  2 · Joue une carte
-                </strong>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9, flexWrap: "wrap" }}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    ...readout("0.7rem", "#1a1400"), background: T.you,
+                    border: `2px solid ${T.you}`, width: 22, height: 22,
+                    display: "grid", placeItems: "center", flexShrink: 0,
+                  }}
+                >
+                  2
+                </span>
+                <h3 style={marquee("0.95rem", T.you)}>Joue une carte</h3>
                 {/* Retour possible tant que le deplacement n'est pas consomme :
                     passer l'etape ne doit pas etre irreversible. */}
                 {moveSkipped && canUseMovePassif(selectedTitan.id) && (
                   <button
                     onClick={() => setMoveSkipped(false)}
-                    style={{ ...cancelBtn(), marginLeft: "auto", fontSize: ".68rem" }}
+                    style={{ ...cancelBtn(), marginLeft: "auto" }}
                   >
-                    ← Me déplacer finalement
+                    <Icon name="move" size={12} /> Me déplacer finalement
                   </button>
                 )}
               </div>
@@ -528,18 +591,17 @@ export default function BoardPanel({ vm }) {
                 onClick={() => setShowCardEffects((v) => !v)}
                 title={showCardEffects ? "Masquer ce que font les cartes" : "Afficher ce que font les cartes"}
                 style={{
-                  display: "flex", alignItems: "center", gap: 6, marginBottom: 6,
-                  background: showCardEffects ? "rgba(255,217,61,.12)" : "rgba(255,255,255,.06)",
-                  border: `1px solid ${showCardEffects ? "rgba(255,217,61,.45)" : "rgba(255,255,255,.18)"}`,
-                  borderRadius: 8, padding: "4px 10px", cursor: "pointer",
-                  color: showCardEffects ? "#FFD93D" : "rgba(255,255,255,.6)",
-                  fontSize: ".68rem", fontWeight: 700, fontFamily: "inherit",
+                  display: "flex", alignItems: "center", gap: 7, marginBottom: 8,
+                  background: "transparent",
+                  border: `2px solid ${showCardEffects ? T.you : T.rule}`,
+                  borderRadius: T.rChip, padding: "6px 11px", cursor: "pointer",
+                  ...label(showCardEffects ? T.you : T.dim, T.micro),
                 }}
               >
                 <span style={{
                   display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  width: 15, height: 15, borderRadius: "50%", flexShrink: 0,
-                  border: `1px solid currentColor`, fontSize: ".68rem",
+                  width: 15, height: 15, flexShrink: 0,
+                  border: `1.5px solid currentColor`, fontSize: ".62rem",
                 }}>?</span>
                 {showCardEffects ? "Masquer ce que font les cartes" : "Que font les cartes ?"}
               </button>

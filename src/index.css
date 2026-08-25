@@ -1,68 +1,289 @@
-/* Bug #7 (tracker) : base responsive PC / tablette / mobile.
-   Le reste de l'UI est en styles inline (flex/flexWrap déjà en place sur
-   la plupart des panneaux), mais il manquait un socle global : sans
-   box-sizing: border-box, tout padding/border inline s'additionnait à la
-   largeur et provoquait un débordement horizontal (scroll fantôme) sur
-   petit écran ; sans hauteur/largeur explicites sur html/body, certains
-   mobiles laissaient apparaître la couleur de fond du navigateur (blanc)
-   autour de l'appli au lieu du dégradé sombre. */
+/* ============================================================
+   PROJET TITAN — LA BORNE
+   ============================================================
+   Le monde visuel du jeu : un tube cathodique de borne d'arcade, la
+   descendance directe de Rampage et King of the Monsters. Encre plate cernée
+   de noir, arêtes dures, jauges à segments, lignes de balayage. Aucun dégradé
+   décoratif, aucun halo posé pour faire joli.
 
-*, *::before, *::after {
+   Ce fichier porte les JETONS. Les composants ne réinventent plus leurs
+   valeurs : ils lisent `var(--…)` (voir aussi src/ui/theme.js, qui expose les
+   mêmes noms au JavaScript pour les styles en ligne).
+
+   RÈGLE DE COULEUR : chaque couleur code une règle du jeu. Le jaune dit
+   « c'est ton tour, c'est toi qui agis ». Le vert dit « disponible ». Le rouge
+   dit « une décision bloque ». Le cyan dit « passif ». Aucune couleur n'est
+   là pour décorer, et les couleurs de Titans, de blocs et de cartes sont des
+   DONNÉES DE JEU : elles ne bougent pas.
+============================================================ */
+
+:root {
+  /* ── Le meuble et le tube ──────────────────────────────── */
+  --ink-void: #05060d;      /* derrière tout, le noir du meuble */
+  --ink-screen: #0d0a1c;    /* le fond du tube */
+  --ink-plate: #171331;     /* une plaque de HUD posée dessus */
+  --ink-plate-hi: #241d47;  /* la même, survolée ou active */
+  --ink-bezel: #2d1d5d;     /* le violet du meuble, hérité */
+
+  /* ── Traits ────────────────────────────────────────────── */
+  /* Un sprite d'arcade est CERNÉ. Le cerne noir est la langue d'élévation
+     de ce monde : on déclare l'élévation par le trait, et l'ombre portée
+     reste réservée au seul élément qui flotte vraiment (la plaque du Titan
+     actif). Jamais les deux sur le même objet. */
+  --edge: #05060d;
+  --edge-w: 2px;
+  --rule: rgba(255, 250, 238, 0.16);
+  --rule-strong: rgba(255, 250, 238, 0.32);
+
+  /* ── Texte ─────────────────────────────────────────────── */
+  --text: #fffaee;
+  /* Teinté depuis le violet du fond, jamais gris : un gris sur un fond
+     coloré se lit comme une tache morte. */
+  --text-dim: #c0b6d8;
+  --text-faint: #8c82a8;
+
+  /* ── Signaux (chacun code une règle) ───────────────────── */
+  --sig-you: #ffd93d;       /* ton tour, ton action primaire */
+  --sig-go: #16e08c;        /* disponible, validé */
+  --sig-warn: #fb923c;      /* attention, en attente */
+  --sig-stop: #f44336;      /* une décision bloque le jeu */
+  --sig-move: #71dbff;      /* passif, déplacement, portée */
+  --sig-tele: #b88cff;      /* téléporteur */
+
+  /* ── Titans (données de jeu) ───────────────────────────── */
+  --t1: #71dbff;
+  --t2: #fb923c;
+  --t3: #16e08c;
+  --t4: #f472b6;
+
+  /* ── Familles ──────────────────────────────────────────── */
+  --font-marquee: "Bowlby One", "Arial Black", sans-serif;
+  --font-readout: "Press Start 2P", "Courier New", monospace;
+  --font-ui: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* ── Échelle typographique ─────────────────────────────
+     L'ancienne interface vivait entre .68rem et .78rem — 11 à 12,5 px — sur
+     un appareil qu'on lit à bout de bras, posé au milieu d'une table. Les
+     quatre frictions signalées par l'auteur sont toutes des échecs de
+     lisibilité, et celui-ci en était la cause commune. Le plancher est
+     maintenant 12,5px, et le corps courant est à 15–16px. */
+  --fs-micro: 0.78rem;
+  --fs-small: 0.875rem;
+  --fs-body: 0.9375rem;
+  --fs-lead: 1.0625rem;
+  --fs-h3: 1.25rem;
+  --fs-h2: 1.625rem;
+  --fs-h1: 2.25rem;
+
+  /* ── Rythme ────────────────────────────────────────────── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* ── Arêtes ────────────────────────────────────────────
+     Une borne d'arcade n'a pas de coins arrondis à 14px. Le monde choisi
+     impose l'arête dure ; 3px sur les plaques, 2px sur les jetons, et 0 sur
+     tout ce qui doit avoir l'air découpé dans la tôle. */
+  --r-plate: 3px;
+  --r-chip: 2px;
+
+  /* ── Mouvement ─────────────────────────────────────────── */
+  /* Deux décélérations exponentielles, pas de rebond : un objet réel ralentit,
+     il ne repart pas en arrière. `snap` est simplement plus courte et plus
+     sèche que `out` — c'est le geste d'une touche qu'on enfonce. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   width: 100%;
   min-height: 100%;
-  background: #0a0212; /* évite le flash blanc navigateur avant montage React */
-  overflow-x: hidden;  /* aucune section ne doit provoquer de scroll horizontal */
+  background: var(--ink-void);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  overflow-x: hidden;
   -webkit-text-size-adjust: 100%;
+  /* Les chiffres de ce jeu sont des mesures : ils doivent s'aligner en
+     colonne et ne pas danser quand un score passe de 9 à 10. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
 }
 
 #root {
   min-height: 100vh;
 }
 
-/* Cibles tactiles confortables sur mobile/tablette (recommandation
-   accessibilité ~44px) sans changer la taille visuelle des boutons
-   compacts existants — on agrandit juste la zone cliquable. */
-@media (hover: none) and (pointer: coarse) {
-  button {
-    min-height: 32px;
+/* ── LES SURFACES QUE LE NAVIGATEUR DESSINE ─────────────────
+   Sélection, curseur, ascenseurs, anneau de focus : livrés par défaut, ils
+   n'appartiennent à aucun système de design. Ils sont peints ici, dans la
+   palette de la borne. */
+::selection {
+  background: var(--sig-you);
+  color: var(--ink-void);
+}
+
+:focus-visible {
+  outline: 3px solid var(--sig-you);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-bezel) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--ink-bezel);
+  border: 2px solid var(--ink-screen);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--sig-tele);
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* ── LE TUBE ────────────────────────────────────────────────
+   Les lignes de balayage sont la matière du sujet, pas une trame décorative
+   posée sur un fond : c'est le tube de la borne. Elles restent sous le
+   contenu (z-index négatif via ::after sur le cadre) et n'atteignent jamais
+   le texte, qui doit rester net. */
+.titan-cabinet {
+  position: relative;
+  isolation: isolate;
+}
+
+.titan-cabinet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.22) 0px,
+    rgba(0, 0, 0, 0.22) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  /* Le vignettage du tube : les bords d'un CRT sont plus sombres que le
+     centre, et c'est ce qui fait qu'on lit l'écran comme un objet et non
+     comme une page. */
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+}
+
+.titan-cabinet::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(
+    120% 90% at 50% 35%,
+    transparent 45%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
-/* Petit mobile : on resserre un peu les marges globales pour laisser plus
-   de place au plateau et aux panneaux sans les casser (ils sont déjà en
-   flexWrap, donc ils se réorganisent tout seuls). */
-@media (max-width: 480px) {
-  #root > div {
-    padding: 6px 4px !important;
-    border-radius: 10px !important;
+/* Certains écrans très denses rendent les lignes de balayage sous forme de
+   moiré. Sous cette densité elles restent nettes ; au-delà on les coupe. */
+@media (min-resolution: 3dppx) {
+  .titan-cabinet::after {
+    display: none;
   }
+}
+
+/* ── LE SEUL MOMENT ANIMÉ ───────────────────────────────────
+   Un mouvement, orchestré, et pas une collection d'effets au survol : la
+   plaque du Titan dont c'est le tour SE LÈVE hors du plateau pendant que les
+   autres reculent. C'est ce qui répond à « savoir ce que je peux faire » :
+   il n'y a jamais qu'une seule chose en relief à l'écran. */
+@keyframes titan-plate-rise {
+  from {
+    transform: translateY(6px) scale(0.985);
+    opacity: 0.7;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes titan-coin-blink {
+  0%,
+  55% {
+    opacity: 1;
+  }
+  56%,
+  100% {
+    opacity: 0.25;
+  }
+}
+
+/* Un impact de kaiju secoue le meuble. Réservé à la résolution d'une carte,
+   une fois, jamais en boucle. */
+@keyframes titan-impact {
+  0% { transform: translate3d(0, 0, 0); }
+  15% { transform: translate3d(-3px, 2px, 0); }
+  30% { transform: translate3d(3px, -2px, 0); }
+  45% { transform: translate3d(-2px, -1px, 0); }
+  60% { transform: translate3d(2px, 1px, 0); }
+  100% { transform: translate3d(0, 0, 0); }
+}
+
+.titan-impact {
+  animation: titan-impact 420ms var(--ease-out) both;
 }
 
 /* ── GRILLE 9×9 SUR PETIT ÉCRAN ──
    Bug remonté par Nikola le 2026-08-17 : « le rendu n'est pas bon en mode
    développeur navigateur sur mobile et tablette ».
 
-   Cette règle décrivait une grille de DIX colonnes :
-       16px repeat(9, …)                → 1 label + 9 cases
-   alors que le plateau en compte DOUZE depuis l'ajout des gouttières
-   « hors du ring » :
-       24px 18px repeat(9, …) 24px      → gouttière, label, 9 cases, gouttière
-   Les rangées avaient exactement le même décalage. Sous 560px, la grille
-   était donc redéfinie avec deux pistes de moins que d'éléments à placer :
-   les colonnes surnuméraires partaient dans des pistes implicites, et tout
-   le plateau se décalait — numéros de colonnes désalignés des cases,
-   dernière colonne rejetée à la ligne.
-
-   La règle suit désormais la structure réelle. Les gouttières et le label
-   sont resserrés pour rendre la place aux cases, qui restent en `1fr` : sur
-   un écran de 360px elles retombent autour de 33px, soit la cible tactile
-   visée à l'origine, sans imposer de défilement horizontal. */
+   La grille compte DOUZE pistes depuis l'ajout des gouttières « hors du
+   ring » : gouttière, label, 9 cases, gouttière. Une ancienne règle n'en
+   décrivait que dix, et tout le plateau se décalait sous 560px. Les règles
+   ci-dessous suivent la structure réelle. Les gouttières et le label sont
+   resserrés pour rendre la place aux cases, qui restent en `1fr`. */
 @media (max-width: 560px) {
   .titan-grid {
     grid-template-columns: 14px 14px repeat(9, minmax(26px, 1fr)) 14px !important;
@@ -71,9 +292,6 @@ html, body {
   }
 }
 
-/* Très petit téléphone : on récupère encore quelques pixels sur les
-   gouttières, seule zone réellement compressible — elles ne portent qu'une
-   icône de Titan en attente, et restent vides la plupart du temps. */
 @media (max-width: 380px) {
   .titan-grid {
     grid-template-columns: 11px 11px repeat(9, minmax(24px, 1fr)) 11px !important;
@@ -81,8 +299,6 @@ html, body {
   }
 }
 
-/* Tablette : la grille reste confortable, on garde la structure à 12 pistes
-   en resserrant juste les colonnes de service. */
 @media (min-width: 561px) and (max-width: 900px) {
   .titan-grid {
     grid-template-columns: 18px 16px repeat(9, minmax(30px, 1fr)) 18px !important;
@@ -90,30 +306,66 @@ html, body {
   }
 }
 
-/* Tablette : légère réduction pour éviter les marges trop généreuses
-   héritées du design desktop. */
+/* ── LARGEURS DU MEUBLE ─────────────────────────────────────
+   Sur PC, le plateau et les panneaux ne doivent plus s'empiler dans une
+   colonne de 820px au milieu d'un écran vide (les deux scènes d'usage,
+   tablette et PC, comptent autant l'une que l'autre). */
+@media (max-width: 480px) {
+  .titan-cabinet {
+    padding: var(--sp-2) var(--sp-2) !important;
+  }
+}
+
 @media (min-width: 481px) and (max-width: 900px) {
-  #root > div {
+  .titan-cabinet {
     max-width: 100% !important;
   }
 }
 
-/* Desktop large : le conteneur restait plafonné à 820px (valeur pensée
-   mobile-first) même sur un écran PC grand format — bug remonté "sur PC
-   l'écran ne prend pas toute la taille". Au-delà de 900px on élargit
-   nettement le plateau de jeu (jusqu'à 1400px) : le canvas 3D suit déjà
-   clientWidth de son conteneur (voir Board3D.jsx), donc il en profite
-   automatiquement sans changement de code côté 3D. Le `!important` est
-   nécessaire pour passer devant le style inline maxWidth:820 posé dans
-   GameView.jsx (même technique que les règles mobile/tablette ci-dessus). */
 @media (min-width: 901px) {
-  #root > div {
+  .titan-cabinet {
     max-width: min(1400px, 96vw) !important;
-    padding: 20px 32px !important;
+    padding: var(--sp-5) var(--sp-6) !important;
   }
 }
+
 @media (min-width: 1400px) {
-  #root > div {
-    padding: 24px 48px !important;
+  .titan-cabinet {
+    padding: var(--sp-5) var(--sp-7) !important;
+  }
+}
+
+/* Cibles tactiles confortables (44px) sur tablette, sans changer la taille
+   visuelle des boutons compacts. */
+@media (hover: none) and (pointer: coarse) {
+  button {
+    min-height: 44px;
+  }
+}
+
+/* ── DEUX COLONNES SUR GRAND ÉCRAN ─────────────────────────
+   Le plateau tient la colonne large, les commandes du tour restent
+   visibles en permanence à droite au lieu de sortir de l'écran à chaque
+   action. Sous 1100px, la grille redevient une pile : c'est exactement la
+   mise en page d'avant, à laquelle la tablette est habituée. */
+.titan-layout {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+@media (min-width: 1100px) {
+  .titan-layout {
+    grid-template-columns: minmax(0, 1.4fr) minmax(370px, 0.8fr);
+    align-items: start;
+    gap: var(--sp-5);
+  }
+
+  .titan-layout__aside {
+    position: sticky;
+    top: var(--sp-3);
+    max-height: calc(100vh - var(--sp-5));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: var(--sp-1);
   }
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Domain from "../domain/index.js";
 import { TITAN_COLORS } from "../ui/titans/constants.js";
-import { TitanIcon } from "../ui/titans/TitanVisuals.jsx";
+import SetupScreen from "../ui/SetupScreen.jsx";
 
 /* Destructuration du domaine au NIVEAU MODULE, et non plus à l'intérieur du
    hook. Ces fonctions sont des constantes de module : les déclarer dans le
@@ -506,6 +506,34 @@ export function useBoardGeneratorController() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePlayerId, phase]);
+
+  /* ── QUI PROGRAMME MAINTENANT ──
+     Bug trouvé en inspectant l'écran d'ouverture d'une partie neuve : en
+     Phase Programmation, `activePlayerId` est nul (elle n'a pas de tour), et
+     l'effet ci-dessus ne s'applique qu'à la Phase Action. Résultat,
+     `selectedTitanId` restait `null` au tout premier écran de la partie —
+     et comme TOUT le panneau de jeu est monté derrière `selectedTitan`, le
+     joueur arrivait sur un plateau sans la moindre commande, sans que rien
+     lui dise qu'il devait d'abord cliquer sur SA propre plaque de Titan.
+     C'est le premier écran de chaque partie, et c'est exactement la friction
+     « savoir ce que je peux faire ».
+
+     La règle appliquée est celle qui existait déjà en filigrane : « chacun
+     programme à son tour, le Titan sélectionné est celui qui programme ». On
+     désigne donc le premier humain qui n'a pas encore validé. Une sélection
+     manuelle n'est jamais écrasée tant qu'elle reste valable : on ne bouge
+     que si personne n'est sélectionné, ou si le sélectionné a fini. */
+  useEffect(() => {
+    if (phase !== "programmation") return;
+    const enCours = selectedTitanId != null
+      && titanModes[selectedTitanId] !== "ia"
+      && !phaseValidated[selectedTitanId];
+    if (enCours) return;
+    const suivant = titanState.ordreJeu.find(
+      (id) => titanModes[id] !== "ia" && !phaseValidated[id]
+    );
+    if (suivant != null && suivant !== selectedTitanId) setSelectedTitanId(suivant);
+  }, [phase, phaseValidated, titanModes, titanState.ordreJeu, selectedTitanId]);
   const selectedTitan = titanState.players.find((t) => t.id === selectedTitanId) || null;
   // Pendant animation de déplacement, on substitue la position visuelle du Titan animé
   const effectivePlayers = movingTitanOverride
@@ -1554,8 +1582,36 @@ export function useBoardGeneratorController() {
     const profils = aiTitanProfilesRef.current;
     const aTrancher = [];
 
+    /* ── UN MÊME ÉLÉMENT NE SE PLACE QU'UNE FOIS ──
+       Bug remonté par Nikola sur la Manche 3 de la graine 3144532881 :
+       « j'étais en F3, j'ai fait Graouhhh, j'aurais dû déplacer 1 Titan puis
+       1 autre — j'ai dû déplacer 2 fois le même. »
+
+       Le journal de ce rapport le montre noir sur blanc, deux lignes de
+       suite :
+         « Titan 4 arrêté faute de puissance → posé en I4 au lieu de H3 »
+         « Titan 4 arrêté faute de puissance → posé en H2 au lieu de H3 »
+       Même Titan, même case de repli par défaut : ce sont DEUX demandes pour
+       UN SEUL arrêt. Elles naissent quand un Titan est touché directement
+       PUIS repercuté par la chaîne au même endroit — `projectInDirection`
+       dépose alors un repli à chacun des deux passages, sans savoir que
+       l'autre existe.
+
+       Le joueur se retrouvait à placer deux fois le même Titan, et le second
+       choix écrasait le premier : le premier n'avait donc servi à rien.
+
+       On dédoublonne sur (Titan, case par défaut) : deux demandes qui
+       désignent le même élément arrêté au même endroit sont le même
+       événement physique, et une seule décision doit être posée au joueur.
+       Deux poussées RÉELLEMENT distinctes ont des cases d'arrêt
+       différentes — elles passent toutes les deux, comme avant. */
+    const dejaVu = new Set();
+
     for (const r of liste) {
       if (r.cases.length <= 1) continue;
+      const signature = `${r.titanId ?? "debris"}@${r.defaut}`;
+      if (dejaVu.has(signature)) continue;
+      dejaVu.add(signature);
       if (modes[r.initiatorId] !== "ia") { aTrancher.push(r); continue; }
 
       const etat = {
@@ -3206,191 +3262,29 @@ export function useBoardGeneratorController() {
   }, [construireRapport, mancheNumber]);
 
   if (!setupDone) {
+    /* L'écran d'accueil vivait ici, en 190 lignes de JSX au milieu de la
+       logique de jeu. Il est sorti dans son propre composant : le contrôleur
+       n'a pas à savoir à quoi ressemble un formulaire. */
     return (
-      <div style={{
-        fontFamily: "'Outfit', Arial, sans-serif",
-        background: "linear-gradient(180deg, #2d1d5d 0%, #0a0212 100%)",
-        color: "#fffaee", padding: 32, borderRadius: 20, maxWidth: 500, margin: "0 auto",
-      }}>
-        <h2 style={{ fontFamily: "'Bowlby One', sans-serif", color: "#FFD93D", fontSize: "1.15rem", marginBottom: 6 }}>
-          PROJET TITAN — Configuration
-        </h2>
-        <p style={{ fontSize: ".78rem", color: "rgba(255,255,255,.55)", marginBottom: 22 }}>
-          Paramètre la partie avant de lancer. Ces réglages sont <strong style={{ color: "#FFD93D" }}>verrouillés au démarrage</strong>.
-        </p>
-
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ color: "#FFD93D", fontFamily: "'Bowlby One', sans-serif", fontSize: ".78rem", marginBottom: 8 }}>
-            Nombre de Titans
-          </div>
-          {/* Même police que les boutons Humain / IA plus bas : Bowlby One
-              sur un libellé de bouton étirait le texte et jurait avec le
-              reste du formulaire. Le nombre garde du poids, la précision
-              entre parenthèses passe en seconde ligne discrète. */}
-          <div style={{ display: "flex", gap: 8 }}>
-            {[3, 4].map((n) => {
-              const on = nbJoueurs === n;
-              return (
-                <button key={n} onClick={() => setNbJoueurs(n)} style={{
-                  flex: 1,
-                  background: on ? "linear-gradient(135deg,#ff9239,#FF2E63)" : "rgba(255,255,255,.07)",
-                  border: `1px solid ${on ? "transparent" : "rgba(255,255,255,.18)"}`,
-                  borderRadius: 10, color: on ? "#fff" : "rgba(255,255,255,.75)",
-                  padding: "9px 0", cursor: "pointer",
-                  display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
-                }}>
-                  <span style={{ fontSize: ".82rem", fontWeight: 700 }}>{n} Titans</span>
-                  <span style={{ fontSize: ".68rem", opacity: on ? 0.85 : 0.5 }}>
-                    {manchesMax(n)} Manches
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 18 }}>
-          <div style={{
-            color: "#FFD93D", fontFamily: "'Bowlby One', sans-serif", fontSize: ".78rem",
-            marginBottom: 8, display: "flex", alignItems: "center", gap: 6,
-          }}>
-            <img
-              src={`${import.meta.env.BASE_URL}assets/rules/titan.png`}
-              alt="" aria-hidden="true"
-              style={{ width: 20, height: 20, objectFit: "contain", filter: "brightness(1.2)" }}
-            />
-            Titans
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {Array.from({ length: nbJoueurs }, (_, i) => i + 1).map((id) => {
-              const tc = TITAN_COLORS[id];
-              const mode = titanModes[id] || "humain";
-              return (
-                // La ligne prend la couleur du Titan : liseré et fond teintés
-                // par son accent, au lieu d'un gris uniforme qui ne disait pas
-                // à qui appartenait la ligne.
-                <div key={id} style={{
-                  display: "flex", alignItems: "center", gap: 10,
-                  background: `${tc?.accent || "#ffffff"}0f`,
-                  border: `1px solid ${tc?.accent || "rgba(255,255,255,.2)"}44`,
-                  borderRadius: 10, padding: "8px 10px", flexWrap: "wrap",
-                }}>
-                  <TitanIcon titanId={id} size={28} variant="plain" />
-                  {/* Le champ ne porte plus ni cadre ni fond propres : il se
-                      fond dans la ligne du Titan, avec un simple soulignement
-                      à sa couleur. Le texte saisi reste blanc — en couleur
-                      d'accent sur fond teinté, un nom devenait illisible. */}
-                  <input
-                    type="text"
-                    value={titanNames[id]}
-                    onChange={(e) => setTitanNames((prev) => ({ ...prev, [id]: e.target.value.slice(0, 18) }))}
-                    placeholder={`Titan ${id}`}
-                    maxLength={18}
-                    style={{
-                      flex: 1, minWidth: 110,
-                      background: "transparent",
-                      border: "none",
-                      borderBottom: `1.5px solid ${tc?.accent || "rgba(255,255,255,.25)"}66`,
-                      borderRadius: 0,
-                      color: "#fffaee", padding: "5px 2px", fontSize: ".82rem",
-                      fontWeight: 600, outline: "none",
-                    }}
-                    title="Choisis le nom de ton Titan (18 caractères max)"
-                  />
-                  <div style={{ display: "flex", gap: 5 }}>
-                    {["humain", "ia"].map((m) => (
-                      <button key={m} onClick={() => setTitanModes((prev) => ({ ...prev, [id]: m }))} style={{
-                        background: mode === m
-                          ? (m === "humain" ? "linear-gradient(135deg,#16E08C,#00C97A)" : "linear-gradient(135deg,#6366f1,#a855f7)")
-                          : "rgba(255,255,255,.07)",
-                        border: "none", borderRadius: 8, color: mode === m ? "#0E0420" : "rgba(255,255,255,.5)",
-                        padding: "5px 10px", fontSize: ".72rem", fontWeight: 700, cursor: "pointer",
-                      }}>
-                        {m === "humain" ? "👤 Humain" : "🤖 IA"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ color: "#FFD93D", fontFamily: "'Bowlby One', sans-serif", fontSize: ".78rem", marginBottom: 8 }}>
-            Modes de jeu
-          </div>
-          <label style={{
-            display: "flex", alignItems: "center", gap: 10,
-            background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.15)",
-            borderRadius: 10, padding: "10px 12px", cursor: "pointer", fontSize: ".78rem",
-          }}>
-            <input type="checkbox" checked={eventsEnabled} onChange={(e) => setEventsEnabled(e.target.checked)} />
-            <span>
-              <strong style={{ color: "#71dbff" }}>🎲 Événements</strong>
-              <div style={{ color: "rgba(255,255,255,.5)", fontSize: ".72rem", marginTop: 2 }}>
-                Ajoute la Phase 1 à chaque Manche (stub — effets codés plus tard).
-              </div>
-            </span>
-          </label>
-        </div>
-
-        <div style={{ marginBottom: 22 }}>
-          <div style={{ color: "#FFD93D", fontFamily: "'Bowlby One', sans-serif", fontSize: ".78rem", marginBottom: 8 }}>
-            🏙️ Seuil Apocalypse Urbaine
-          </div>
-          <div style={{
-            display: "flex", alignItems: "center", gap: 10,
-            background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.15)",
-            borderRadius: 10, padding: "10px 12px",
-          }}>
-            <input type="number" min="0" max="24" value={apocalypseThreshold}
-              onChange={(e) => setApocalypseThreshold(Math.max(0, Math.min(24, Number(e.target.value) || 0)))}
-              style={{ width: 60, background: "rgba(255,255,255,.08)", color: "#fffaee", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "6px 8px" }}
-            />
-            <span style={{ fontSize: ".74rem", color: "rgba(255,255,255,.55)" }}>
-              bâtiments encore debout = fin de partie.
-            </span>
-          </div>
-        </div>
-
-        {/* GRAINE — Nikola, 2026-08-24 : « rejouer une partie depuis sa
-            graine ». Laisse vide pour une partie normale ; colle la graine
-            d'un rapport de bug pour retomber exactement sur la meme partie
-            (meme plateau, memes positions, meme ordre de jeu, memes profils
-            d'IA). */}
-        <div style={{ marginBottom: 22 }}>
-          <div style={{ color: "#FFD93D", fontFamily: "'Bowlby One', sans-serif", fontSize: ".78rem", marginBottom: 8 }}>
-            🎲 Graine (facultatif)
-          </div>
-          <div style={{
-            display: "flex", alignItems: "center", gap: 10,
-            background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.15)",
-            borderRadius: 10, padding: "10px 12px",
-          }}>
-            <input
-              type="text" inputMode="numeric" value={seedInput}
-              onChange={(e) => setSeedInput(e.target.value.replace(/[^0-9]/g, ""))}
-              placeholder="aléatoire"
-              style={{ width: 130, background: "rgba(255,255,255,.08)", color: "#fffaee", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "6px 8px", fontFamily: "inherit" }}
-            />
-            <span style={{ fontSize: ".74rem", color: "rgba(255,255,255,.55)" }}>
-              vide = partie normale. Une graine rejoue la même partie à l'identique.
-            </span>
-          </div>
-        </div>
-
-        <button
-          onClick={() => { regenerate(seedInput === "" ? undefined : seedInput); setSetupDone(true); }}
-          style={{
-            width: "100%", background: "linear-gradient(135deg,#16E08C,#00C97A)", border: "none",
-            borderRadius: 10, color: "#0E0420", fontWeight: 700, padding: "12px 0",
-            fontFamily: "'Bowlby One', sans-serif", fontSize: ".82rem", cursor: "pointer",
-          }}
-        >
-          🏙️ Lancer la partie
-        </button>
-      </div>
+      <SetupScreen
+        nbJoueurs={nbJoueurs}
+        setNbJoueurs={setNbJoueurs}
+        manchesMax={manchesMax}
+        titanNames={titanNames}
+        setTitanNames={setTitanNames}
+        titanModes={titanModes}
+        setTitanModes={setTitanModes}
+        eventsEnabled={eventsEnabled}
+        setEventsEnabled={setEventsEnabled}
+        apocalypseThreshold={apocalypseThreshold}
+        setApocalypseThreshold={setApocalypseThreshold}
+        seedInput={seedInput}
+        setSeedInput={setSeedInput}
+        onLancer={() => {
+          regenerate(seedInput === "" ? undefined : seedInput);
+          setSetupDone(true);
+        }}
+      />
     );
   }
 
@@ -3512,6 +3406,9 @@ export function useBoardGeneratorController() {
     setEcroulement,
     ecroulementCells,
     repliQueue,
+    // Exposé pour le test de non-régression du dédoublonnage : c'est le seul
+    // moyen de vérifier la file sans rejouer une chaîne de réaction entière.
+    enqueueReplis,
     currentRepli,
     choisirRepli,
     ecroulementPoserDebris,

@@ -11,6 +11,7 @@ import { COLOR_HEX, ROWS, isBuildingCell, isSocleMarker, socleValue } from "../.
 import { BLOCK_NAME } from "../blockNames.js";
 import { btnStyle, cancelBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
+import { T, readout } from "../theme.js";
 
 export default function RoundPanels({ vm }) {
   // Bug remonté : quand une case cumule 2 débris DIFFÉRENTS (ex. bloc rose
@@ -424,7 +425,7 @@ export default function RoundPanels({ vm }) {
         {/* Ligne des numéros de colonne */}
         <div /><div />
         {[1,2,3,4,5,6,7,8,9].map((c) => (
-          <div key={c} style={{ display: "grid", placeItems: "center", fontSize: ".68rem", color: "rgba(255,255,255,.4)" }}>{c}</div>
+          <div key={c} style={{ display: "grid", placeItems: "center", ...readout("0.62rem", T.dim) }}>{c}</div>
         ))}
         <div />
         {/* Gouttière haute : attente au-dessus de la ligne A */}
@@ -434,7 +435,7 @@ export default function RoundPanels({ vm }) {
         {ROWS.map((r) => (
           <React.Fragment key={r}>
             <Gouttiere cle={`${r}1`} zone="gauche" />
-            <div style={{ display: "grid", placeItems: "center", fontSize: ".68rem", color: "rgba(255,255,255,.4)" }}>{r}</div>
+            <div style={{ display: "grid", placeItems: "center", ...readout("0.62rem", T.dim) }}>{r}</div>
             {[1,2,3,4,5,6,7,8,9].map((c) => {
               const key = r + c;
               const titan = titanCorners[key];
@@ -538,13 +539,20 @@ export default function RoundPanels({ vm }) {
                   cellBg = `${perimAccent}18`;
                 }
               } else if (isBldg) {
-                cellBg = topBlock ? COLOR_HEX[topBlock] : "rgba(255,255,255,.05)";
+                // Une parcelle de bâtiment vidée reste une PARCELLE : elle ne
+                // doit pas se confondre avec la rue, sinon on ne voit plus la
+                // trame de la ville et on perd le repère du Périmètre.
+                cellBg = topBlock ? COLOR_HEX[topBlock] : "rgba(255,250,238,.09)";
               } else {
-                // Bug remonté : les cases couloir (sans bâtiment) se
-                // fondaient presque totalement dans le fond du site
-                // (.02 d'opacité). Accentué à .07 pour rester nettement
-                // en retrait des cases bâtiment tout en restant lisible.
-                cellBg = "rgba(255,255,255,.07)";
+                /* LA RUE EST UN CREUX, PAS UN APLAT.
+                   Les couloirs étaient un gris translucide de plus, à peine
+                   distinct des parcelles vides : le plateau se lisait comme
+                   une trame uniforme où il fallait chercher les bâtiments un
+                   par un. Ils sont maintenant plus SOMBRES que le fond du
+                   meuble — la rue est en creux, les bâtiments sont posés
+                   dessus. C'est ce qui rend la ville lisible d'un coup d'œil,
+                   et c'est aussi comme ça qu'un plateau imprimé la dessine. */
+                cellBg = "rgba(0,0,0,.42)";
               }
 
               // Cases sur lesquelles un clic declenche une ACTION (selectionner
@@ -614,7 +622,10 @@ export default function RoundPanels({ vm }) {
                     // plancher (minmax), pas la case. Un minimum posé ici
                     // empêchait la case de suivre une colonne plus étroite sur
                     // téléphone et débordait la grille.
-                    minWidth: 0, aspectRatio: "1 / 1", borderRadius: 4, position: "relative",
+                    // Arête dure : le monde de la borne n'a pas de coin
+                    // arrondi à 4 px, et une grille de 81 cases arrondies se
+                    // lit comme une planche de pastilles.
+                    minWidth: 0, aspectRatio: "1 / 1", borderRadius: 1, position: "relative",
                     /* PULSATION DES CASES D'ACTION (Nikola, 2026-08-24, « on
                        teste mais pas sûr »). Volontairement TRES discrete :
                        2,4 s par cycle et 6 % d'amplitude, la ou une pulsation

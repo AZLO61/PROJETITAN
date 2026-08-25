@@ -153,3 +153,6 @@ simulations/
 # sur le depot (le site se construit via GitHub Actions). Ils restent sur
 # le disque, ils ne sont simplement plus partages.
 *.bat
+
+# Artefacts de session Impeccable (captures de revue)
+.impeccable/review/
