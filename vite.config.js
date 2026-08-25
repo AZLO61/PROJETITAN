@@ -13,7 +13,20 @@ export default defineConfig({
        au-dessus des 5 s par défaut de Vitest. `npm run check` échouait donc
        par intermittence sur « Test timed out in 5000ms », sans qu'aucun code
        ne soit en cause — un rouge qu'on prenait l'habitude d'ignorer, ce qui
-       est exactement la façon de rater un vrai rouge. */
-    testTimeout: 30000,
+       est exactement la façon de rater un vrai rouge.
+
+       PORTÉ DE 30 s À 120 s LE 2026-08-24, après le premier passage en CI.
+       Le test « aucune campagne ne pose de débris sur un bâtiment debout »
+       tient 29,6 s sur la machine de Nikola : 98 % du budget. Vert en local,
+       il dépassait systématiquement sur un runner GitHub Actions, plus lent
+       et à deux cœurs — le tout premier push a donc échoué au CI alors que
+       rien n'était casse.
+
+       Ces tests jouent des CENTAINES de parties completes : leur duree est
+       legitime, c'est le budget qui etait trop juste. On donne donc une
+       marge franche plutot qu'un seuil au ras des mesures, sans quoi la
+       moindre machine plus lente rouvre le meme faux rouge. */
+    testTimeout: 120000,
+    hookTimeout: 120000,
   },
 });
