@@ -148,3 +148,8 @@ simulations/
 
 # Artefacts d outillage local (graphe de code) : ne se partagent pas
 .codegraph/
+
+# Lanceurs Windows locaux : pratiques sur le poste de Nikola, sans objet
+# sur le depot (le site se construit via GitHub Actions). Ils restent sur
+# le disque, ils ne sont simplement plus partages.
+*.bat
