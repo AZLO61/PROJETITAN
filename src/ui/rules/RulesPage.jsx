@@ -4,6 +4,8 @@ import {
   BAREMES, BAREME_VERT, TROPHEES, PISTES_ADN, FINS_PARTIE,
 } from "./rulesContent.js";
 import BlockIcon from "../BlockIcon.jsx";
+import { T, marquee, label, prose } from "../theme.js";
+import Icon from "../icons.jsx";
 
 /* ============================================================
    PAGE RÈGLES — version numérique du livret V36
@@ -21,30 +23,40 @@ import BlockIcon from "../BlockIcon.jsx";
    une règle en pleine partie sans faire défiler trois écrans.
 ============================================================ */
 
-// Palette du livret (titan-style.css)
+/* ── LE LIVRET EST DANS LE MÊME MEUBLE ──
+   Il gardait la feuille de style du livret papier V36 : dégradés violets,
+   gélules arrondies à 999 px, et « Bangers » en titre — une police qui n'a
+   jamais été chargée. Retour de Nikola : « le livret fait un peu tache dans
+   sa direction artistique maintenant ». C'était le dernier écran resté dans
+   l'ancien monde.
+
+   Les NOMS de la palette ne bougent pas (ils servent une centaine de fois
+   ici), seules les valeurs pointent désormais sur les jetons de la borne.
+   Les couleurs de repère du livret — jaune, magenta, vert, teal — sont
+   conservées : ce sont les mêmes signaux que dans le jeu. */
 const C = {
-  p2: "#26124A", p3: "#3A1A6B", p4: "#5421A0",
-  y1: "#FFD93D", m1: "#FF2E63", g1: "#16E08C", teal: "#2DD4BF",
-  cream: "#fffaee", ink: "#0E0420", muted: "rgb(212, 194, 230)",
+  p2: T.screen, p3: T.plate, p4: T.plateHi,
+  y1: T.you, m1: T.stop, g1: T.go, teal: "#2DD4BF",
+  cream: T.text, ink: "#0f0826", muted: T.dim,
 };
 
 const SECTIONS = [
-  { id: "essentiel", label: "L'essentiel", icon: "⚡" },
-  { id: "manche", label: "Structure d'une Manche", icon: "🔄" },
-  { id: "permanentes", label: "Tes 2 règles permanentes", icon: "🧡" },
-  { id: "cartes", label: "Les 6 Cartes Actions", icon: "🎴" },
-  { id: "transversales", label: "Règles transversales", icon: "💥" },
-  { id: "lexique", label: "Lexique", icon: "📖" },
-  { id: "scoring", label: "Scoring final", icon: "🏆" },
-  { id: "fin", label: "Fin de partie", icon: "🛑" },
+  { id: "essentiel", label: "L'essentiel", icon: "bolt" },
+  { id: "manche", label: "Structure d'une Manche", icon: "undo" },
+  { id: "permanentes", label: "Tes 2 règles permanentes", icon: "move" },
+  { id: "cartes", label: "Les 6 Cartes Actions", icon: "card" },
+  { id: "transversales", label: "Règles transversales", icon: "smash" },
+  { id: "lexique", label: "Lexique", icon: "eye" },
+  { id: "scoring", label: "Scoring final", icon: "lantern" },
+  { id: "fin", label: "Fin de partie", icon: "alert" },
 ];
 
 function Panel({ children, glow, style }) {
   return (
     <div style={{
-      background: glow ? "rgba(255,217,61,.06)" : "rgba(255,255,255,.04)",
-      border: `1px solid ${glow ? "rgba(255,217,61,.3)" : "rgba(255,255,255,.1)"}`,
-      borderRadius: 18, padding: "16px 18px", ...style,
+      background: glow ? "rgba(255,217,61,.07)" : "rgba(0,0,0,.26)",
+      border: `2px solid ${glow ? T.you : T.rule}`,
+      borderRadius: T.rPlate, padding: "16px 18px", ...style,
     }}>
       {children}
     </div>
@@ -58,11 +70,11 @@ function Panel({ children, glow, style }) {
 function Title({ children }) {
   return (
     <>
-      <h2 style={{
-        fontFamily: "'Bangers', 'Bowlby One', sans-serif", letterSpacing: ".03em",
-        fontSize: "clamp(1.6rem, 4vw, 2.4rem)", color: C.y1, margin: "0 0 16px",
-        lineHeight: 1.1,
-      }}>
+      {/* 'Bangers' n'a jamais été chargée non plus : ce titre s'affichait donc
+          dans une police de repli, penchée par certains navigateurs qui
+          synthétisent l'italique. Il prend la police du fronton, comme tous
+          les titres du jeu. */}
+      <h2 style={{ ...marquee("clamp(1.4rem, 3.4vw, 2rem)", C.y1), margin: "0 0 16px" }}>
         {children}
       </h2>
     </>
@@ -71,10 +83,7 @@ function Title({ children }) {
 
 function Sub({ children }) {
   return (
-    <h3 style={{
-      fontFamily: "'Bowlby One', sans-serif", fontSize: "1rem",
-      color: C.cream, margin: "24px 0 10px",
-    }}>
+    <h3 style={{ ...marquee("1rem", C.cream), margin: "26px 0 10px" }}>
       {children}
     </h3>
   );
@@ -83,9 +92,10 @@ function Sub({ children }) {
 function Badge({ code, color }) {
   return (
     <span style={{
-      display: "inline-block", padding: "1px 8px", borderRadius: 999,
-      background: color, color: C.ink, fontWeight: 800, fontSize: ".7rem",
-      letterSpacing: ".05em", verticalAlign: "middle",
+      display: "inline-block", padding: "2px 8px", borderRadius: T.rChip,
+      background: color, color: C.ink, border: `2px solid ${T.edge}`,
+      fontWeight: 800, fontSize: ".72rem",
+      letterSpacing: ".06em", verticalAlign: "middle",
     }}>
       {code}
     </span>
@@ -113,39 +123,38 @@ export default function RulesPage({ onClose }) {
       aria-label="Règles du jeu"
       style={{
         position: "fixed", inset: 0, zIndex: 9000,
-        background: `linear-gradient(180deg, ${C.p2} 0%, ${C.ink} 100%)`,
-        color: C.cream, fontFamily: "'Outfit', Arial, sans-serif",
+        background: T.screen,
+        color: C.cream, fontFamily: T.ui,
         display: "flex", flexDirection: "column",
       }}
     >
       {/* ── EN-TÊTE ── */}
       <header style={{
         display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
-        padding: "12px 18px", borderBottom: "1px solid rgba(255,255,255,.1)",
-        background: "rgba(0,0,0,.25)", flexShrink: 0,
+        padding: "12px 18px", borderBottom: `2px solid ${T.ruleStrong}`,
+        background: "rgba(0,0,0,.3)", flexShrink: 0,
       }}>
-        <div style={{
-          fontFamily: "'Bangers', sans-serif", fontSize: "1.5rem",
-          letterSpacing: ".04em", color: C.y1, lineHeight: 1,
-        }}>
-          PROJET TITAN
-        </div>
+        <div style={marquee("1.3rem", C.y1)}>Projet Titan</div>
         <span style={{
-          fontSize: ".68rem", color: C.muted, border: `1px solid ${C.p4}`,
-          borderRadius: 999, padding: "2px 10px",
+          ...label(C.muted, T.micro),
+          border: `2px solid ${T.rule}`,
+          borderRadius: T.rChip, padding: "3px 9px",
         }}>
           Livret V36
         </span>
         <button
           onClick={onClose}
           style={{
-            marginLeft: "auto", background: `linear-gradient(135deg, ${C.m1}, #C2185B)`,
-            border: "none", borderRadius: 10, color: "#fff", fontWeight: 700,
-            padding: "8px 16px", fontSize: ".82rem", cursor: "pointer",
-            fontFamily: "'Outfit', sans-serif",
+            marginLeft: "auto", background: C.m1,
+            border: `2px solid ${T.edge}`, borderRadius: T.rChip,
+            color: "#fffaee", padding: "10px 16px", cursor: "pointer",
+            boxShadow: `0 3px 0 ${T.edge}`,
+            display: "inline-flex", alignItems: "center", gap: 7,
+            ...label("#fffaee", T.micro),
           }}
         >
-          ✕ Retour à la partie
+          <Icon name="close" size={14} />
+          Retour à la partie
         </button>
       </header>
 
@@ -153,8 +162,8 @@ export default function RulesPage({ onClose }) {
         {/* ── SOMMAIRE ── */}
         <nav style={{
           flexShrink: 0, overflowY: "auto", padding: "12px 10px",
-          borderRight: "1px solid rgba(255,255,255,.08)",
-          background: "rgba(0,0,0,.15)", minWidth: 62,
+          borderRight: `2px solid ${T.rule}`,
+          background: "rgba(0,0,0,.22)", minWidth: 62,
         }}>
           {SECTIONS.map((s) => {
             const active = s.id === section;
@@ -165,15 +174,15 @@ export default function RulesPage({ onClose }) {
                 title={s.label}
                 style={{
                   display: "flex", alignItems: "center", gap: 10, width: "100%",
-                  background: active ? `linear-gradient(90deg, ${C.p4}, ${C.p3})` : "transparent",
-                  border: active ? `1px solid ${C.y1}66` : "1px solid transparent",
-                  borderRadius: 10, color: active ? C.y1 : C.muted,
-                  padding: "9px 11px", marginBottom: 4, cursor: "pointer",
-                  fontSize: ".8rem", fontWeight: active ? 700 : 500, textAlign: "left",
-                  fontFamily: "'Outfit', sans-serif",
+                  background: active ? C.p4 : "transparent",
+                  border: `2px solid ${active ? C.y1 : "transparent"}`,
+                  borderRadius: T.rChip,
+                  padding: "10px 11px", marginBottom: 4, cursor: "pointer",
+                  textAlign: "left",
+                  ...label(active ? C.y1 : C.muted, T.micro),
                 }}
               >
-                <span style={{ fontSize: "1.05rem", lineHeight: 1 }}>{s.icon}</span>
+                <Icon name={s.icon} size={16} />
                 {/* Le libellé disparaît sous 720px : le sommaire devient une
                     colonne d'icônes, pour laisser la place au contenu. */}
                 <span className="rules-nav-label">{s.label}</span>
@@ -230,7 +239,7 @@ function SectionEssentiel() {
         </Panel>
       </div>
 
-      <Sub>🎮 Le principe</Sub>
+      <Sub>Le principe</Sub>
       <Panel>
         Chaque Manche, tu programmes <strong style={{ color: C.y1 }}>3 cartes face cachée</strong> parmi
         les 6 de ta main. Tu les révèles une par une, à tour de rôle. Chaque carte détruit
@@ -238,7 +247,7 @@ function SectionEssentiel() {
         tu casses, et tu marques à la fin.
       </Panel>
 
-      <Sub>📊 Durée</Sub>
+      <Sub>Durée</Sub>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
         <Panel style={{ flex: 1, minWidth: 160, textAlign: "center" }}>
           <div style={{ fontFamily: "'Titan One', sans-serif", fontSize: "1.8rem", color: C.y1 }}>6</div>
@@ -261,8 +270,8 @@ function SectionManche() {
         {PHASES_MANCHE.map((p) => (
           <Panel key={p.n} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
             <div style={{
-              flexShrink: 0, width: 34, height: 34, borderRadius: 10,
-              background: `linear-gradient(135deg, ${C.p4}, ${C.p3})`,
+              flexShrink: 0, width: 34, height: 34, borderRadius: T.rChip,
+              background: C.p4,
               border: `1px solid ${C.y1}55`,
               display: "flex", alignItems: "center", justifyContent: "center",
               fontFamily: "'Titan One', sans-serif", color: C.y1, fontSize: "1rem",
@@ -284,7 +293,7 @@ function SectionManche() {
         Entre chaque Manche, le Jeton Détonateur passe au joueur suivant dans le sens horaire.
       </Panel>
 
-      <Sub>🎴 Le Repos en détail</Sub>
+      <Sub>Le Repos en détail</Sub>
       <Panel style={{ marginBottom: 10 }}>
         <strong style={{ color: C.teal }}>Vol de carte —</strong> dans le sens du Détonateur, chaque Titan
         choisit 1 carte parmi les 3 jouées du Titan suivant et la pose face visible dans sa zone Repos.
@@ -358,8 +367,8 @@ function SectionCartes() {
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {CARTES.map((c) => (
           <div key={c.num} style={{
-            background: `linear-gradient(160deg, ${c.couleur}18, rgba(255,255,255,.03))`,
-            border: `1px solid ${c.couleur}55`, borderRadius: 18, padding: "16px 18px",
+            background: `color-mix(in srgb, ${c.couleur} 16%, rgba(0,0,0,.3))`,
+            border: `1px solid ${c.couleur}55`, borderRadius: T.rPlate, padding: "16px 18px",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
               <div style={{ fontSize: "2rem", lineHeight: 1 }}>{c.icon}</div>
@@ -371,7 +380,7 @@ function SectionCartes() {
               </div>
               <span style={{
                 marginLeft: "auto", background: "rgba(0,0,0,.3)", border: `1px solid ${c.couleur}`,
-                borderRadius: 999, padding: "3px 12px", fontSize: ".76rem", color: C.cream, fontWeight: 700,
+                borderRadius: T.rChip, padding: "3px 12px", fontSize: ".76rem", color: C.cream, fontWeight: 700,
               }}>
                 ⚡ Force {c.force}
               </span>
@@ -405,7 +414,7 @@ function SectionTransversales() {
     <>
       <Title eyebrow="💥 L'âme du jeu">RÈGLES TRANSVERSALES</Title>
 
-      <Sub>⚡ L'Énergie et le Seuil 4</Sub>
+      <Sub>L'Énergie et le Seuil 4</Sub>
       <Panel glow>
         Ton <strong style={{ color: C.y1 }}>Énergie</strong> se calcule au moment où tu joues ta carte :
         c'est le nombre de cases occupées dans ton Périmètre, plafonné à 8. Une case est occupée par
@@ -420,7 +429,7 @@ function SectionTransversales() {
         </div>
       </Panel>
 
-      <Sub>↩️ Arrêt faute de puissance et projection</Sub>
+      <Sub>Arrêt faute de puissance et projection</Sub>
       <Panel style={{ marginBottom: 10 }}>
         <strong style={{ color: C.teal }}>Arrêt faute de puissance —</strong> un élément qui percute
         un bâtiment ou atteint le bord du plateau sans l'énergie du Seuil 4 s'arrête net, sur une
@@ -466,7 +475,7 @@ function SectionTransversales() {
         plateau avec une énergie de 4 ou plus ressort par le bord opposé et poursuit sa trajectoire.
       </Panel>
 
-      <Sub>🗿 Socles</Sub>
+      <Sub>Socles</Sub>
       <Panel>
         Le Socle est posé sous chaque bâtiment à sa construction, et sa valeur est{" "}
         <strong style={{ color: C.y1 }}>fixe</strong> : elle ne change pas quand le bâtiment perd des blocs.
@@ -478,7 +487,7 @@ function SectionTransversales() {
         </div>
       </Panel>
 
-      <Sub>🌀 Téléporteurs</Sub>
+      <Sub>Téléporteurs</Sub>
       <Panel>
         Les 5 bâtiments Téléporteur ont un bloc Vert à leur base et font au moins 3 étages. Tant que
         ce bloc Vert n'est pas collecté, le Téléporteur est actif et traversable pendant un mouvement.
@@ -551,7 +560,7 @@ function SectionScoring() {
         {BAREMES.map((b) => (
           <div key={b.key} style={{
             background: `${b.hex}12`, border: `1px solid ${b.hex}44`,
-            borderRadius: 16, padding: "14px 16px",
+            borderRadius: T.rPlate, padding: "14px 16px",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
               <BlockIcon color={b.key} size={30} />
@@ -570,7 +579,7 @@ function SectionScoring() {
                 <div key={i} style={{
                   minWidth: 52, textAlign: "center",
                   background: "rgba(0,0,0,.28)", border: `1px solid ${b.hex}55`,
-                  borderRadius: 10, padding: "6px 8px",
+                  borderRadius: T.rChip, padding: "6px 8px",
                 }}>
                   <div style={{
                     fontFamily: "'Titan One', sans-serif", fontSize: "1.1rem", color: b.hex,
@@ -594,7 +603,7 @@ function SectionScoring() {
         {/* Le Vert n'a pas de barème : il se traite à part. */}
         <div style={{
           background: `${BAREME_VERT.hex}12`, border: `1px solid ${BAREME_VERT.hex}44`,
-          borderRadius: 16, padding: "14px 16px",
+          borderRadius: T.rPlate, padding: "14px 16px",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
             <BlockIcon color={BAREME_VERT.key} size={30} />
@@ -618,7 +627,7 @@ function SectionScoring() {
         </div>
       </div>
 
-      <Sub>🏅 Trophées</Sub>
+      <Sub>Trophées</Sub>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
         {TROPHEES.map((t) => (
           <Panel key={t.nom}>
@@ -630,7 +639,7 @@ function SectionScoring() {
         ))}
       </div>
 
-      <Sub>🧬 Pistes ADN — classement final</Sub>
+      <Sub>Pistes ADN — classement final</Sub>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
         {PISTES_ADN.map((p) => (
           <Panel key={p.rang} style={{ flex: 1, minWidth: 110, textAlign: "center" }}>

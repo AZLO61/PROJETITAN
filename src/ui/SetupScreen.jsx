@@ -150,7 +150,7 @@ export default function SetupScreen({
                       « 1P / 2P » du haut d'un écran d'arcade. */}
                   <span
                     style={{
-                      ...readout("0.7rem", "#0d0a1c"),
+                      ...readout("0.7rem", "#0f0826"),
                       background: tc?.accent || T.rule,
                       padding: "5px 6px",
                       flexShrink: 0,
@@ -204,13 +204,16 @@ export default function SetupScreen({
                             background: on ? couleur : "transparent",
                             border: `2px solid ${on ? couleur : T.rule}`,
                             borderRadius: T.rChip,
-                            color: on ? "#0d0a1c" : T.faint,
+                            color: on ? "#0f0826" : T.faint,
                             padding: "7px 11px",
                             cursor: "pointer",
-                            ...label(on ? "#0d0a1c" : T.faint, "0.68rem"),
+                            ...label(on ? "#0f0826" : T.faint, "0.68rem"),
                           }}
                         >
-                          <Icon name={m === "humain" ? "brawl" : "bot"} size={13} />
+                          {/* La main qui joue, pas un poing : le poing dit
+                              « Bagarre » partout ailleurs dans le jeu, et il
+                              n'a rien à faire sur un choix humain / IA. */}
+                          <Icon name={m === "humain" ? "pointer" : "bot"} size={13} />
                           {m === "humain" ? "Humain" : "IA"}
                         </button>
                       );

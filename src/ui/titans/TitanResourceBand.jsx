@@ -5,7 +5,7 @@ import { TitanIcon } from "./TitanVisuals.jsx";
 import BlockIcon from "../BlockIcon.jsx";
 import { baremeHint } from "../blockNames.js";
 import { T, marquee, readout, label } from "../theme.js";
-import Icon from "../icons.jsx";
+import Icon, { AdrenalineIcon } from "../icons.jsx";
 
 /* ============================================================
    LA RANGÉE DE JOUEURS — LE HUD DE LA BORNE
@@ -131,7 +131,7 @@ export default function TitanResourceBand({
            fonction. */
         gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))",
         gap: T.s2,
-        marginBottom: T.s4,
+        marginBottom: T.s3,
         // La plaque active se lève : la rangée réserve la place au-dessus,
         // sinon elle pousse ce qui la précède à chaque changement de tour.
         paddingTop: 4,
@@ -242,7 +242,7 @@ export default function TitanResourceBand({
                   cursor: "help", flexShrink: 0,
                 }}
               >
-                <Icon name="adrenaline" size={14} />
+                <AdrenalineIcon size={16} />
                 <span style={readout("0.78rem")}>{t.adrenaline || 0}</span>
               </div>
             </div>

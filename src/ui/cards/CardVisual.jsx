@@ -151,7 +151,7 @@ export default function CardVisual({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "rgba(5,6,13,.55)",
+            background: "rgba(12,8,32,.55)",
           }}
         >
           <span
@@ -160,7 +160,7 @@ export default function CardVisual({
               transform: "rotate(-11deg)",
               border: `2px solid ${played ? T.faint : T.you}`,
               padding: "3px 8px",
-              background: "rgba(5,6,13,.8)",
+              background: "rgba(12,8,32,.8)",
             }}
           >
             {played ? "Jouée" : "Repos"}

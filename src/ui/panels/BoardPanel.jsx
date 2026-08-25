@@ -7,7 +7,7 @@ import { TITAN_COLORS } from "../titans/constants.js";
 import { CARD_LABEL, PHASE_LABELS } from "../../domain/index.js";
 import { smallBtn, cancelBtn } from "../styles.js";
 import { T, marquee, readout, label, prose } from "../theme.js";
-import Icon from "../icons.jsx";
+import Icon, { AdrenalineIcon } from "../icons.jsx";
 
 /* ── UNE ÉTAPE DU TOUR ─────────────────────────────────────
    Le tour suit son ordre réel — se déplacer, jouer, ramasser — et une seule
@@ -33,7 +33,7 @@ function Step({ n, titre, quand, accent, ouvert, children }) {
         <span
           aria-hidden="true"
           style={{
-            ...readout("0.7rem", ouvert ? "#0d0a1c" : T.faint),
+            ...readout("0.7rem", ouvert ? "#0f0826" : T.faint),
             background: ouvert ? accent : "transparent",
             border: `2px solid ${ouvert ? accent : T.rule}`,
             width: 22,
@@ -60,42 +60,44 @@ function Step({ n, titre, quand, accent, ouvert, children }) {
 // Selecteur d'Adrenaline : le livret dit « +1 par Adrenaline depensee », donc
 // un Titan qui en a plusieurs peut toutes les investir. Une case a cocher ne
 // permettait d'en jouer qu'une seule.
-function AdrenalinePicker({ value, max, onChange, label }) {
+function AdrenalinePicker({ value, max, onChange, label: aide }) {
   if (max <= 0) {
     return (
-      <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.3)" }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, ...label(T.faint, T.micro) }}>
+        <AdrenalineIcon size={15} style={{ opacity: 0.4 }} />
         Pas d'Adrénaline
       </span>
     );
   }
+  // Deux touches de borne encadrant l'afficheur : mêmes arêtes dures, même
+  // épaisseur de capuchon que le reste du meuble.
+  const pas = (actif) => ({
+    width: 28, height: 28, flexShrink: 0,
+    background: actif ? T.go : "rgba(255,250,238,.06)",
+    border: `2px solid ${T.edge}`,
+    borderRadius: T.rChip,
+    color: actif ? "#00311e" : T.faint,
+    fontWeight: 800, lineHeight: 1, fontSize: T.body,
+    cursor: actif ? "pointer" : "not-allowed",
+    boxShadow: actif ? `0 2px 0 ${T.edge}` : "none",
+  });
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 5 }} title={label}>
-      <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.6)" }}>💉</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }} title={aide}>
+      <AdrenalineIcon size={17} />
       <button
         onClick={() => onChange(Math.max(0, value - 1))}
         disabled={value <= 0}
-        style={{
-          width: 24, height: 24, borderRadius: 6, cursor: value > 0 ? "pointer" : "not-allowed",
-          background: "rgba(255,255,255,.08)", border: "1px solid rgba(255,255,255,.2)",
-          color: value > 0 ? "#fff" : "rgba(255,255,255,.25)", fontWeight: 700, lineHeight: 1,
-        }}
+        aria-label="Dépenser une Adrénaline de moins"
+        style={pas(value > 0)}
       >−</button>
-      <span style={{
-        minWidth: 30, textAlign: "center", fontSize: ".76rem", fontWeight: 700,
-        color: value > 0 ? "#86ff71" : "rgba(255,255,255,.45)",
-        fontVariantNumeric: "tabular-nums",
-      }}>
+      <span style={{ ...readout("0.72rem", value > 0 ? T.go : T.faint), minWidth: 34, textAlign: "center" }}>
         {value}/{max}
       </span>
       <button
         onClick={() => onChange(Math.min(max, value + 1))}
         disabled={value >= max}
-        style={{
-          width: 24, height: 24, borderRadius: 6, cursor: value < max ? "pointer" : "not-allowed",
-          background: value < max ? "rgba(134,255,113,.18)" : "rgba(255,255,255,.06)",
-          border: `1px solid ${value < max ? "rgba(134,255,113,.5)" : "rgba(255,255,255,.15)"}`,
-          color: value < max ? "#86ff71" : "rgba(255,255,255,.25)", fontWeight: 700, lineHeight: 1,
-        }}
+        aria-label="Dépenser une Adrénaline de plus"
+        style={pas(value < max)}
       >+</button>
     </div>
   );

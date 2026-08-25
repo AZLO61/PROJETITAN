@@ -68,7 +68,7 @@ export default function HeaderPhase({ vm }) {
           display: "flex",
           gap: 6,
           flexWrap: "wrap",
-          marginBottom: T.s4,
+          marginBottom: T.s3,
         }}
       >
         <Commande
@@ -92,10 +92,15 @@ export default function HeaderPhase({ vm }) {
         >
           Annuler
         </Commande>
+        {/* Le vert dit « disponible, validé » partout ailleurs dans le jeu :
+            sur un bouton d'affichage, il annonçait une action réussie qui
+            n'existe pas. Le décompte est le trophée de fin de partie, donc le
+            jaune — la même couleur que la lanterne qu'il porte et que l'écran
+            de décompte lui-même. */}
         <Commande
           onClick={() => setShowScoring((s) => !s)}
           icon="lantern"
-          tone={showScoring ? T.go : null}
+          tone={showScoring ? T.you : null}
           title="Afficher ou masquer le décompte des points"
         >
           Scoring
@@ -142,7 +147,7 @@ export default function HeaderPhase({ vm }) {
             position: "fixed",
             inset: 0,
             zIndex: 9500,
-            background: "rgba(5,6,13,.86)",
+            background: "rgba(12,8,32,.86)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",

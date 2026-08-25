@@ -21,56 +21,48 @@ import Icon from "./icons.jsx";
    cette taille sur tout l'écran. */
 function Marquee({ mancheNumber, totalManches, phaseLabel, detonateurNom }) {
   return (
+    /* Ce bandeau était plus haut de moitié : le titre montait à 2,6 rem et
+       chaque bloc portait sa propre ligne de libellé. Retour de Nikola : « je
+       dois défiler un peu vers le bas pour avoir le plateau lisible avec les
+       informations de jeu ». Le fronton d'une borne se lit une fois en
+       s'asseyant ; c'est le plateau qu'on regarde pendant 1 h 30. Il rend donc
+       la hauteur au jeu — le grand format reste sur l'écran d'accueil, où il a
+       toute la place. */
     <header
       style={{
         display: "flex",
-        alignItems: "flex-end",
+        alignItems: "baseline",
         justifyContent: "space-between",
         gap: T.s4,
         flexWrap: "wrap",
-        paddingBottom: T.s3,
-        marginBottom: T.s4,
+        paddingBottom: T.s2,
+        marginBottom: T.s3,
         borderBottom: `2px solid ${T.ruleStrong}`,
       }}
     >
-      <div>
-        <h1
-          style={{
-            ...marquee("clamp(1.6rem, 4.5vw, 2.6rem)", T.you),
-            display: "flex",
-            alignItems: "baseline",
-            gap: ".35em",
-          }}
-        >
-          Projet Titan
-        </h1>
-        <div style={{ ...label(T.faint), marginTop: 6 }}>
-          BIG CITY — {detonateurNom ? `Détonateur ${detonateurNom}` : "9 × 9"}
-        </div>
+      <div style={{ display: "flex", alignItems: "baseline", gap: T.s3, flexWrap: "wrap" }}>
+        <h1 style={marquee("clamp(1.25rem, 2.6vw, 1.75rem)", T.you)}>Projet Titan</h1>
+        <span style={label(T.faint)}>
+          BIG CITY{detonateurNom ? ` — Détonateur ${detonateurNom}` : ""}
+        </span>
       </div>
 
       {/* L'afficheur : Manche et Phase, en police bitmap, alignés à droite
-          comme le compteur de crédits d'une borne. */}
-      <div style={{ display: "flex", alignItems: "center", gap: T.s5 }}>
-        <div>
-          <div style={label(T.faint)}>Manche</div>
-          <div style={{ ...readout("1.5rem", T.text), marginTop: 6 }}>
+          comme le compteur de crédits d'une borne. Sur une seule ligne, le
+          libellé devant la valeur : deux lignes empilées coûtaient 30 px de
+          plateau pour deux mots qu'on lit une fois par Manche. */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: T.s4, flexWrap: "wrap" }}>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2 }}>
+          <span style={label(T.faint)}>Manche</span>
+          <span style={readout("0.95rem", T.text)}>
             {mancheNumber}
             <span style={{ color: T.faint }}>/{totalManches}</span>
-          </div>
-        </div>
-        <div>
-          <div style={label(T.faint)}>Phase</div>
-          <div
-            style={{
-              ...marquee("1.05rem", T.go),
-              marginTop: 6,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {phaseLabel}
-          </div>
-        </div>
+          </span>
+        </span>
+        <span style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2 }}>
+          <span style={label(T.faint)}>Phase</span>
+          <span style={{ ...marquee("0.95rem", T.go), whiteSpace: "nowrap" }}>{phaseLabel}</span>
+        </span>
       </div>
     </header>
   );
@@ -98,9 +90,8 @@ export default function GameView(vm) {
         fontFamily: T.ui,
         background: T.screen,
         color: T.text,
-        padding: "16px 14px",
+        padding: "12px 14px",
         maxWidth: 880,
-        margin: "0 auto",
         minHeight: "100vh",
         boxSizing: "border-box",
       }}

@@ -18,19 +18,24 @@
 ============================================================ */
 
 :root {
-  /* ── Le meuble et le tube ──────────────────────────────── */
-  --ink-void: #05060d;      /* derrière tout, le noir du meuble */
-  --ink-screen: #0d0a1c;    /* le fond du tube */
-  --ink-plate: #171331;     /* une plaque de HUD posée dessus */
-  --ink-plate-hi: #241d47;  /* la même, survolée ou active */
-  --ink-bezel: #2d1d5d;     /* le violet du meuble, hérité */
+  /* ── Le meuble et le tube ────────────────────────────────
+     Retour de Nikola : « rends le site un peu plus violet, c'est 20 % trop
+     sombre ». Toute la gamme est remontée d'environ 20 % de luminosité et
+     ramenée vers le violet du meuble hérité (#2d1d5d) — c'est la teinte du
+     jeu, elle ne doit pas se perdre dans un noir neutre. Le cerne, lui,
+     reste presque noir : c'est un trait d'encre, pas une surface. */
+  --ink-void: #0c0820;      /* derrière tout, le fond du meuble */
+  --ink-screen: #16102e;    /* le fond du tube */
+  --ink-plate: #221a45;     /* une plaque de HUD posée dessus */
+  --ink-plate-hi: #2f2459;  /* la même, survolée ou active */
+  --ink-bezel: #3d2775;     /* le violet du meuble, hérité */
 
   /* ── Traits ────────────────────────────────────────────── */
   /* Un sprite d'arcade est CERNÉ. Le cerne noir est la langue d'élévation
      de ce monde : on déclare l'élévation par le trait, et l'ombre portée
      reste réservée au seul élément qui flotte vraiment (la plaque du Titan
      actif). Jamais les deux sur le même objet. */
-  --edge: #05060d;
+  --edge: #07040f;
   --edge-w: 2px;
   --rule: rgba(255, 250, 238, 0.16);
   --rule-strong: rgba(255, 250, 238, 0.32);
@@ -180,6 +185,14 @@ button {
 .titan-cabinet {
   position: relative;
   isolation: isolate;
+  /* Le centrage vit ICI et nulle part ailleurs.
+     Il était posé en style en ligne dans GameView et absent de SetupScreen,
+     alors que les media queries plus bas donnent une `max-width` aux DEUX :
+     au-delà de 900 px, l'écran d'accueil se retrouvait donc plaqué à gauche
+     (bug d'accueil remonté par Nikola). Une largeur bornée sans marge auto
+     n'est pas centrée, et il n'y avait aucune raison que les deux écrans du
+     même meuble règlent ça différemment. */
+  margin-inline: auto;
 }
 
 .titan-cabinet::after {
@@ -325,13 +338,16 @@ button {
 @media (min-width: 901px) {
   .titan-cabinet {
     max-width: min(1400px, 96vw) !important;
-    padding: var(--sp-5) var(--sp-6) !important;
+    /* Rembourrage vertical réduit : sur un écran de 1080p, chaque bande de
+       24 px prise en haut est une bande de plateau perdue en bas. Le
+       rembourrage horizontal, lui, ne coûte rien. */
+    padding: var(--sp-3) var(--sp-6) !important;
   }
 }
 
 @media (min-width: 1400px) {
   .titan-cabinet {
-    padding: var(--sp-5) var(--sp-7) !important;
+    padding: var(--sp-3) var(--sp-7) !important;
   }
 }
 

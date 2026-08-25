@@ -13,6 +13,24 @@ import { btnStyle, cancelBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
 import { T, readout } from "../theme.js";
 
+/* ── LE SOL DE BIG CITY ────────────────────────────────────
+   Un seul matériau pour la rue et pour la parcelle rasée : c'est le même sol,
+   vu au même endroit. La parcelle est à peine plus claire que la rue, juste
+   assez pour qu'on lise encore la trame des îlots sans que la ville se
+   fracture en damier. */
+const SOL_RUE = "rgba(255,250,238,.075)";
+const SOL_PARCELLE = "rgba(255,250,238,.115)";
+
+/* Les bâtiments sont assombris de 20 % (demande de Nikola). Ils gardent leur
+   couleur de bloc — c'est une donnée de jeu — mais cessent de vibrer sur le
+   sol clair, et les chiffres blancs de Socle redeviennent lisibles dessus. */
+function assombrir(hex, facteur = 0.8) {
+  if (!hex || hex[0] !== "#" || hex.length !== 7) return hex;
+  const c = (i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * facteur);
+  const h = (n) => n.toString(16).padStart(2, "0");
+  return `#${h(c(1))}${h(c(3))}${h(c(5))}`;
+}
+
 export default function RoundPanels({ vm }) {
   // Bug remonté : quand une case cumule 2 débris DIFFÉRENTS (ex. bloc rose
   // + socle, ou bloc bleu + bloc rouge), cliquer "Ramasser" prenait
@@ -531,8 +549,9 @@ export default function RoundPanels({ vm }) {
                 cellBg = "rgba(22,224,140,.05)"; // zone théorique, pas encore cliquable
               } else if (inPerimeter) {
                 if (isBldg && topBlock) {
-                  // Bâtiment dans le périmètre : couleur du bloc seule, sans overlay Titan
-                  cellBg = COLOR_HEX[topBlock];
+                  // Bâtiment dans le périmètre : couleur du bloc seule, sans
+                  // overlay Titan — assombrie comme partout ailleurs.
+                  cellBg = assombrir(COLOR_HEX[topBlock]);
                 } else if (isBldg) {
                   cellBg = `${perimAccent}22`;
                 } else {
@@ -542,17 +561,17 @@ export default function RoundPanels({ vm }) {
                 // Une parcelle de bâtiment vidée reste une PARCELLE : elle ne
                 // doit pas se confondre avec la rue, sinon on ne voit plus la
                 // trame de la ville et on perd le repère du Périmètre.
-                cellBg = topBlock ? COLOR_HEX[topBlock] : "rgba(255,250,238,.09)";
+                cellBg = topBlock ? assombrir(COLOR_HEX[topBlock]) : SOL_PARCELLE;
               } else {
-                /* LA RUE EST UN CREUX, PAS UN APLAT.
-                   Les couloirs étaient un gris translucide de plus, à peine
-                   distinct des parcelles vides : le plateau se lisait comme
-                   une trame uniforme où il fallait chercher les bâtiments un
-                   par un. Ils sont maintenant plus SOMBRES que le fond du
-                   meuble — la rue est en creux, les bâtiments sont posés
-                   dessus. C'est ce qui rend la ville lisible d'un coup d'œil,
-                   et c'est aussi comme ça qu'un plateau imprimé la dessine. */
-                cellBg = "rgba(0,0,0,.42)";
+                /* LA RUE PREND LE MÊME SOL QUE LES PARCELLES.
+                   Elle avait d'abord été creusée à `rgba(0,0,0,.42)` pour
+                   détacher la ville du fond. Retour de Nikola : « les tuiles
+                   où il n'y a pas de bâtiment sont beaucoup trop sombres,
+                   repars sur celle sous les bâtiments pour la couleur ». Le
+                   sol de BIG CITY est donc UN seul matériau, celui qu'on voit
+                   sous un bâtiment rasé, et ce sont les bâtiments — assombris
+                   de 20 % — qui portent seuls le contraste. */
+                cellBg = SOL_RUE;
               }
 
               // Cases sur lesquelles un clic declenche une ACTION (selectionner

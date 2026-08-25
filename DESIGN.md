@@ -49,11 +49,16 @@ franc sur un fond coloré se lit comme une tache morte.
 
 | Jeton | Valeur | Emploi |
 |---|---|---|
-| `--ink-void` | `#05060d` | derrière tout, le noir du meuble |
-| `--ink-screen` | `#0d0a1c` | le fond du tube |
-| `--ink-plate` | `#171331` | une plaque de HUD posée dessus |
-| `--ink-plate-hi` | `#241d47` | la même, survolée ou active |
-| `--ink-bezel` | `#2d1d5d` | le violet du meuble, hérité |
+| `--ink-void` | `#0c0820` | derrière tout, le fond du meuble |
+| `--ink-screen` | `#16102e` | le fond du tube |
+| `--ink-plate` | `#221a45` | une plaque de HUD posée dessus |
+| `--ink-plate-hi` | `#2f2459` | la même, survolée ou active |
+| `--ink-bezel` | `#3d2775` | le violet du meuble, hérité |
+
+Toute la gamme est **violette, pas noire**. Une première version tirait vers
+le noir neutre ; le jeu y perdait sa teinte, et l'écran était nettement trop
+sombre. Le cerne, lui, reste presque noir (`#07040f`) : c'est un trait
+d'encre, pas une surface.
 
 La classe `.titan-cabinet` porte le tube : lignes de balayage en `::after`
 (coupées au-delà de 3 dppx, où elles moirent) et vignettage en `::before`. Le
@@ -92,6 +97,10 @@ nulle part — et toutes les déclarations du code retombaient en silence sur le
 | **Press Start 2P** | l'afficheur | chiffres et compteurs uniquement (`readout()`) — police bitmap, illisible en paragraphe |
 | **Archivo** | le bandeau sérigraphié | tout le reste : libellés (`label()`), phrases de règle (`prose()`) |
 
+Le fronton du jeu est **compact** : le grand format reste sur l'écran
+d'accueil, qui a la place. En partie, chaque bande prise en haut est une bande
+de plateau perdue en bas, et c'est le plateau qu'on regarde pendant 1 h 30.
+
 Échelle : `--fs-micro` 0.78rem → `--fs-h1` 2.25rem. **Le plancher est
 12,5 px.** L'ancienne interface vivait entre 11 et 12,5 px sur un appareil
 qu'on lit à bout de bras, posé au milieu d'une table : c'était la cause
@@ -115,6 +124,11 @@ icône doit garder le même **poids visuel** à toutes ses tailles.
 Chaque carte a son pictogramme, qui dit son **geste** et pas son thème :
 `smash`, `charge`, `roar`, `hop`, `duel`, `hoard`.
 
+**Une exception, assumée** : l'Adrénaline utilise la seringue livrée avec le
+jeu (`assets/rules/adrenaline.png`, via `<AdrenalineIcon>`), comme les icônes
+de blocs et le Socle. Ce sont des dessins du livret, et ils valent mieux que
+leur paraphrase au trait.
+
 ## Mouvement
 
 `--ease-out` et `--ease-snap` sont deux décélérations exponentielles. **Pas de
@@ -136,16 +150,26 @@ scaleX()`, jamais par `width`.
   étape visible à la fois, numérotée, via le composant `Step`.
 - **Aucune plaque n'existe pour porter une bordure.** Un titre en bandeau et un
   filet suffisent à séparer deux blocs.
+- **Le centrage vit dans `.titan-cabinet`** (`margin-inline: auto`), jamais en
+  style en ligne : les deux écrans du même meuble ne peuvent pas le régler
+  différemment.
 - **Deux colonnes au-delà de 1100 px** (`.titan-layout`) : le plateau à gauche,
   les commandes du tour en colonne collante à droite. Sous ce seuil, la pile
   d'origine, à laquelle la tablette est habituée.
 
 ## Lecture du plateau
 
-La rue est un **creux** (`rgba(0,0,0,.42)`, plus sombre que le fond), les
-bâtiments sont des aplats posés dessus dans la couleur de leur bloc du haut.
-C'est ce qui rend la ville lisible d'un coup d'œil, et c'est comme ça qu'un
-plateau imprimé la dessine.
+**Un seul matériau pour le sol** : la rue (`rgba(255,250,238,.075)`) et la
+parcelle rasée (`.115`) sont le même sol vu au même endroit, la seconde à
+peine plus claire pour qu'on lise encore la trame des îlots. La rue avait
+d'abord été creusée en noir pour détacher la ville du fond ; elle rendait le
+plateau beaucoup trop sombre, et c'est aux bâtiments seuls de porter le
+contraste.
+
+Les bâtiments gardent la couleur de leur bloc du haut — c'est une donnée de
+jeu — **assombrie de 20 %** (`assombrir()` dans `RoundPanels.jsx`) : ils
+cessent de vibrer sur le sol clair, et les chiffres blancs de Socle
+redeviennent lisibles dessus.
 
 Les pistes Bagarre et Destruction n'ont pas de maximum connu : chaque barre est
 tracée **par rapport au meilleur de la table**, jamais sur une échelle absolue

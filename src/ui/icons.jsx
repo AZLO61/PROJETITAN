@@ -44,31 +44,30 @@ const P = {
     </>
   ),
 
-  /* ── Ressources et pistes ────────────────────────────── */
-  // Adrénaline : le piston de la seringue, réduit à sa mécanique.
-  adrenaline: (
-    <>
-      <path d="M14 3 21 10" />
-      <path d="M17.5 6.5 8 16v4H4l1-4 9.5-9.5z" />
-      <path d="M10 10l4 4" />
-    </>
-  ),
-  /* Bagarre : deux forces qui se rentrent dedans. Le poing détaillé qui
-     servait ici comptait quatre tracés imbriqués : à 13 px, taille réelle
-     dans la bande des Titans, ils se refermaient en pâté et l'icône devenait
-     indiscernable de celle de la Destruction juste en dessous. Deux chevrons
-     qui se percutent tiennent à n'importe quelle taille. */
+  /* ── Ressources et pistes ──────────────────────────────
+     L'Adrénaline n'est plus ici : elle utilise la seringue fournie avec le
+     jeu (`public/assets/rules/adrenaline.png`), via `<AdrenalineIcon>` plus
+     bas. C'est un dessin du livret, il vaut mieux que ma paraphrase. */
+
+  /* Bagarre : le poing, de profil, en blocs. Deux versions ont échoué avant
+     celle-ci — un poing à quatre tracés imbriqués qui se refermait en pâté à
+     13 px, puis deux chevrons qui se lisaient comme une paire de ciseaux.
+     Le poing en blocs tient parce qu'il n'a que des formes pleines et un
+     poignet : à n'importe quelle taille, il reste un poing. */
   brawl: (
     <>
-      <path d="M3 6l6 6-6 6" />
-      <path d="M21 6l-6 6 6 6" />
-      <path d="M12 9v6" />
+      <path d="M3 8h10a3 3 0 0 1 3 3v3a3 3 0 0 1-3 3H3z" />
+      <path d="M7 8v10M11 8v10" />
+      <path d="M16 11h5v4h-5" />
     </>
   ),
-  // Destruction : une tour dont le haut est parti, en escalier descendant.
+  /* Destruction : un bloc fendu de haut en bas. L'escalier descendant qui
+     servait ici se lisait comme un graphique en marches, pas comme une
+     démolition — c'est la FÊLURE qui dit que le bâtiment est cassé. */
   wreck: (
     <>
-      <path d="M4 21V5h6v6h5v5h5v5z" />
+      <path d="M4 21V4h16v17z" />
+      <path d="M12 4l-3 7h5l-3 10" />
     </>
   ),
   // Bloc de béton.
@@ -252,6 +251,31 @@ export default function Icon({ name, size = 18, strokeWidth, style, title }) {
       {title ? <title>{title}</title> : null}
       {d}
     </svg>
+  );
+}
+
+/** La seringue d'Adrénaline livrée avec le jeu.
+ *
+ *  Ce n'est pas une icône du jeu de traits : c'est un dessin du livret, et
+ *  il est repris tel quel plutôt que paraphrasé (demande de Nikola). Il ne
+ *  prend donc pas `currentColor` — il porte ses propres couleurs, comme les
+ *  icônes de blocs et le Socle, qui viennent de la même série. */
+export function AdrenalineIcon({ size = 16, style }) {
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}assets/rules/adrenaline.png`}
+      alt=""
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        objectFit: "contain",
+        display: "block",
+        flexShrink: 0,
+        filter: "brightness(1.15)",
+        ...style,
+      }}
+    />
   );
 }
 
