@@ -3,6 +3,9 @@ import { TitanIcon } from "./titans/TitanVisuals.jsx";
 import { TITAN_COLORS } from "./titans/constants.js";
 import { T, marquee, readout, label, prose } from "./theme.js";
 import Icon from "./icons.jsx";
+// L'échelle de difficulté vit dans le domaine : l'écran d'accueil, le profil
+// dévoilé et les campagnes de mesure en nomment les barreaux de la même façon.
+import { FORCES, FORCE_LABELS } from "../domain/aiEvaluation.js";
 
 /* ============================================================
    L'ÉCRAN D'ACCUEIL — LA SÉLECTION DES JOUEURS
@@ -35,6 +38,8 @@ export default function SetupScreen({
   titanNames, setTitanNames,
   titanModes, setTitanModes,
   eventsEnabled, setEventsEnabled,
+  difficulte, setDifficulte,
+  modeVolRepos, setModeVolRepos,
   apocalypseThreshold, setApocalypseThreshold,
   seedInput, setSeedInput,
   onLancer,
@@ -69,12 +74,12 @@ export default function SetupScreen({
             lit depuis l'autre bout de la salle. */}
         <header style={{ textAlign: "center", marginBottom: 36 }}>
           <h1 style={marquee("clamp(2.4rem, 9vw, 4.5rem)", T.you)}>Projet Titan</h1>
+          {/* « Big City · 9 × 9 » disait la taille du plateau, une chose
+              qu'on découvre en deux secondes en le regardant. Sous le titre,
+              la seule ligne qui serve est celle qui dit quoi faire de cet
+              écran (Nikola, 2026-08-28). */}
           <p style={{ ...label(T.dim, T.small), marginTop: 10, letterSpacing: ".28em" }}>
-            Big City · 9 × 9
-          </p>
-          <p style={{ ...prose(T.faint, T.small), margin: "16px auto 0", textAlign: "center" }}>
-            Des Titans démolissent la ville pour remplir leur Repaire. Règle la
-            partie ci-dessous — ces choix sont verrouillés au démarrage.
+            Règle ta partie avant de jouer
           </p>
         </header>
 
@@ -146,18 +151,11 @@ export default function SetupScreen({
                     flexWrap: "wrap",
                   }}
                 >
-                  {/* Le numéro de joueur, dans sa couleur : c'est l'étiquette
-                      « 1P / 2P » du haut d'un écran d'arcade. */}
-                  <span
-                    style={{
-                      ...readout("0.7rem", "#0f0826"),
-                      background: tc?.accent || T.rule,
-                      padding: "5px 6px",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {id}P
-                  </span>
+                  {/* La pastille « 1P / 2P » a été retirée (Nikola,
+                      2026-08-28). Elle numérotait une place autour de la
+                      table, alors que le portrait, la couleur et le nom
+                      saisi désignent déjà le Titan — trois fois la même
+                      information, dont une en jargon de borne. */}
                   <TitanIcon titanId={id} size={40} variant="plain" />
                   {/* Le champ se fond dans la ligne : un simple soulignement à
                       la couleur du Titan. Le texte saisi reste blanc — en
@@ -188,38 +186,104 @@ export default function SetupScreen({
                     }}
                     title="Choisis le nom de ton Titan (18 caractères max)"
                   />
-                  <div style={{ display: "flex", gap: 5 }}>
-                    {["humain", "ia"].map((m) => {
-                      const on = mode === m;
-                      const couleur = m === "humain" ? T.go : T.tele;
-                      return (
-                        <button
-                          key={m}
-                          onClick={() => setTitanModes((prev) => ({ ...prev, [id]: m }))}
-                          aria-pressed={on}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 5,
-                            background: on ? couleur : "transparent",
-                            border: `2px solid ${on ? couleur : T.rule}`,
-                            borderRadius: T.rChip,
-                            color: on ? "#0f0826" : T.faint,
-                            padding: "7px 11px",
-                            cursor: "pointer",
-                            ...label(on ? "#0f0826" : T.faint, "0.68rem"),
-                          }}
-                        >
-                          {/* La main qui joue, pas un poing : le poing dit
-                              « Bagarre » partout ailleurs dans le jeu, et il
-                              n'a rien à faire sur un choix humain / IA. */}
-                          <Icon name={m === "humain" ? "pointer" : "bot"} size={13} />
-                          {m === "humain" ? "Humain" : "IA"}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {/* UN SEUL BOUTON, ENFONCÉ OU NON (Nikola, 2026-08-28 :
+                      « ne fais pas de bouton Humain, fais juste IA cliqué ou
+                      non »). Deux boutons pour un choix binaire obligent à
+                      lire les deux pour savoir lequel est actif ; un
+                      interrupteur se lit d'un coup. Et « Humain » n'est pas
+                      un réglage, c'est l'absence d'IA. */}
+                  <button
+                    onClick={() =>
+                      setTitanModes((prev) => ({ ...prev, [id]: prev[id] === "ia" ? "humain" : "ia" }))
+                    }
+                    role="switch"
+                    aria-checked={mode === "ia"}
+                    aria-label={`Titan ${id} joué par l'IA`}
+                    title={mode === "ia" ? "Piloté par l'IA — clique pour le rendre à un joueur" : "Joué par un humain — clique pour le confier à l'IA"}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
+                      background: mode === "ia" ? T.tele : "transparent",
+                      border: `2px solid ${mode === "ia" ? T.tele : T.rule}`,
+                      borderRadius: T.rChip,
+                      color: mode === "ia" ? "#0f0826" : T.faint,
+                      padding: "7px 13px",
+                      cursor: "pointer",
+                      flexShrink: 0,
+                      ...label(mode === "ia" ? "#0f0826" : T.faint, "0.68rem"),
+                    }}
+                  >
+                    <Icon name="bot" size={13} />
+                    IA
+                  </button>
                 </div>
+              );
+            })}
+          </div>
+        </Reglage>
+
+        {/* ── DIFFICULTÉ ──
+            Nikola, 2026-08-28 : « j'aimerais avoir 4 niveaux de difficulté
+            clairement distincts ». Le réglage existait, mais il était rangé
+            en bas avec le Seuil Apocalypse et la graine, sous le nom
+            « Niveau des IA », et proposait trois entrées dont deux
+            décrivaient un TIRAGE (« Mêlé », « Confirmé mini ») plutôt qu'un
+            niveau. On ne savait pas ce qu'on choisissait.
+
+            Il remonte donc juste sous la sélection des joueurs, à la même
+            taille qu'elle : après « qui joue », la question suivante est
+            « contre quoi ». Quatre entrées, dans l'ordre croissant, et
+            chacune dit en une ligne ce que l'IA sait faire de plus que la
+            précédente — c'est la seule façon de rendre l'échelle lisible
+            sans jargon de réglage. */}
+        <Reglage
+          titre="Difficulté"
+          aide="Toutes les IA jouent au niveau choisi. Leur tempérament, lui, reste tiré au sort : deux parties de même niveau ne se ressemblent pas."
+        >
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))" }}>
+            {/* UNE COULEUR PAR NIVEAU (Nikola, 2026-08-28). Les quatre
+                s'allumaient dans le même jaune : la couleur disait
+                « sélectionné », elle ne disait pas LEQUEL. Elles reprennent
+                donc les quatre signaux que le jeu emploie déjà, dans l'ordre
+                où il les emploie — le vert du disponible, le cyan du passif,
+                l'orange de l'alerte, le rouge de l'arrêt. On lit le niveau
+                choisi à la couleur seule, sans relire les quatre libellés. */}
+            {[
+              { cle: FORCES.FACILE, ton: T.go, aide: "Ne compte que son butin. Ignore les bonus de fin, et se trompe de temps en temps." },
+              { cle: FORCES.MOYEN, ton: T.move, aide: "Compte tout le décompte. Mais se déplace sans savoir quelle carte il jouera de là." },
+              { cle: FORCES.DIFFICILE, ton: T.warn, aide: "Place son Titan POUR sa carte, et prépare sa Manche coup après coup." },
+              { cle: FORCES.EXPERT, ton: T.stop, aide: "En plus : regarde ce qu'il vous offre, et ce que chaque vol vous coûte vraiment." },
+            ].map(({ cle, ton, aide }) => {
+              const on = difficulte === cle;
+              return (
+                <button
+                  key={cle}
+                  onClick={() => setDifficulte(cle)}
+                  aria-pressed={on}
+                  /* Le libellé visible est dans un span imbriqué avec sa
+                     phrase d'explication : sans nom accessible, le lecteur
+                     d'écran annonçait « bouton » quatre fois de suite. */
+                  aria-label={`Difficulté ${FORCE_LABELS[cle]} — ${aide}`}
+                  style={{
+                    background: on ? ton : "transparent",
+                    border: `2px solid ${on ? ton : T.rule}`,
+                    borderRadius: T.rChip,
+                    color: on ? "#0f0826" : T.dim,
+                    padding: "11px 12px",
+                    cursor: "pointer",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "flex-start",
+                    gap: 5,
+                    textAlign: "left",
+                    boxShadow: on ? `0 3px 0 ${T.edge}` : "none",
+                    transition: "background 140ms linear, border-color 140ms linear",
+                  }}
+                >
+                  <span style={label(on ? "#0f0826" : ton, T.small)}>{FORCE_LABELS[cle]}</span>
+                  <span style={{ ...prose(on ? "#0f0826" : T.faint, T.micro), lineHeight: 1.35 }}>{aide}</span>
+                </button>
               );
             })}
           </div>
@@ -256,6 +320,52 @@ export default function SetupScreen({
                 </span>
               </span>
             </label>
+
+            {/* ── CE QUE FAIT LE VOL DE PHASE REPOS ──
+                Nikola, 2026-08-28 : « faudrait que ça soit un mode avant le
+                lancement pour la phase Repos : soit c'est la carte de la
+                victime qui va dans sa zone Repos, soit ça va dans la main du
+                Titan qui a sélectionné la carte ».
+
+                Les deux versions changent la nature de la phase, pas son
+                dosage : l'une prive, l'autre transfère. Ça ne se règle donc
+                pas au curseur, ça se choisit — et avant de commencer, comme
+                le nombre de Manches. */}
+            <div style={{ border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "11px 13px" }}>
+              <div style={{ ...label(T.dim, T.small), marginBottom: 8 }}>Vol de Phase Repos</div>
+              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(min(210px, 100%), 1fr))" }}>
+                {[
+                  { cle: "repos", nom: "Mise au repos", aide: "La carte tirée part en Zone Repos chez sa victime : elle en est privée une Manche, personne ne la gagne." },
+                  { cle: "main", nom: "Emprunt", aide: "La carte tirée passe en main du voleur pour la Manche, puis retourne à son propriétaire." },
+                ].map(({ cle, nom, aide }) => {
+                  const on = modeVolRepos === cle;
+                  return (
+                    <button
+                      key={cle}
+                      onClick={() => setModeVolRepos(cle)}
+                      aria-pressed={on}
+                      aria-label={`Vol de Phase Repos : ${nom} — ${aide}`}
+                      style={{
+                        background: on ? T.tele : "transparent",
+                        border: `2px solid ${on ? T.tele : T.rule}`,
+                        borderRadius: T.rChip,
+                        color: on ? "#0f0826" : T.dim,
+                        padding: "10px 12px",
+                        cursor: "pointer",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: 4,
+                        textAlign: "left",
+                      }}
+                    >
+                      <span style={label(on ? "#0f0826" : T.tele, T.small)}>{nom}</span>
+                      <span style={{ ...prose(on ? "#0f0826" : T.faint, T.micro), lineHeight: 1.35 }}>{aide}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "11px 13px" }}>
               <label style={label(T.dim, T.small)} htmlFor="seuil-apo">

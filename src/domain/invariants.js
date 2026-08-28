@@ -124,30 +124,37 @@ export function verifierInvariants(etat, contexte = "") {
     }
   }
 
-  // ── 6. Les cartes d'un Titan ne se dupliquent pas ──
-  // Chaque Titan possède un exemplaire des 6 cartes Actions. La même
-  // carte ne peut pas être à la fois en main et programmée : le
-  // symptôme classique d'un `splice` oublié.
+  /* ── 6. Aucune carte ne se perd ni ne se crée ──
+     Chaque Titan commence avec un exemplaire des 6 cartes Actions, soit
+     6 × nbJoueurs cartes en jeu.
+
+     CE QUI A CHANGÉ LE 2026-08-28. Le vol de Phase Repos TRANSFÈRE
+     désormais la carte au voleur (cf. `resolveVolPhaseRepos`), au lieu de
+     la coucher en Zone Repos chez sa victime. Une main n'est donc plus
+     figée à six, et un Titan peut très bien détenir deux exemplaires de la
+     même carte — c'est le but du geste, pas un `splice` oublié.
+
+     Ce qui reste vrai, et c'est ce qu'on vérifie : le TOTAL en jeu ne
+     bouge pas. Une carte qui disparaît ou qui apparaît reste le symptôme
+     classique d'une file mal dépilée, et l'invariant l'attrape toujours —
+     il le fait simplement sur la table entière au lieu de chaque main. */
+  const cartesDe = (t) => [
+    ...(t.hand || []),
+    ...(t.programmed || []),
+    ...(t.playedThisManche || []),
+    ...(t.discardedHidden || []),
+    ...(t.repos || []).map((e) => e.cardId),
+  ];
+  const totalEnJeu = titans.reduce((somme, t) => somme + cartesDe(t).length, 0);
+  const attendu = titans.length * 6;
+  if (totalEnJeu !== attendu) {
+    signaler("compte-de-cartes", `${totalEnJeu} cartes en jeu pour ${attendu} attendues`);
+  }
+  // Une main vide est légale (tout est programmé), un Titan sans aucune
+  // carte du tout ne l'est pas : il ne pourrait plus jamais programmer.
   for (const t of titans) {
-    const toutes = [
-      ...(t.hand || []),
-      ...(t.programmed || []),
-      ...(t.playedThisManche || []),
-      ...(t.discardedHidden || []),
-      ...(t.repos || []).map((e) => e.cardId),
-    ];
-    const vues = new Set();
-    for (const c of toutes) {
-      if (vues.has(c)) signaler("carte-dupliquee", `Titan ${t.id} détient ${c} en double`);
-      vues.add(c);
-    }
-    if (toutes.length > 6) {
-      signaler("trop-de-cartes", `Titan ${t.id} détient ${toutes.length} cartes pour 6 possibles`);
-    }
-    // Une carte perdue est tout aussi grave qu'une carte dupliquée : le
-    // Titan finirait la partie avec moins d'options que ses adversaires.
-    if (toutes.length < 6) {
-      signaler("carte-perdue", `Titan ${t.id} ne détient plus que ${toutes.length} cartes sur 6`);
+    if (cartesDe(t).length === 0) {
+      signaler("titan-sans-carte", `Titan ${t.id} ne détient plus aucune carte`);
     }
   }
 

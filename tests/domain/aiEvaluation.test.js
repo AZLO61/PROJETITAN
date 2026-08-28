@@ -8,8 +8,10 @@ import {
   bestVertAssignments,
   chooseAmongBest,
   evaluatePosition,
+  gagnantArcEnCiel,
   makeProfile,
   profileLabel,
+  reglagesDe,
   valeurAPortee,
 } from "../../src/domain/aiEvaluation.js";
 import { setSeed } from "../../src/domain/rng.js";
@@ -19,8 +21,8 @@ import { computeFinalScore } from "../../src/domain/gameRules.js";
 // pas ses valeurs numériques exactes. Les notes doivent pouvoir bouger
 // quand Nikola retouche un barème — c'est même tout l'intérêt du branchement
 // sur computeFinalScore. Ce qui ne doit pas bouger, c'est l'ordre des
-// préférences : un Expert doit rester différentiel, un Novice aveugle aux
-// Pistes ADN, un Agressif porté sur la bagarre.
+// préférences : un Expert doit lire le plateau plus finement qu'un Confirmé,
+// un Novice rester aveugle aux Pistes ADN, un Agressif porté sur la bagarre.
 
 const titan = (id, extra = {}) => ({
   id,
@@ -43,7 +45,7 @@ describe("évaluation — la valeur d'un bloc est marginale, pas fixe", () => {
   // barème Bleu [1,3,5,7,10,15,20,25,30], le 2e bloc rapporte 2 et le
   // 6e en rapporte 5. Une table de poids à la main écraserait cette
   // courbe et l'IA accumulerait sans savoir quand s'arrêter.
-  const profil = makeProfile(FORCES.CONFIRME, TEMPERAMENTS.OPPORTUNISTE);
+  const profil = makeProfile(FORCES.MOYEN, TEMPERAMENTS.OPPORTUNISTE);
   const noteAvec = (n) =>
     evaluatePosition(1, etat([titan(1, { repaire: Array(n).fill("bleu") })]), profil);
 
@@ -63,8 +65,8 @@ describe("évaluation — la valeur d'un bloc est marginale, pas fixe", () => {
 });
 
 describe("force — le Novice regarde moins loin, il ne triche pas", () => {
-  const novice = makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE);
-  const confirme = makeProfile(FORCES.CONFIRME, TEMPERAMENTS.OPPORTUNISTE);
+  const novice = makeProfile(FORCES.FACILE, TEMPERAMENTS.OPPORTUNISTE);
+  const confirme = makeProfile(FORCES.MOYEN, TEMPERAMENTS.OPPORTUNISTE);
 
   it("le Novice compte son Adrénaline, comme le Confirmé", () => {
     /* Il l'ignorait totalement jusqu'au 2026-08-18, et la gaspillait donc
@@ -105,36 +107,72 @@ describe("force — le Novice regarde moins loin, il ne triche pas", () => {
   });
 });
 
-describe("force — l'Expert évalue en différentiel", () => {
-  const confirme = makeProfile(FORCES.CONFIRME, TEMPERAMENTS.OPPORTUNISTE);
-  const expert = makeProfile(FORCES.EXPERT, TEMPERAMENTS.OPPORTUNISTE);
+describe("force — l'Expert lit le plateau, le Confirmé lit le barème", () => {
+  /* Ce bloc verrouillait auparavant la NUISANCE : l'Expert préférant la
+     position où son adversaire souffre. Mesuré le 2026-08-27 sur cinq poids
+     et deux séries de graines, ce terme lui FAIT PERDRE des points de façon
+     monotone (ratio Confirmé/Expert 97 % sans nuisance, 101 % à 0,5, 108 % à
+     1,0, 120 % à 1,6) : à quatre joueurs, coûter trois points au meneur les
+     fait gagner autant aux deux autres qu'à soi. Il a donc été retiré, et ce
+     que l'Expert a de plus est désormais un REGARD, pas une agression. */
+  const presqueArcEnCiel = { cell: "E5", repaire: ["bleu", "rose", "orange", "rouge"] };
 
-  // Deux positions où le Titan 1 marque EXACTEMENT pareil ; seule change
-  // la fortune de son adversaire. Le Confirmé doit être indifférent, et
-  // l'Expert doit préférer celle où l'adversaire souffre. C'est ce qui
-  // fait émerger la nuisance sans qu'aucune règle d'attaque soit écrite.
-  const monRepaire = { repaire: ["bleu", "bleu", "rose"] };
-  const adversaireRiche = etat([titan(1, monRepaire), titan(2, { repaire: Array(7).fill("bleu") })]);
-  const adversairePauvre = etat([titan(1, monRepaire), titan(2, { repaire: ["bleu"] })]);
-
-  it("le Confirmé ne fait pas la différence", () => {
-    expect(evaluatePosition(1, adversaireRiche, confirme)).toBe(
-      evaluatePosition(1, adversairePauvre, confirme)
-    );
+  it("le barème seul ne voit pas les 5 points d'un trophée à portée", () => {
+    // Un Vert au sol ne rapporte aucun point de BARÈME — il ne marque sur
+    // aucune colonne. Mais il est la cinquième couleur de ce Titan-là, donc
+    // l'Arc-en-ciel, donc 5 points fermes. C'est exactement le genre de
+    // situation que l'ancienne lecture ratait.
+    const autour = etat([titan(1, presqueArcEnCiel), titan(2, { cell: "A1" })], {}, { E6: ["vert"] });
+    const auBareme = valeurAPortee(titan(1, presqueArcEnCiel), autour, 3, { auScoreComplet: false });
+    const auScore = valeurAPortee(titan(1, presqueArcEnCiel), autour, 3, { auScoreComplet: true });
+    expect(auScore).toBeGreaterThan(auBareme);
   });
 
-  it("l'Expert préfère nettement la position où l'adversaire est distancé", () => {
-    expect(evaluatePosition(1, adversairePauvre, expert)).toBeGreaterThan(
-      evaluatePosition(1, adversaireRiche, expert)
-    );
+  it("un tas qu'un adversaire touche vaut moins que le même tas gardé", () => {
+    const moi = titan(1, { cell: "E5" });
+    const tas = { E6: ["bleu", "bleu"] };
+    const seul = etat([moi, titan(2, { cell: "A1" })], {}, tas);
+    const dispute = etat([moi, titan(2, { cell: "E7" })], {}, tas);
+    const opts = { voitConcurrence: true };
+    expect(valeurAPortee(moi, dispute, 3, opts)).toBeLessThan(valeurAPortee(moi, seul, 3, opts));
+  });
+
+  it("sans ce regard, la présence de l'adversaire ne change rien", () => {
+    const moi = titan(1, { cell: "E5" });
+    const tas = { E6: ["bleu", "bleu"] };
+    const seul = etat([moi, titan(2, { cell: "A1" })], {}, tas);
+    const dispute = etat([moi, titan(2, { cell: "E7" })], {}, tas);
+    expect(valeurAPortee(moi, dispute, 3)).toBe(valeurAPortee(moi, seul, 3));
+  });
+
+  it("le Confirmé reste indifférent à la fortune de son adversaire", () => {
+    const confirme = makeProfile(FORCES.MOYEN, TEMPERAMENTS.OPPORTUNISTE);
+    const monRepaire = { repaire: ["bleu", "bleu", "rose"] };
+    // Les Bleu de l'adversaire ne disputent ni le bonus Rose ni un
+    // classement de piste : sa fortune ne peut donc pas déplacer mon total.
+    const riche = etat([titan(1, monRepaire), titan(2, { repaire: Array(7).fill("bleu") })]);
+    const pauvre = etat([titan(1, monRepaire), titan(2, { repaire: ["bleu"] })]);
+    expect(evaluatePosition(1, riche, confirme)).toBe(evaluatePosition(1, pauvre, confirme));
+  });
+});
+
+describe("trophée Arc-en-ciel — l'IA sait qu'il reste à prendre", () => {
+  it("il revient au premier Titan qui possède les cinq couleurs", () => {
+    const cinq = ["bleu", "rose", "orange", "rouge", "vert"];
+    expect(gagnantArcEnCiel([titan(1, { repaire: ["bleu"] }), titan(2, { repaire: cinq })])).toBe(2);
+  });
+
+  it("personne ne le tient tant qu'une couleur manque", () => {
+    const quatre = ["bleu", "rose", "orange", "rouge"];
+    expect(gagnantArcEnCiel([titan(1, { repaire: quatre }), titan(2, { repaire: quatre })])).toBe(null);
   });
 });
 
 describe("tempérament — même force, préférences différentes", () => {
   // Un Agressif et un Collectionneur de même force doivent classer
   // différemment deux positions de valeur brute comparable.
-  const agressif = makeProfile(FORCES.CONFIRME, TEMPERAMENTS.AGRESSIF);
-  const collectionneur = makeProfile(FORCES.CONFIRME, TEMPERAMENTS.COLLECTIONNEUR);
+  const agressif = makeProfile(FORCES.MOYEN, TEMPERAMENTS.AGRESSIF);
+  const collectionneur = makeProfile(FORCES.MOYEN, TEMPERAMENTS.COLLECTIONNEUR);
 
   const viaBagarre = etat([titan(1, { bagarre: 6 }), titan(2)]);
   const viaSocles = etat([titan(1, { socles: [4, 4] }), titan(2)]);
@@ -182,7 +220,7 @@ describe("valeur à portée — l'IA voit ce qui traîne autour d'elle", () => {
     // (cf. FORCE_SETTINGS et scripts/mesure-forces.mjs).
     const vide = etat([titan(1), titan(2)]);
     const entoure = etat([titan(1), titan(2)], {}, { E5: ["bleu", "bleu", "bleu"] });
-    for (const force of [FORCES.NOVICE, FORCES.CONFIRME, FORCES.EXPERT]) {
+    for (const force of [FORCES.FACILE, FORCES.MOYEN, FORCES.EXPERT]) {
       const profil = makeProfile(force, TEMPERAMENTS.OPPORTUNISTE);
       expect(evaluatePosition(1, entoure, profil)).toBeGreaterThan(evaluatePosition(1, vide, profil));
     }
@@ -197,23 +235,30 @@ describe("valeur à portée — l'IA voit ce qui traîne autour d'elle", () => {
        toujours pas le score complet, il ne voit pas les adversaires, et il ne
        perçoit qu'une PART des bonus de fin. Un `visionBonus` à 1 ferait de lui
        un Confirmé, à 0 il retomberait au gouffre d'avant. */
-    expect(FORCE_SETTINGS[FORCES.NOVICE].voitScoreComplet).toBe(false);
-    expect(FORCE_SETTINGS[FORCES.NOVICE].voitAdversaires).toBe(false);
-    expect(FORCE_SETTINGS[FORCES.NOVICE].visionBonus).toBeGreaterThan(0);
-    expect(FORCE_SETTINGS[FORCES.NOVICE].visionBonus).toBeLessThan(1);
-    expect(FORCE_SETTINGS[FORCES.CONFIRME].voitScoreComplet).toBe(true);
+    expect(FORCE_SETTINGS[FORCES.FACILE].voitScoreComplet).toBe(false);
+    expect(FORCE_SETTINGS[FORCES.FACILE].voitAdversaires).toBe(false);
+    expect(FORCE_SETTINGS[FORCES.FACILE].visionBonus).toBeGreaterThan(0);
+    expect(FORCE_SETTINGS[FORCES.FACILE].visionBonus).toBeLessThan(1);
+    expect(FORCE_SETTINGS[FORCES.MOYEN].voitScoreComplet).toBe(true);
     // Il garde aussi du bruit là où le Confirmé n'en a plus.
-    expect(FORCE_SETTINGS[FORCES.NOVICE].topN).toBeGreaterThan(FORCE_SETTINGS[FORCES.CONFIRME].topN);
-    // Le différentiel adverse reste la marche entre Confirmé et Expert :
-    // c'est de là que vient toute la nuisance, et lui seul l'a.
-    expect(FORCE_SETTINGS[FORCES.CONFIRME].poidsAdversaires).toBe(0);
-    expect(FORCE_SETTINGS[FORCES.EXPERT].poidsAdversaires).toBeGreaterThan(0);
+    expect(FORCE_SETTINGS[FORCES.FACILE].topN).toBeGreaterThan(FORCE_SETTINGS[FORCES.MOYEN].topN);
+    /* LA MARCHE ENTRE CONFIRMÉ ET EXPERT, REFAITE LE 2026-08-27.
+       C'était le différentiel adverse — `poidsAdversaires` — mesuré depuis
+       comme coûtant des points à l'Expert quel que soit son dosage, et
+       retiré. Ce sont maintenant DEUX REGARDS de plus sur le plateau, et
+       c'est la mesure qui les a placés là plutôt que l'intuition : ouvrir la
+       lecture de la concurrence au Confirmé faisait repasser le ratio
+       Confirmé/Expert de 98,9 % à 100,9 % sur 30 parties × 8 graines. */
+    expect(FORCE_SETTINGS[FORCES.MOYEN].voitPorteeAuScore).toBe(false);
+    expect(FORCE_SETTINGS[FORCES.EXPERT].voitPorteeAuScore).toBe(true);
+    expect(FORCE_SETTINGS[FORCES.MOYEN].voitConcurrence).toBe(false);
+    expect(FORCE_SETTINGS[FORCES.EXPERT].voitConcurrence).toBe(true);
   });
 
 });
 
 describe("blocs Vert — l'IA sait où elle les poserait", () => {
-  const profil = makeProfile(FORCES.CONFIRME, TEMPERAMENTS.OPPORTUNISTE);
+  const profil = makeProfile(FORCES.MOYEN, TEMPERAMENTS.OPPORTUNISTE);
 
   it("un Vert vaut quelque chose, il n'est plus compté zéro", () => {
     const sans = etat([titan(1, { repaire: ["bleu", "bleu"] }), titan(2)]);
@@ -323,7 +368,7 @@ describe("choix du coup — la molette de bruit", () => {
 
   it("le Novice varie, mais reste dans ses trois meilleurs coups", () => {
     setSeed(4);
-    const profil = makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE);
+    const profil = makeProfile(FORCES.FACILE, TEMPERAMENTS.OPPORTUNISTE);
     const vus = new Set();
     for (let i = 0; i < 200; i++) vus.add(chooseAmongBest(candidats, profil).id);
     expect(vus.size).toBeGreaterThan(1);
@@ -334,7 +379,7 @@ describe("choix du coup — la molette de bruit", () => {
   });
 
   it("le tirage est reproductible à graine égale", () => {
-    const profil = makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE);
+    const profil = makeProfile(FORCES.FACILE, TEMPERAMENTS.OPPORTUNISTE);
     setSeed(2026);
     const a = Array.from({ length: 30 }, () => chooseAmongBest(candidats, profil).id);
     setSeed(2026);
@@ -348,8 +393,9 @@ describe("choix du coup — la molette de bruit", () => {
 });
 
 describe("profils — inventaire", () => {
-  it("expose les 9 combinaisons de force et de tempérament", () => {
-    expect(allProfiles()).toHaveLength(9);
+  it("expose les 12 combinaisons de niveau et de tempérament", () => {
+    // Quatre niveaux de difficulté depuis le 2026-08-28, trois tempéraments.
+    expect(allProfiles()).toHaveLength(12);
   });
 
   it("s'affiche en clair pour la révélation en fin de partie", () => {
@@ -374,7 +420,7 @@ describe("tirage pondéré — le Novice revient vers son meilleur coup", () => 
   };
 
   it("le meilleur coup sort nettement plus souvent que le troisième", () => {
-    const d = distribution(makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE));
+    const d = distribution(makeProfile(FORCES.FACILE, TEMPERAMENTS.OPPORTUNISTE));
     expect(d.A).toBeGreaterThan(d.B);
     expect(d.B).toBeGreaterThan(d.C);
     // Poids 9 / 3 / 1 pour un biais de 3 : le meilleur doit dominer largement.
@@ -390,7 +436,7 @@ describe("tirage pondéré — le Novice revient vers son meilleur coup", () => 
        Ce qui doit rester vrai : il se trompe ENCORE. Un Novice qui prendrait
        toujours le meilleur coup serait un Expert myope, pas un débutant. Son
        second choix sort donc toujours, le troisième n'existe plus. */
-    const d = distribution(makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE));
+    const d = distribution(makeProfile(FORCES.FACILE, TEMPERAMENTS.OPPORTUNISTE));
     expect(d.B).toBeGreaterThan(0);
     expect(d.C).toBe(0);
     // Et il penche nettement vers le meilleur, sans s'y enfermer.
@@ -407,7 +453,7 @@ describe("tirage pondéré — le Novice revient vers son meilleur coup", () => 
     // noté doit dominer largement, sans que l'autre disparaisse.
     setSeed(999);
     const deux = [{ note: 5, id: "X" }, { note: 4, id: "Y" }];
-    const profil = { force: FORCES.NOVICE, temperament: TEMPERAMENTS.OPPORTUNISTE };
+    const profil = { force: FORCES.FACILE, temperament: TEMPERAMENTS.OPPORTUNISTE };
     const compte = { X: 0, Y: 0 };
     for (let i = 0; i < 2000; i++) compte[chooseAmongBest(deux, profil).id]++;
     expect(compte.X).toBeGreaterThan(compte.Y);
@@ -420,9 +466,45 @@ describe("tirage pondéré — le Novice revient vers son meilleur coup", () => 
     // plus le bruit. Deux profils déterministes, donc, et c'est voulu.
     setSeed(4);
     const deux = [{ note: 5, id: "X" }, { note: 4, id: "Y" }];
-    for (const force of [FORCES.CONFIRME, FORCES.EXPERT]) {
+    for (const force of [FORCES.MOYEN, FORCES.EXPERT]) {
       const profil = { force, temperament: TEMPERAMENTS.OPPORTUNISTE };
       for (let i = 0; i < 50; i++) expect(chooseAmongBest(deux, profil).id).toBe("X");
     }
+  });
+});
+
+/* ── L'INTERRUPTEUR DE MESURE (2026-08-27) ──────────────────
+   `FORCE_SETTINGS` reste la source de verite d'une force. Un profil peut
+   porter un `reglages` qui la surcharge, et c'est reserve a la mesure :
+   `scripts/duel-reglages.mjs` s'en sert pour faire jouer deux reglages dans
+   LA MEME partie, protocole qui manquait aux deux passes precedentes.
+
+   Ces tests verrouillent la seule chose qui compte pour le jeu : sans
+   surcharge, rien ne bouge. */
+describe("Surcharge de reglages, reservee a la mesure", () => {
+  it("sans surcharge, un profil rend exactement les reglages de sa force", () => {
+    for (const force of Object.values(FORCES)) {
+      expect(reglagesDe(makeProfile(force))).toEqual(FORCE_SETTINGS[force]);
+    }
+  });
+
+  it("une surcharge ne remplace que les cles qu'elle nomme", () => {
+    const r = reglagesDe(makeProfile(FORCES.MOYEN, TEMPERAMENTS.OPPORTUNISTE, { rayonPortee: 4 }));
+    expect(r.rayonPortee).toBe(4);
+    expect(r.voitScoreComplet).toBe(FORCE_SETTINGS[FORCES.MOYEN].voitScoreComplet);
+  });
+
+  it("la nuisance est la marque de l'Expert, et de lui seul", () => {
+    /* Remesuree le 2026-08-27 au soir en duel meme-partie (240 parties,
+       sieges croises) : +0,25 point, 52,5 % de victoires — elle ne coute
+       rien, contrairement a ce que disait le balayage du matin, fait sur
+       deux campagnes separees. Elle est donc rebranchee sur l'Expert.
+
+       Si ce test tombe, c'est qu'une force a change de camp — un arbitrage
+       de jeu (une IA qui GENE ne joue pas comme une IA qui MARQUE), pas un
+       detail de reglage. */
+    expect(FORCE_SETTINGS[FORCES.EXPERT].poidsAdversaires).toBeGreaterThan(0);
+    expect(FORCE_SETTINGS[FORCES.FACILE].poidsAdversaires).toBe(0);
+    expect(FORCE_SETTINGS[FORCES.MOYEN].poidsAdversaires).toBe(0);
   });
 });

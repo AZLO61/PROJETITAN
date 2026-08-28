@@ -71,21 +71,26 @@ import {
   rentrerEnJeu,
   resolveFreeMovement,
   resolveRecuperation,
+  rendreCartesEmpruntees,
   resolveVolPhaseRepos,
 } from "./gameRules.js";
 import {
   FORCES,
   TEMPERAMENTS,
   bestVertAssignments,
+  gagnantArcEnCiel,
   makeProfile,
   profileLabel,
+  reglagesDe,
 } from "./aiEvaluation.js";
 import {
   appliquerCoup,
   planCardPlay,
   planMovement,
   planProgrammation,
+  planProgrammationSequentielle,
   planRecuperation,
+  planTour,
 } from "./aiPlanner.js";
 import { pick, setSeed } from "./rng.js";
 import { verifierHygiene, verifierInvariants } from "./invariants.js";
@@ -113,7 +118,7 @@ export function profilsAleatoires(nbJoueurs) {
  * @param {object} options.profils     { [titanId]: { force, temperament } }
  * @param {number} options.seed        graine, pour rejouer la partie
  */
-export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier = false, apocalypseThreshold = 5 } = {}) {
+export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier = false, apocalypseThreshold = 5, modeVolRepos = "main" } = {}) {
   setSeed(seed);
   // Journal des anomalies : violations d'invariants, Manches sautées,
   // tours sans coup jouable. Toujours rempli, même hors mode `verifier`,
@@ -127,6 +132,11 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
     board: etatPlateau.board,
     looseBlocks: {},
     titans: titanState.players,
+    // Contexte de fin de partie, lu par `valeurFinDePartie` : sans lui, le
+    // simulateur mesurerait des IA aveugles à une lecture que le jeu réel
+    // leur donne, et la campagne ne dirait plus rien de la vraie force.
+    // `manche` est réécrit à chaque Manche, plus bas.
+    finDePartie: { apocalypseThreshold, mancheNumber: 1, nbJoueurs },
   };
 
   // ── ATTRIBUTION DES VIOLATIONS À L'ÉTAPE FAUTIVE ──
@@ -197,7 +207,9 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
     for (const t of etat.titans) ensureProgrammableHand(t);
 
     for (const id of ordreManche) {
-      const cartes = planProgrammation(id, etat, profilsUtilises[id], manche);
+      const cartes = reglagesDe(profilsUtilises[id]).programmationSequentielle
+        ? planProgrammationSequentielle(id, etat, profilsUtilises[id], manche)
+        : planProgrammation(id, etat, profilsUtilises[id], manche);
       if (cartes.length === ROUNDS_PAR_MANCHE) {
         const res = programCards(id, cartes, etat.titans);
         if (!res.ok) anomalies.push({ type: "programmation-refusee", manche, titanId: id, raison: res.reason });
@@ -235,14 +247,31 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
           controler("rentree", manche, round, id);
         }
 
+        /* QUI N'A PAS ENCORE JOUÉ CE ROUND. C'est ce qui permet à
+           l'évaluation de chiffrer ce qu'un coup OFFRE : ce que je laisse
+           traîner devant un Titan qui joue après moi, il le ramasse ; ce
+           que je laisse devant un Titan qui a déjà joué, je peux encore
+           aller le chercher (cf. `valeurOfferte`). */
+        etat.aJouerEncore = new Set(ordreManche.slice(ordreManche.indexOf(id) + 1));
+        etat.finDePartie = { apocalypseThreshold, mancheNumber: manche, nbJoueurs };
+
+        /* LE TOUR SE DÉCIDE D'UN BLOC quand la force le permet : la case où
+           se placer dépend de la carte qu'on va jouer depuis là (cf.
+           `planTour`). Les niveaux du bas gardent la séquence historique,
+           décider en aveugle de sa propre carte étant précisément une
+           erreur de débutant. */
+        const tour = planTour(id, etat, profil, manche, porteeMouvement);
+
         // 1. Mouvement gratuit (2 cases, réduit d'autant s'il vient de
         //    rentrer sur le plateau), passif de chaque tour.
-        const mouvement = porteeMouvement > 0 ? planMovement(id, etat, profil, porteeMouvement) : null;
+        const mouvement = tour
+          ? (tour.destKey ? { destKey: tour.destKey } : null)
+          : (porteeMouvement > 0 ? planMovement(id, etat, profil, porteeMouvement) : null);
         if (mouvement) resolveFreeMovement(id, mouvement.destKey, etat);
         controler("mouvement", manche, round, id);
 
         // 2. Carte Action.
-        const coup = planCardPlay(id, etat, profil, manche);
+        const coup = tour ? tour.coup : planCardPlay(id, etat, profil, manche);
         const cardId = coup?.cardId ?? titan.programmed[0];
         if (coup) {
           appliquerCoup(coup, id, etat, manche, profil);
@@ -273,7 +302,12 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
     // ── PHASE REPOS ──
     // Le sens du vol revient au Détonateur dans le livret ; faute de
     // règle de décision pour l'IA, il est tiré au sort (cf. en-tête).
-    resolveVolPhaseRepos(manche, pick(["gauche", "droite"]), ordreManche, etat.titans);
+    // ON REND AVANT DE PIQUER (Nikola, 2026-08-28). Une carte empruntee a
+    // la Manche precedente retourne a son proprietaire d'abord ; le pool de
+    // vol d'un Titan qui en a joue une ne compte donc plus que ses deux
+    // cartes a lui. Voler d'abord permettrait de piquer la carte d'un tiers.
+    rendreCartesEmpruntees(etat.titans);
+    resolveVolPhaseRepos(manche, pick(["gauche", "droite"]), ordreManche, etat.titans, modeVolRepos);
     controler("vol-phase-repos", manche);
 
     // ── FIN DE MANCHE ──
@@ -296,7 +330,13 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
   // Placement des Verts en mode EXACT : c'est la vraie décision de fin de
   // partie, elle n'est calculée qu'une fois, elle doit être juste.
   const verts = bestVertAssignments(etat.titans, { exact: true });
-  const scores = computeFinalScore(etat.titans, verts, null);
+  /* Le trophée Arc-en-ciel valait `null` ici, donc les 5 points n'étaient
+     JAMAIS attribués en campagne : le simulateur notait une partie que le
+     jeu réel ne note pas, et toute mesure d'équilibrage était faussée
+     d'autant. `gagnantArcEnCiel` le déduit du plateau final — approximation
+     sur l'ORDRE d'arrivée quand deux Titans ont les cinq couleurs, jamais
+     sur le fait qu'il soit pris ou non. */
+  const scores = computeFinalScore(etat.titans, verts, gagnantArcEnCiel(etat.titans));
 
   // Le tri par score seul laissait les égalités se départager par ordre
   // d'identifiant. classementFinal applique le vrai départage du livret
@@ -339,10 +379,10 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
  * @param {object|null} options.profils profils imposés, ou null pour tirer
  *                                      au sort à chaque partie
  */
-export function lancerCampagne({ parties = 100, nbJoueurs = 4, seed = 1, profils = null, verifier = false, apocalypseThreshold = 5 } = {}) {
+export function lancerCampagne({ parties = 100, nbJoueurs = 4, seed = 1, profils = null, verifier = false, apocalypseThreshold = 5, modeVolRepos = "main" } = {}) {
   const resultats = [];
   for (let i = 0; i < parties; i++) {
-    resultats.push(jouerPartie({ nbJoueurs, profils, seed: seed + i, verifier, apocalypseThreshold }));
+    resultats.push(jouerPartie({ nbJoueurs, profils, seed: seed + i, verifier, apocalypseThreshold, modeVolRepos }));
   }
   return { parties, nbJoueurs, seed, resultats, stats: agreger(resultats), anomalies: agregerAnomalies(resultats) };
 }

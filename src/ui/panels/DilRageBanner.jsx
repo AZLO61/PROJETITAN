@@ -60,15 +60,28 @@ export default function DilRageBanner({ vm }) {
       background: isRage ? "rgba(227,35,71,.18)" : "rgba(45,141,245,.18)",
       border: `2.5px solid ${mainColor}`,
       boxShadow: `0 0 0 3px ${glowColor}, 0 4px 18px ${glowColor}`,
-      borderRadius: 14, padding: "14px 18px", marginBottom: 14, fontSize: ".9rem",
+      borderRadius: 12, padding: "9px 13px", marginBottom: 9, fontSize: ".85rem",
     }}>
+      {/* UNE SEULE LIGNE D'EN-TÊTE, ET ELLE PORTE TOUT — Nikola, 2026-08-28 :
+          « le panneau est trop gros, ça décale trop le plateau, on perd de
+          l'information », et « l'information qui suit est un peu répétitive ».
+
+          Les deux Titans étaient nommés DEUX FOIS : une fois dans le titre
+          (« T1 vs T2 ») et une fois dans la phrase juste en dessous (« T1
+          désigne 2 options chez T2 »), chacun avec son icône et son nom
+          complet. Sur un affichage où chaque ligne prise au plateau est une
+          ligne de plateau perdue, c'était quatre étiquettes pour deux
+          informations. Le titre porte désormais la phrase complète, et les
+          phrases qui suivaient ne renomment plus personne. */}
       <div style={{
-        fontFamily: "'Bowlby One', sans-serif", marginBottom: 10, fontSize: "1.05rem",
-        color: isRage ? "#ff8fa3" : "#71dbff", display: "flex", alignItems: "center", gap: 8,
+        fontFamily: "'Bowlby One', sans-serif", marginBottom: 7, fontSize: ".92rem",
+        color: isRage ? "#ff8fa3" : "#71dbff",
+        display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", lineHeight: 1.3,
       }}>
         <span aria-hidden="true">⚠️</span>
-        {currentDecision.type} — {currentDecision.cardLabel} ·{" "}
-        <TitanTag id={currentDecision.attackerId} titanDisplayName={titanDisplayName} /> vs{" "}
+        {currentDecision.type} · {currentDecision.cardLabel} —{" "}
+        <TitanTag id={currentDecision.attackerId} titanDisplayName={titanDisplayName} />
+        <span style={{ opacity: .7, fontFamily: "inherit" }}>sur</span>
         <TitanTag id={currentDecision.defenderId} titanDisplayName={titanDisplayName} />
       </div>
       {/* TITAN PAR TITAN. Une seule carte peut ouvrir plusieurs décisions —
@@ -93,9 +106,10 @@ export default function DilRageBanner({ vm }) {
         const options = getDilOptions(currentDecision.defenderId, { titans: titanState.players });
         return (
           <div>
-            <p style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-              <TitanTag id={currentDecision.attackerId} titanDisplayName={titanDisplayName} /> désigne 2 options chez{" "}
-              <TitanTag id={currentDecision.defenderId} titanDisplayName={titanDisplayName} /> :
+            <p style={{ margin: "0 0 6px", color: "rgba(255,255,255,.75)", fontSize: ".8rem" }}>
+              {currentDecision.autoAttackerPick
+                ? "Tu n'as pas le choix : ce sont ses 2 seules options. C'est elle qui décidera ce qu'elle lâche — ou si elle préfère payer 1 Adrénaline."
+                : "Désigne 2 options à lui faire perdre :"}
             </p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
               {options.length === 0 && <span style={{ color: "rgba(255,255,255,.5)" }}>Repaire vide.</span>}
@@ -143,8 +157,8 @@ export default function DilRageBanner({ vm }) {
         const canPay = (defender.adrenaline || 0) >= 1;
         return (
           <div>
-            <p style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-              <TitanTag id={currentDecision.defenderId} titanDisplayName={titanDisplayName} /> : laquelle perdre ?
+            <p style={{ margin: "0 0 6px", color: "rgba(255,255,255,.75)", fontSize: ".8rem" }}>
+              Laquelle perdre ?
               {currentDecision.autoAttackerPick && (
                 <span style={{ color: "rgba(255,255,255,.55)", fontSize: ".78rem" }}>
                   {" "}— l'attaquant n'avait pas le choix, ce sont les 2 seules options de ton Repaire.
@@ -190,8 +204,8 @@ export default function DilRageBanner({ vm }) {
         const showAdrOpt = defender.repaire.length < 2 && (defender.adrenaline || 0) > 0;
         return (
           <div>
-            <p style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4 }}>
-              <TitanTag id={currentDecision.attackerId} titanDisplayName={titanDisplayName} /> choisit librement :
+            <p style={{ margin: "0 0 6px", color: "rgba(255,255,255,.75)", fontSize: ".8rem" }}>
+              Choisis librement ce que tu lui arraches :
             </p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {defender.repaire.map((c, i) => (

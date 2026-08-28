@@ -85,7 +85,15 @@ function isBuildingCell(row, col) {
    helpers ci-dessous, qui doivent être utilisés par tout code cherchant
    « qui est sur cette case ». */
 function estSurLePlateau(titan) {
-  return !!titan && !titan.horsPlateau;
+  /* `aPlacer` s'ajoute à `horsPlateau` depuis le 2026-08-28 : pendant le
+     placement d'ouverture, un Titan qui n'a pas encore choisi son angle n'est
+     PAS sur le plateau. Sa `cell` porte déjà un emplacement par défaut, pour
+     qu'aucune lecture ne tombe sur `null` — mais personne ne doit la lire.
+
+     Les deux drapeaux passent par ce seul helper, déjà utilisé partout où le
+     code demande « qui est sur cette case » : c'est ce qui rend le placement
+     interactif possible sans toucher aux quinze appelants. */
+  return !!titan && !titan.horsPlateau && !titan.aPlacer;
 }
 
 /** Index case → id, limité aux Titans réellement présents sur le plateau. */
@@ -123,15 +131,20 @@ function indexerTitans(titans) {
    auraient chacun réimplémenté le départage — c'est exactement le piège du
    « cinquième endroit » qui a déjà coûté une campagne faussée le 18 août. */
 function rentrerEnJeu(titanId, gameState, { choisirAuto = false } = {}) {
-  const { board, titans } = gameState;
+  const { board, titans, looseBlocks = {} } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   if (!titan || !titan.horsPlateau) {
     return { rentre: false, cellule: titan?.cell ?? null, cout: 0, log: [] };
   }
 
+  /* Une case libre pour rentrer, c'est une case sur laquelle le Titan aurait
+     le droit de s'arrêter en se déplaçant : même fonction, pour que les deux
+     ne puissent pas diverger. Un Amas n'en interdit pas l'arrêt (cf.
+     `elementAuSolBloqueArret`), rentrer dessus est donc permis. */
   const libre = (cle) => {
     const b = board[cle];
     if (b && b.blocks && b.blocks.length > 0) return false;
+    if (elementAuSolBloqueArret(looseBlocks[cle])) return false;
     return !titans.some((t) => t.id !== titanId && estSurLePlateau(t) && t.cell === cle);
   };
 
@@ -537,33 +550,91 @@ const CARD_FORCE = {
   je_ne_partage_pas: 3,
 };
 
-function placeTitans(nbJoueurs) {
-  // 8 emplacements possibles = 4 coins × 2 cases adjacentes.
-  // Tirage libre : permet le partage d'un coin (2 Titans sur ses 2 cases
-  // adjacentes) et les coins vides, sans contrainte artificielle 1/coin.
-  //
-  // Ruling tranché Nikola (session), point ouvert V36 « priorité au
-  // mouvement gratuit quand 2 Titans partagent un coin de départ » : le
-  // point est CLOS, il n'y a pas de conflit à arbitrer. Chaque pôle offre
-  // 2 positions distinctes, donc 2 Titans qui partagent un coin occupent
-  // malgré tout 2 cases différentes et ne se gênent pas au départ. Aucune
-  // règle de priorité n'est nécessaire, et le tirage libre ci-dessous
-  // reste le bon comportement.
+/* ---- QUI SE PLACE, ET DANS QUEL ORDRE (Nikola, 2026-08-28) --------
+   « En fonction de qui a le jeton Détonateur à la première Manche, on place
+   les Titans dans l'ordre inverse, dans une des 2 cases d'un angle, comme
+   les règles le disent. »
+
+   Le placement était tiré au sort et attribué aux Titans 1, 2, 3, 4 dans
+   l'ordre du tirage : il n'avait aucun rapport avec le Détonateur. Or
+   l'ordre de placement est une vraie mécanique — celui qui pose EN DERNIER
+   voit où sont tous les autres avant de choisir. Le livret le donne au
+   Détonateur, en compensation du fait qu'il ouvre la Manche.
+
+   D'où la séquence, et elle ne peut pas s'écrire dans un autre ordre :
+   1. on tire l'ordre de jeu et le Détonateur de la Manche 1 ;
+   2. on en déduit l'ordre d'initiative, pivoté sur le Détonateur ;
+   3. on place dans l'ordre INVERSE de celui-là — le Détonateur en dernier.
+
+   CHOIX DE LA CASE. Chaque Titan prend une des 2 cases d'un angle, tirée
+   parmi celles qui restent. Une première version faisait préférer un angle
+   ENCORE LIBRE à chacun : c'était une invention, et elle contredisait un
+   ruling. Le point V36 « coin partagé » est clos depuis longtemps — deux
+   Titans peuvent partager un pôle, ils y occupent 2 cases distinctes et ne
+   se gênent pas — et un test le vérifie. Ce qui change ici est l'ORDRE de
+   placement, rien d'autre. */
+/* `modes` — { [id]: "ia" | "humain" }, ou null.
+   null (simulateur, apercu d'accueil) : tout le monde est placé tout de suite,
+   comportement d'origine, et les campagnes gardent leurs graines.
+   Fourni : les Titans sont marqués `aPlacer` et le placement devient une
+   SÉQUENCE que le contrôleur déroule (cf. `placerTitanInitial`). */
+function placeTitans(nbJoueurs, modes = null) {
+  const ids = Array.from({ length: nbJoueurs }, (_, i) => i + 1);
+  const ordreJeu = shuffle(ids);
+  const detonateurManche1 = pick(ordreJeu);
+
+  const depart = ordreJeu.indexOf(detonateurManche1);
+  const initiative = [...ordreJeu.slice(depart), ...ordreJeu.slice(0, depart)];
+  const ordrePlacement = [...initiative].reverse();
+
   const slots = [];
   for (const corner of Object.keys(CORNERS)) {
     for (const cell of CORNERS[corner].adjacents) {
       slots.push({ corner, cell, gradient: CORNERS[corner].gradient });
     }
   }
-  const picked = shuffle(slots).slice(0, nbJoueurs);
-  const players = picked.map((slot, idx) => ({
-    id: idx + 1,
-    corner: slot.corner,
-    cell: slot.cell,
+
+  const disponibles = shuffle(slots);
+
+  /* ── LE PLACEMENT EST UN CHOIX, PAS UN TIRAGE ──
+     Nikola, 2026-08-28 : « le placement choisi par le joueur au début du jeu
+     (inverse de l'initiative, Détonateur en dernier), on se place sur une des
+     cases libres adjacentes à un angle. C'est un choix, ça ne doit pas être
+     automatique, sauf pour une IA. »
+
+     La passe précédente avait corrigé l'ORDRE (le Détonateur pose en dernier,
+     et voit donc tout le monde avant de choisir) mais laissé le tirage au
+     sort : l'ordre était devenu juste pour une décision que personne ne
+     prenait. Or c'est exactement ce que cet ordre sert à arbitrer.
+
+     `slotDe` reste rempli pour TOUT LE MONDE : c'est l'emplacement PAR DÉFAUT,
+     celui d'une IA et celui qu'un Titan garde si personne ne tranche. Ce qui
+     change, c'est `aPlacer` — tant qu'il est vrai, le Titan n'est pas sur le
+     plateau (cf. `estSurLePlateau`), sa case par défaut n'est lue par
+     personne, et le contrôleur déroule la séquence : les IA prennent leur
+     emplacement dès leur tour, un humain attend son clic. Chacun voit donc
+     l'état réel du plateau à SON tour de poser, et pas un plateau déjà
+     rempli par des Titans qui devaient poser après lui. */
+  const slotDe = {};
+  for (const id of ordrePlacement) {
+    const choisi = disponibles.shift();
+    if (!choisi) break; // 8 emplacements pour 4 Titans au plus : inatteignable
+    slotDe[id] = choisi;
+  }
+  const placementInteractif = Boolean(modes);
+
+  const players = ids.map((id) => ({
+    id,
+    corner: slotDe[id].corner,
+    cell: slotDe[id].cell,
     // Éjecté hors de BIG CITY : il attend son tour pour rentrer, et `cell`
     // désigne alors sa case de retour (cf. rentrerEnJeu).
     horsPlateau: false,
-    gradient: TITAN_GRADIENT[idx + 1],
+    // N'a pas encore posé son Titan sur un angle. `cell` porte déjà son
+    // emplacement par défaut, mais il n'est pas sur le plateau tant que
+    // ce drapeau est là (cf. estSurLePlateau).
+    aPlacer: placementInteractif,
+    gradient: TITAN_GRADIENT[id],
     repaire: [],
     // Scoring final (brique ajoutée cette session) : compteurs réels des
     // 2 Pistes ADN (jusqu'ici seulement mentionnés dans les logs texte,
@@ -591,9 +662,76 @@ function placeTitans(nbJoueurs) {
     repos: [], // [{ cardId, faceUp, returnAtManche }] — indisponibles, reviennent en MAIN À LEUR PROPRIÉTAIRE (confirmé Nikola : le vol/la Fatigue rendent une carte indisponible 1 Manche chez son propriétaire, ils ne la transfèrent PAS au voleur/attaquant)
     adrenaline: 1, // dette #3 résolue : stock réel, 1 distribué au départ (Manche 1) puis +1 à chaque advanceManche
   }));
-  const ordreJeu = shuffle(players.map((p) => p.id));
-  const detonateurManche1 = pick(ordreJeu);
-  return { players, ordreJeu, detonateur: detonateurManche1 };
+  return {
+    players,
+    ordreJeu,
+    detonateur: detonateurManche1,
+    /* L'ordre dans lequel on POSE : l'inverse de l'initiative, Détonateur en
+       dernier. Le contrôleur le déroule quand le placement est interactif. */
+    ordrePlacement,
+    // Emplacements encore libres après les 4 par défaut : ce sont eux qu'on
+    // propose à un joueur qui veut un autre angle que celui qu'on lui a
+    // réservé. Mélangés par la même graine, donc reproductibles.
+    slotsRestants: disponibles.map((s2) => s2.cell),
+  };
+}
+
+/* ============================================================
+   PLACEMENT D'OUVERTURE — LES CASES OFFERTES, ET LA POSE
+   ============================================================
+   Les emplacements légaux sont les 8 cases adjacentes aux 4 angles (2 par
+   angle). Deux Titans peuvent partager un angle — le point V36 « coin
+   partagé » est clos depuis longtemps, ils y occupent 2 cases distinctes et
+   ne se gênent pas — donc la seule contrainte est qu'une case ne porte pas
+   déjà un Titan DÉJÀ POSÉ. Ceux qui attendent encore leur tour ne comptent
+   pas : c'est tout l'objet du drapeau `aPlacer`, et c'est ce qui fait que
+   poser en dernier est un avantage.
+============================================================ */
+function getPlacementCells(gameStateTitans) {
+  const prises = new Set(
+    (gameStateTitans || []).filter((t) => estSurLePlateau(t)).map((t) => t.cell)
+  );
+  const cases = [];
+  for (const coin of Object.keys(CORNERS)) {
+    for (const cell of CORNERS[coin].adjacents) {
+      if (!prises.has(cell)) cases.push(cell);
+    }
+  }
+  return cases;
+}
+
+/**
+ * Pose un Titan sur son angle d'ouverture.
+ * `cellKey` omis (ou déjà pris) : on retombe sur son emplacement par défaut
+ * s'il est encore libre, sinon sur la première case libre. C'est ce que fait
+ * une IA, et c'est aussi le filet qui garantit que la séquence se termine
+ * toujours — une partie ne doit jamais rester bloquée sur un placement.
+ */
+function placerTitanInitial(titanId, cellKey, gameStateTitans) {
+  const titan = (gameStateTitans || []).find((t) => t.id === titanId);
+  if (!titan || !titan.aPlacer) return { pose: false, cellule: titan?.cell ?? null, log: [] };
+
+  const libres = getPlacementCells(gameStateTitans);
+  if (libres.length === 0) {
+    return { pose: false, cellule: titan.cell, log: [`Titan ${titanId} : aucun emplacement d'angle libre.`] };
+  }
+  const cible = libres.includes(cellKey)
+    ? cellKey
+    : (libres.includes(titan.cell) ? titan.cell : libres[0]);
+
+  titan.cell = cible;
+  // Le coin d'appartenance suit la case : il sert à la teinte de la piste
+  // d'attente et au repérage à l'écran, il ne doit pas rester sur l'angle
+  // que le tirage avait réservé si le joueur en a choisi un autre.
+  const coin = Object.keys(CORNERS).find((c) => CORNERS[c].adjacents.includes(cible));
+  if (coin) titan.corner = coin;
+  titan.aPlacer = false;
+
+  return {
+    pose: true,
+    cellule: cible,
+    log: [`📍 Titan ${titanId} prend position en ${cible} (angle ${coin ?? "?"}).`],
+  };
 }
 
 function nextDetonateur(ordreJeu, current) {
@@ -712,8 +850,7 @@ function releaseSocle(cellKey, board, looseBlocks) {
   const bldg = board[cellKey];
   if (!bldg) return;
   board[cellKey] = { ...bldg, blocks: [] };
-  if (!looseBlocks[cellKey]) looseBlocks[cellKey] = [];
-  looseBlocks[cellKey].push(socleMarker(bldg.socle));
+  poserDebrisAuSol(looseBlocks, cellKey, socleMarker(bldg.socle));
 }
 
 /* ============================================================
@@ -848,8 +985,32 @@ function getCasesRepliDebris(depuis, cible, dr, dc, { board, looseBlocks = {}, t
   let candidates;
   if (depuis) {
     const autour = new Set(voisines(depuis));
-    // La charnière : sa propre case, plus celles qui touchent les deux.
-    candidates = [depuis, ...voisines(cible).filter((k) => autour.has(k))];
+    /* La charnière : sa propre case, plus celles qui touchent les deux —
+       MAIS JAMAIS UNE CASE AU-DELÀ DE L'OBSTACLE.
+
+       Bug remonté par Nikola le 2026-08-28 : « je viens de D7, je tape C7,
+       rebond = D6 D7 D8, pas C6 ou C8 comme là ». Les quatre cases qui
+       touchent D7 et C7 sont C6, C8, D6 et D8 ; les deux premières sont
+       dans la rangée C, c'est-à-dire DERRIÈRE le mur qu'on n'a pas eu la
+       puissance de franchir. Un élément arrêté par un obstacle ne peut pas
+       se retrouver de l'autre côté : c'est toute la raison d'être du repli.
+
+       On écarte donc une case qui a progressé sur TOUS les axes du
+       mouvement. Sur un déplacement droit il n'y a qu'un axe, et le filtre
+       supprime exactement la rangée d'en face. Sur une diagonale il y en a
+       deux, et seule la case qui progresse sur les deux est au-delà — c'est
+       la cible elle-même, déjà exclue : les deux cases « de biais » restent
+       proposées, ce qui est bien ce qu'on veut. */
+    const rDepuis = rowIndex(depuis[0]);
+    const cDepuis = Number(depuis.slice(1));
+    const auDela = (k) => {
+      const r = rowIndex(k[0]);
+      const c = Number(k.slice(1));
+      const avanceEnLigne = dr === 0 || Math.sign(r - rDepuis) === Math.sign(dr);
+      const avanceEnColonne = dc === 0 || Math.sign(c - cDepuis) === Math.sign(dc);
+      return avanceEnLigne && avanceEnColonne;
+    };
+    candidates = [depuis, ...voisines(cible).filter((k) => autour.has(k) && !auDela(k))];
   } else {
     // Sortie de faille : aucune case précédente sur ce bord du plateau.
     // On écarte toute case qui progresse sur un axe du déplacement.
@@ -951,10 +1112,12 @@ function appliquerReplElement(repli, cellKey, gameState) {
     }
   }
 
+  const initiateurBascule = repli.initiatorId ?? repli.titanId ?? null;
   if (repli.titanId != null) {
     const titan = titans.find((t) => t.id === repli.titanId);
     if (!titan) return { log, applied: false };
     titan.cell = cellKey;
+    log.push(...basculerToursSousTitans(initiateurBascule, gameState));
     return { log, applied: true };
   }
 
@@ -962,9 +1125,65 @@ function appliquerReplElement(repli, cellKey, gameState) {
   const bloc = pile.pop();
   if (bloc === undefined) return { log, applied: false };
   retirerPileVide(looseBlocks, repli.defaut);
-  if (!looseBlocks[cellKey]) looseBlocks[cellKey] = [];
-  looseBlocks[cellKey].push(bloc);
+  poserDebrisAuSol(looseBlocks, cellKey, bloc);
+  log.push(...basculerToursSousTitans(initiateurBascule, gameState));
   return { log, applied: true };
+}
+
+/* ============================================================
+   UN TAS PERCUTÉ BASCULE DANS L'AXE
+   ============================================================
+   Ruling Nikola du 2026-08-28, après une charge restée sans effet : « si je
+   percute un tas de débris ou fais percuter un tas, ça bascule dans le sens
+   de percussion, plus besoin du Seuil 4, ça va fluidifier la partie — si je
+   saute dessus ça s'effondre, la nuance est importante ».
+
+   DEUX GESTES, DEUX RÉSULTATS, et c'est toute la nuance :
+   · On PERCUTE le tas (charge de Tête en Avant, ou Titan projeté qui vient
+     s'y écraser) → il bascule DANS L'AXE, ici même.
+   · On SAUTE dessus (Boing Boing) → il s'ÉCROULE autour, sur les 8 cases
+     voisines, au choix du joueur (cf. `resolveEcroulementAmas`). Inchangé.
+
+   CE QUE LE SEUIL 4 COÛTAIT. Sous 4 d'énergie, un tas était déclaré
+   « obstacle infranchissable » : la charge s'arrêtait pile devant, sans rien
+   déplacer, et un Titan projeté dessus y grimpait au lieu de le pousser. Un
+   tas devenait donc un mur inerte au milieu du plateau, que seule une carte
+   chèrement payée pouvait déblayer. Le seuil ne décide plus rien ici : il
+   reste ce qu'il est ailleurs, l'arbitre entre DIL et RAGE.
+
+   PHYSIQUE DE LA BASCULE, reprise telle quelle de l'ancien Patatras : chaque
+   débris part avec pour énergie SA HAUTEUR dans le tas. Celui du sommet vole
+   loin, celui du bas bouge à peine — c'est ce qui distingue visuellement une
+   tour qui bascule d'une explosion. On dépile donc du haut vers le bas.
+
+   `ctx` est celui de `projectInDirection` : même plateau, même journal, même
+   ensemble `enChaine`, pour qu'un débris éjecté ne revienne pas frapper le
+   Titan encore en vol qui vient de renverser le tas. Les blocs qui partent
+   sont des DÉBRIS, jamais un Titan : `movingTitanId` est donc forcé à null.
+============================================================ */
+function basculerAmasDansLAxe(cellKey, dr, dc, ctx) {
+  const { looseBlocks } = ctx;
+  const log = ctx.log || [];
+  const pile = looseBlocks[cellKey];
+  if (!pile || pile.length === 0) return false;
+
+  const row = cellKey[0];
+  const col = Number(cellKey.slice(1));
+  const ejectes = [...pile];
+  delete looseBlocks[cellKey];
+
+  for (let i = ejectes.length - 1; i >= 0; i--) {
+    const bloc = ejectes[i];
+    const hauteur = i + 1;
+    const landing = projectInDirection(row, col, dr, dc, hauteur, { ...ctx, movingTitanId: null });
+    const landingKey = landing.row + landing.col;
+    poserDebrisAuSol(looseBlocks, landingKey, bloc);
+    log.push(
+      `${cellKey} : le tas bascule dans l'axe — bloc ${bloc} (hauteur ${hauteur}) part vers ${landingKey}` +
+        (landing.hasBounced ? " (après rebond)" : "")
+    );
+  }
+  return true;
 }
 
 function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
@@ -1209,8 +1428,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         // Titan de la carte des obstacles pour toute la réaction.
         const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remaining - 1, { ...ctx, movingTitanId: null, enChaine });
         const pushedKey = pushed.row + pushed.col;
-        if (!looseBlocks[pushedKey]) looseBlocks[pushedKey] = [];
-        looseBlocks[pushedKey].push(broken);
+        poserDebrisAuSol(looseBlocks, pushedKey, broken);
 
         /* LE BLOC CASSE SE POSE AU CHOIX DE L'ATTAQUANT (Nikola, 2026-08-19).
 
@@ -1463,7 +1681,42 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
        là qu'il se fraie un chemin. La différence de traitement est voulue et
        tient en une phrase : le béton s'empile, le Titan bouscule. */
     const elementEstUnDebris = ctx.movingTitanId == null;
-    if (stack && stack.length > 0 && (elementEstUnDebris || stack.length >= 2 || remainingAfterArrival <= 1)) {
+
+    /* Un Titan projeté sur une tour de débris MONTE dessus, comme avant.
+       Ce qui suit son atterrissage — la tour qui bascule, parce qu'il n'a
+       pas choisi d'y aller — n'est pas décidé ici : la trajectoire ne
+       déplace pas le Titan, c'est son appelant qui écrit sa case au retour.
+       La bascule est donc une passe de fin de résolution, cf.
+       `basculerToursSousTitans`. */
+    /* ── UN TITAN LANCÉ NE GRIMPE PLUS SUR UN TAS, IL LE RENVERSE ──
+       Ruling du 2026-08-28, cf. `basculerAmasDansLAxe`. C'est le cas remonté
+       par Nikola : il charge un Titan en H2 depuis H3, un tas dort en H1, et
+       le Titan percuté se contentait de monter dessus. Le tas devait partir,
+       et même ressortir par la faille au-delà du bord.
+
+       Il faut de l'ÉNERGIE pour renverser un tas, comme il en fallait déjà
+       pour pousser un débris isolé quelques lignes plus bas : un projectile
+       en bout de course s'arrête dessus. Ce n'est pas le Seuil 4 qui revient
+       déguisé — c'est le même test `remainingAfterArrival > 1` que le reste
+       de la trajectoire applique déjà partout.
+
+       Un DÉBRIS en vol, lui, garde la règle du 2026-08-18 : béton sur béton,
+       ça s'empile. « Le béton s'empile, le Titan bouscule ». */
+    if (stack && estAmas(stack) && !elementEstUnDebris && remainingAfterArrival > 1) {
+      basculerAmasDansLAxe(nextKey, curDr, curDc, { ...ctx, log, enChaine });
+
+      /* La bascule a pu ramener un débris sur la case (rebond), ou déplacer
+         un Titan par réaction en chaîne jusque-là. On re-teste avant de s'y
+         poser, comme le fait déjà la poussée d'un débris isolé. */
+      if (caseOccupeeParUnAutreTitan(nextKey)) {
+        break; // reste sur la case actuelle (r, c)
+      }
+      avancerVers(nr, nc);
+      remaining = 0;
+      break;
+    }
+
+    if (stack && stack.length > 0 && (elementEstUnDebris || estAmas(stack) || remainingAfterArrival <= 1)) {
       // Formation d'Amas : l'élément se pose sur ce qui est déjà là.
       avancerVers(nr, nc);
       remaining = 0;
@@ -1478,8 +1731,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
       // Un bloc est transmis, pas un Titan : même raison qu'au ricochet.
       const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remainingAfterArrival, { ...ctx, movingTitanId: null, enChaine });
       const pushedKey = pushed.row + pushed.col;
-      if (!looseBlocks[pushedKey]) looseBlocks[pushedKey] = [];
-      looseBlocks[pushedKey].push(pushedColor);
+      poserDebrisAuSol(looseBlocks, pushedKey, pushedColor);
       log.push(
         `${nextKey} : réaction en chaîne — bloc ${pushedColor} transmis vers ${pushedKey} (énergie ${remainingAfterArrival}).`
       );
@@ -1730,7 +1982,7 @@ function releverPercussion(titanId, gameState, adrenalineBonus = 0) {
     const key = cell.row + cell.col;
     const pile = looseBlocks[key];
     if (pile && pile.length >= 1) blocs.add(key);
-    if (pile && pile.length >= 2) amas.add(key);
+    if (estAmas(pile)) amas.add(key);
   }
   return { energie, seuil4: energie >= SEUIL_4, blocs, amas };
 }
@@ -1780,6 +2032,10 @@ function resolveToutCasserBatiments(titanId, gameState, adrenalineBonus = 0, per
   for (const cell of perimeter) {
     if (cell.isSelf) continue;
     const key = cell.row + cell.col;
+    /* Restriction à UNE case quand l'appelant résout élément par élément
+       (cf. `resolveToutCasserCase`). Absent, ce champ ne change rien : le
+       sous-résolveur balaie tout le Périmètre comme avant. */
+    if (releve.cibleUnique && key !== releve.cibleUnique) continue;
     const bldg = board[key];
     if (!bldg || bldg.blocks.length === 0) continue;
 
@@ -1793,8 +2049,7 @@ function resolveToutCasserBatiments(titanId, gameState, adrenalineBonus = 0, per
     // Le bloc atterrit réellement sur le plateau. Chaînes de réaction
     // gérées par projectInDirection (Bâtiment=mur en plein vol, Titan/Bloc
     // rencontré = point d'arrêt + poussée en chaîne).
-    if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
-    looseBlocks[landingKey].push(broken);
+    poserDebrisAuSol(looseBlocks, landingKey, broken);
 
     log.push(
       `${key} : bloc ${broken} cassé (+1 Destruction, Titan ${titanId} → ${titan.destruction}) · projeté et posé en ${landingKey}` +
@@ -1828,6 +2083,10 @@ function resolveToutCasserBlocs(titanId, gameState, adrenalineBonus = 0, percuss
   for (const cell of perimeter) {
     if (cell.isSelf) continue;
     const key = cell.row + cell.col;
+    /* Restriction à UNE case quand l'appelant résout élément par élément
+       (cf. `resolveToutCasserCase`). Absent, ce champ ne change rien : le
+       sous-résolveur balaie tout le Périmètre comme avant. */
+    if (releve.cibleUnique && key !== releve.cibleUnique) continue;
     // Seules les cases qui portaient déjà un débris À LA PERCUSSION sont
     // concernées : un bloc tombé pendant la résolution de cette même carte
     // ne se fait pas reprojeter dans la foulée.
@@ -1842,8 +2101,7 @@ function resolveToutCasserBlocs(titanId, gameState, adrenalineBonus = 0, percuss
     const landing = projectInDirection(cell.row, cell.col, dr, dc, energie, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId });
     const landingKey = landing.row + landing.col;
 
-    if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
-    looseBlocks[landingKey].push(projected);
+    poserDebrisAuSol(looseBlocks, landingKey, projected);
 
     log.push(
       `${key} : bloc libre ${projected} projeté et posé en ${landingKey}` +
@@ -1855,8 +2113,9 @@ function resolveToutCasserBlocs(titanId, gameState, adrenalineBonus = 0, percuss
 }
 
 function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percussion = null, bagarreSetPartage = null) {
-  // Sous-cas "Titan" — déplacement physique + résolution DIL/RAGE via le
-  // moteur générique de décision (§1bis du tracker).
+  // Sous-cas "Titan" — déplacement physique, Bagarre, et Dilemme AU-DESSUS DU
+  // SEUIL 4 seulement. Cette carte n'a plus de RAGE (ruling du 2026-08-28,
+  // détaillé dans la boucle ci-dessous).
   const crediteIci = !bagarreSetPartage;
   const { board, titans, looseBlocks, replis, trajectoires } = gameState;
   const titan = titans.find((t) => t.id === titanId);
@@ -1875,6 +2134,10 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percus
   for (const cell of perimeter) {
     if (cell.isSelf) continue;
     const key = cell.row + cell.col;
+    /* Restriction à UNE case quand l'appelant résout élément par élément
+       (cf. `resolveToutCasserCase`). Absent, ce champ ne change rien : le
+       sous-résolveur balaie tout le Périmètre comme avant. */
+    if (releve.cibleUnique && key !== releve.cibleUnique) continue;
     const targetId = titansByCell[key];
     if (!targetId || targetId === titanId) continue;
     const target = titans.find((t) => t.id === targetId);
@@ -1897,21 +2160,34 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percus
        dit vraiment : un Titan distinct ne rapporte qu'UNE fois, d'ou le Set. */
     bagarreSet.add(targetId);
 
-    if (seuil4) {
-      if (canRage(targetId, gameState)) {
-        decisions.push(makeDecisionRequest("RAGE", titanId, targetId, "Tout Casser", caseAvant));
-      } else {
-        log.push(`${key} : RAGE sans effet sur Titan ${targetId} (aucune ressource à prendre).`);
-      }
+    /* ── TOUT CASSER NE FAIT PLUS DE RAGE ──
+       Ruling Nikola du 2026-08-28 : « on va modifier Tout Casser : en dessous
+       du Seuil 4, déplacement et gain de piste Bagarre, mais aucun vol ; à 4 ou
+       au-dessus, DIL — il n'y a pas de RAGE. »
+
+       La carte avait le barème le plus dur du jeu : elle frappe jusqu'à huit
+       cases à la fois, et chacune ouvrait un vol — un Dilemme sous le seuil,
+       une RAGE au-dessus. Elle prend désormais le profil inverse des cartes
+       dirigées : LARGE mais moins tranchante. Sous le seuil elle bouscule et
+       marque, sans rien prendre à personne ; au-dessus elle ouvre un Dilemme,
+       où la victime garde la main sur ce qu'elle lâche.
+
+       Le Seuil 4 change donc de rôle ICI : il ne départage plus DIL et RAGE
+       (Tout Casser n'a plus de RAGE), il décide s'il y a un vol ou pas. Les
+       autres cartes gardent leur RAGE : c'est ce qui les distingue désormais de
+       celle-ci. */
+    if (!seuil4) {
+      log.push(`${key} : Titan ${targetId} bousculé (énergie ${energie} < Seuil 4) — déplacement et Bagarre, aucun vol.`);
     } else if (canDil(targetId, gameState)) {
       decisions.push(makeDecisionRequest("DIL", titanId, targetId, "Tout Casser", caseAvant));
     } else {
-      log.push(`${key} : DIL impossible sur Titan ${targetId} (< 2 couleurs différentes en Repaire).`);
+      log.push(`${key} : DIL impossible sur Titan ${targetId} (< 2 options distinctes en Repaire).`);
     }
 
-    const mode = seuil4 ? "RAGE" : "DIL";
+    // Plus de RAGE sur cette carte : au-dessus du seuil c'est un Dilemme, en
+    // dessous il n'y a pas de vol du tout.
     log.push(
-      `${key} : Titan ${targetId} touché (${mode}) → déplacé en ${target.cell}` +
+      `${key} : Titan ${targetId} touché${seuil4 ? " (Seuil 4, Dilemme)" : ""} → déplacé en ${target.cell}` +
         (landing.hasBounced ? " (après rebond)" : "")
     );
   }
@@ -1920,11 +2196,24 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percus
 }
 
 function resolveToutCasserAmas(titanId, gameState, adrenalineBonus = 0, percussion = null, bagarreSetPartage = null) {
-  // Sous-cas "Amas de béton" (Patatras) — Seuil 4 requis.
-  // Amas = 2+ blocs libres empilés sur une même case (jamais un bâtiment,
-  // confirmé Nikola). Éjection du haut vers le bas, direction opposée à
-  // la percussion (= même direction radiale que les autres sous-cas),
-  // distance = hauteur du bloc dans la pile (pas l'énergie de la carte).
+  /* Sous-cas "Amas de béton" (Patatras). Amas = 2+ blocs libres empilés sur
+     une même case (jamais un bâtiment, confirmé Nikola). Éjection du haut
+     vers le bas, dans l'axe radial de la percussion comme les autres
+     sous-cas, distance = hauteur du bloc dans la pile.
+
+     LE SEUIL 4 NE COMMANDE PLUS CE SOUS-CAS — Nikola, 2026-08-28. La règle
+     qu'il a énoncée ne parle pas d'une carte mais du geste : « si je percute
+     un tas de débris ou fais percuter un tas, ça bascule dans le sens de
+     percussion, plus besoin du Seuil 4 ». Tout Casser EST une percussion —
+     c'est littéralement `releverPercussion` qui l'alimente — donc la laisser
+     seule sous l'ancien seuil aurait recréé la divergence que ce projet paie
+     à chaque fois : la même règle appliquée ici et pas là.
+
+     ⚠️ À ARBITRER SI L'ÉQUILIBRE BOUGE : c'est le seul des trois sites de
+     bascule que Nikola n'a pas cité en exemple, et celui qui renforce le plus
+     une carte (Tout Casser touche jusqu'à 8 cases d'un coup, là où une charge
+     n'en percute qu'une). Le Seuil 4 continue de commander les trois autres
+     sous-cas de la carte, il n'a été retiré qu'ici. */
   const bagarreSet = bagarreSetPartage || new Set();
   const crediteIci = !bagarreSetPartage;
   const { board, titans, looseBlocks, replis, trajectoires } = gameState;
@@ -1937,14 +2226,14 @@ function resolveToutCasserAmas(titanId, gameState, adrenalineBonus = 0, percussi
   const seuil4 = releve.seuil4;
 
   const log = [];
-  if (!seuil4) {
-    log.push(`Énergie ${energie} < Seuil 4 — aucun Patatras déclenché.`);
-    return { energie, seuil4, log };
-  }
 
   for (const cell of perimeter) {
     if (cell.isSelf) continue;
     const key = cell.row + cell.col;
+    /* Restriction à UNE case quand l'appelant résout élément par élément
+       (cf. `resolveToutCasserCase`). Absent, ce champ ne change rien : le
+       sous-résolveur balaie tout le Périmètre comme avant. */
+    if (releve.cibleUnique && key !== releve.cibleUnique) continue;
     // Comme pour le sous-cas Blocs : seuls les Amas déjà constitués à la
     // percussion s'écroulent, pas ceux que cette carte vient d'empiler.
     if (!releve.amas.has(key)) continue;
@@ -1953,24 +2242,90 @@ function resolveToutCasserAmas(titanId, gameState, adrenalineBonus = 0, percussi
 
     const dr = rowIndex(cell.row) - rowIndex(titanRow);
     const dc = cell.col - titanCol;
-    const ejected = [...stack]; // bas (index 0) → sommet (dernier index)
-    delete looseBlocks[key]; // Amas consommé par l'écroulement
-
-    for (let i = ejected.length - 1; i >= 0; i--) {
-      const blockColor = ejected[i];
-      const hauteur = i + 1; // position dans la pile = hauteur = distance de projection
-      const landing = projectInDirection(cell.row, cell.col, dr, dc, hauteur, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId });
-      const landingKey = landing.row + landing.col;
-      if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
-      looseBlocks[landingKey].push(blockColor);
-      log.push(
-        `${key} : Patatras — bloc ${blockColor} (hauteur ${hauteur}) éjecté vers ${landingKey}` +
-          (landing.hasBounced ? " (après rebond)" : "")
-      );
-    }
+    // Même bascule qu'une charge ou qu'un Titan projeté : une seule
+    // implémentation pour les trois, elles ne peuvent plus diverger.
+    basculerAmasDansLAxe(key, dr, dc, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId });
   }
   crediterBagarre(titan, bagarreSet, log, crediteIci);
   return { energie, seuil4, log };
+}
+
+/* ============================================================
+   TOUT CASSER, ÉLÉMENT PAR ÉLÉMENT ET DANS L'ORDRE DU JOUEUR
+   ============================================================
+   Nikola, 2026-08-28 : « en cas de TOUT CASSER, on projette les éléments 1 par 1
+   dans l'ordre, mon choix. »
+
+   La carte résolvait ses quatre sous-cas d'affilée — bâtiments, puis blocs, puis
+   Titans, puis Amas — chacun balayant tout le Périmètre. Trois choses en
+   découlaient, et aucune n'était voulue :
+
+   · L'ORDRE ÉTAIT CELUI DU CODE. Un bâtiment tombait toujours avant le Titan
+     d'à côté, quoi qu'il arrive, alors que l'ordre change le résultat : un bloc
+     projeté sur une case que le Titan vient de quitter ne s'empile pas au même
+     endroit, et un débris posé avant ou après une poussée ne forme pas le même
+     tas.
+   · TOUT PARTAIT EN UNE SECONDE, sans qu'on puisse suivre ce qui se passait.
+   · LE JOUEUR N'AVAIT AUCUNE PRISE sur la seule carte qui touche huit cases à
+     la fois.
+
+   `listerCiblesToutCasser` relève ce que la percussion va toucher, case par
+   case, avec la nature de chaque cible ; `resolveToutCasserCase` en résout UNE.
+   L'appelant décide de l'ordre — un humain en cliquant, une IA en prenant la
+   liste telle quelle, ce qui préserve exactement l'ordre historique et donc les
+   graines des campagnes.
+
+   L'ÉNERGIE NE SE RECALCULE PAS entre deux éléments : c'est le relevé de
+   percussion, pris une fois pour toute la carte, qui la fixe (ruling déjà
+   verrouillé par un test — « Tout Casser tient une seule énergie pour toute la
+   carte »). Choisir l'ordre change ce que les projections rencontrent, jamais
+   la force du souffle.
+============================================================ */
+function listerCiblesToutCasser(titanId, gameState, percussion) {
+  const { board, titans, looseBlocks } = gameState;
+  const titan = titans.find((t) => t.id === titanId);
+  if (!titan) return [];
+  const perimeter = getPerimeter(titan.cell[0], Number(titan.cell.slice(1)));
+  const titansByCell = indexerTitans(titans);
+  const cibles = [];
+
+  for (const cell of perimeter) {
+    if (cell.isSelf) continue;
+    const key = cell.row + cell.col;
+    const bldg = board[key];
+
+    /* Une case ne porte qu'UNE nature à la fois pour cette carte, et l'ordre
+       des tests reprend celui des anciens sous-résolveurs : un bâtiment debout
+       exclut tout le reste (personne ne s'y tient), un Titan passe avant le
+       béton qu'il piétine, et un Amas se distingue d'un bloc isolé. */
+    if (bldg && bldg.blocks.length > 0) { cibles.push({ key, nature: "batiment" }); continue; }
+    const occupant = titansByCell[key];
+    if (occupant && occupant !== titanId) { cibles.push({ key, nature: "titan", targetId: occupant }); continue; }
+    if (percussion.amas.has(key)) { cibles.push({ key, nature: "amas" }); continue; }
+    if (percussion.blocs.has(key)) { cibles.push({ key, nature: "bloc" }); continue; }
+    void looseBlocks;
+  }
+  return cibles;
+}
+
+/** Résout UNE case du Périmètre. Renvoie le journal et les décisions produites. */
+function resolveToutCasserCase(titanId, cible, gameState, percussion, bagarreSet) {
+  const filtre = new Set([cible.key]);
+  const restreint = {
+    ...percussion,
+    // Le sous-résolveur balaie tout le Périmètre : on le restreint à la case
+    // demandée en ne lui laissant qu'elle dans les relevés qu'il consulte.
+    blocs: new Set([...percussion.blocs].filter((k) => filtre.has(k))),
+    amas: new Set([...percussion.amas].filter((k) => filtre.has(k))),
+    cibleUnique: cible.key,
+  };
+  switch (cible.nature) {
+    case "batiment": return resolveToutCasserBatiments(titanId, gameState, 0, restreint, bagarreSet);
+    case "bloc": return resolveToutCasserBlocs(titanId, gameState, 0, restreint, bagarreSet);
+    case "titan": return resolveToutCasserTitans(titanId, gameState, 0, restreint, bagarreSet);
+    case "amas": return resolveToutCasserAmas(titanId, gameState, 0, restreint, bagarreSet);
+    default: return { log: [], decisions: [] };
+  }
 }
 
 function resolveToutCasser(titanId, gameState, adrenalineBonus = 0) {
@@ -1989,10 +2344,11 @@ function resolveToutCasser(titanId, gameState, adrenalineBonus = 0) {
   const r4 = resolveToutCasserAmas(titanId, gameState, adrenalineBonus, percussion, bagarreSet);
   const logBagarre = [];
   crediterBagarre(gameState.titans.find((t) => t.id === titanId), bagarreSet, logBagarre);
+  const logBascule = basculerToursSousTitans(titanId, gameState);
   return {
     energie: percussion.energie,
     seuil4: percussion.seuil4,
-    log: [...r1.log, ...r2.log, ...r3.log, ...r4.log, ...logBagarre],
+    log: [...r1.log, ...r2.log, ...r3.log, ...r4.log, ...logBagarre, ...logBascule],
     decisions: [...(r3.decisions || [])],
   };
 }
@@ -2028,9 +2384,10 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
   //    case PRÉCÉDENTE (superposition Titan+Bâtiment interdite). Si le coup
   //    vide totalement le bâtiment → la case devient un couloir (règle mise
   //    en place) → le Titan avance dessus.
-  // 2) Amas de béton SANS Seuil 4 → trop massif, bloque le Titan comme un
-  //    mur (aucun effet, arrêt case précédente). Seuil 4 → Patatras, balayé,
-  //    le Titan avance sur la case libérée.
+  // 2) Amas de béton → il BASCULE dans l'axe de la charge, quelle que soit
+  //    l'énergie, et le Titan avance sur la case libérée. Le Seuil 4 ne
+  //    commande plus ce sous-cas depuis le 2026-08-28 (cf.
+  //    `basculerAmasDansLAxe`) : il ne départage plus que DIL et RAGE.
   // 3) Titan adverse touché → "ça fait les 2" : effet Repaire (DIL/RAGE) ET
   //    arrêt physique (superposition Titan+Titan interdite), résolu via le
   //    moteur générique de décision (§1bis).
@@ -2038,6 +2395,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
   const titan = titans.find((t) => t.id === titanId);
   const titansByCell = indexerTitans(titans);
 
+  const depart = titan.cell; // pour tracer sa course à la fin (cf. plus bas)
   const startRowIdx = rowIndex(titan.cell[0]);
   const startCol = Number(titan.cell.slice(1));
   // Livret : « +1 par Adrenaline depensee ». Le parametre accepte donc un
@@ -2066,7 +2424,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
     const bldg = board[key];
     const hasBuilding = bldg && bldg.blocks.length > 0;
     const stack = looseBlocks[key];
-    const hasAmas = stack && stack.length >= 2;
+    const hasAmas = estAmas(stack);
     const hasSingleBlock = stack && stack.length === 1;
     const occupantId = titansByCell[key];
 
@@ -2093,8 +2451,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
         const below = bldg.blocks.pop();
         const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId });
         const landingKey = landing.row + landing.col;
-        if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
-        looseBlocks[landingKey].push(below);
+        poserDebrisAuSol(looseBlocks, landingKey, below);
         log.push(
           `${key} : Seuil 4 → bloc du dessous ${below} projeté dans l'axe de la charge (énergie ${energie}) vers ${landingKey}` +
             (landing.hasBounced ? " (après rebond)" : "")
@@ -2185,8 +2542,9 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
          Titan + Titan etant interdite par le livret, l'attaquant recule
          alors jusqu'a la premiere case libre de son propre chemin. */
       const occupees = new Set(titans.filter((t) => t.id !== titanId).map((t) => t.cell));
+      const impraticable = (cell) => occupees.has(cell);
       let arrivee = key;
-      if (occupees.has(arrivee)) {
+      if (impraticable(arrivee)) {
         // Remonte le chemin parcouru, de la plus avancee vers le depart.
         const chemin = [];
         for (let d = distance - 1; d >= 0; d--) {
@@ -2195,7 +2553,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
           if (r < 0 || r > 8 || c < 1 || c > 9) continue;
           chemin.push(rowFromIndex(r) + c);
         }
-        arrivee = chemin.find((cell) => !occupees.has(cell)) ?? titan.cell;
+        arrivee = chemin.find((cell) => !impraticable(cell)) ?? titan.cell;
         log.push(`${key} occupée (cible non déplacée ou revenue dessus) — Titan ${titanId} recule en ${arrivee}.`);
       }
       titan.cell = arrivee;
@@ -2207,36 +2565,33 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
     // La case est libre de tout Titan à partir d'ici : Amas et bloc isolé
     // peuvent être traités sans risque de superposition.
     if (hasAmas) {
-      if (seuil4) {
-        /* « Applique la logique de charge pour tout » (Nikola, 2026-08-19).
-           Ces blocs partaient en `-dr, -dc`, donc A CONTRE-SENS de la charge :
-           un Titan qui defonce un Amas se le renvoyait dessus. C'est le meme
-           defaut que celui corrige le matin sur le second bloc d'un batiment,
-           quelques dizaines de lignes plus haut, et qui avait ete signale
-           comme restant a arbitrer.
+      /* PLUS DE SEUIL 4 ICI — Nikola, 2026-08-28 : « si je percute un tas de
+         débris ça bascule dans le sens de percussion, plus besoin du Seuil 4,
+         ça va fluidifier la partie ».
 
-           Tout ce qu'une charge percute part desormais DEVANT, dans l'axe de
-           percussion, avec l'energie de l'impact. Il ne reste plus aucune
-           projection a contre-sens dans le moteur. */
-        const ejected = [...stack];
-        delete looseBlocks[key];
-        for (let i = ejected.length - 1; i >= 0; i--) {
-          const blockColor = ejected[i];
-          const hauteur = i + 1;
-          const landing = projectInDirection(row, cIdx, dr, dc, hauteur, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId });
-          const landingKey = landing.row + landing.col;
-          if (!looseBlocks[landingKey]) looseBlocks[landingKey] = [];
-          looseBlocks[landingKey].push(blockColor);
-          log.push(
-            `${key} : Patatras — bloc ${blockColor} (hauteur ${hauteur}) éjecté vers ${landingKey}` +
-              (landing.hasBounced ? " (après rebond)" : "")
-          );
-        }
+         Sous le seuil, la charge s'arrêtait net devant le tas sans rien
+         déplacer (« Amas trop massif → obstacle infranchissable ») : un tas
+         valait alors mur, et il fallait une charge chèrement payée en
+         Adrénaline pour espérer le déblayer. Une charge renverse désormais
+         toujours ce qu'elle percute.
+
+         La bascule elle-même vit dans `basculerAmasDansLAxe`, partagée avec
+         la réaction en chaîne : les deux chemins ne peuvent plus diverger,
+         alors qu'ils avaient déjà divergé une fois sur le SENS de la
+         projection (à contre-sens, corrigé le 2026-08-19). */
+      basculerAmasDansLAxe(key, dr, dc, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId });
+
+      /* La bascule a pu faire rebondir un débris sur la case, ou y pousser un
+         Titan en chaîne. Le chargeur ne prend la place que si elle est
+         réellement libre — sinon il s'arrête juste avant, comme contre un
+         bâtiment debout. */
+      const occupeeApres = titans.some((t) => t.id !== titanId && estSurLePlateau(t) && t.cell === key);
+      if (!occupeeApres && !elementAuSolBloqueArret(looseBlocks[key])) {
         titan.cell = key;
-        log.push(`Titan ${titanId} avance jusqu'à ${key} (Amas balayé par le Patatras).`);
+        log.push(`Titan ${titanId} avance jusqu'à ${key} (tas renversé par la charge).`);
       } else {
         titan.cell = lastFreeCell;
-        log.push(`${key} : Amas trop massif (énergie ${energie} < Seuil 4) → obstacle infranchissable. Titan ${titanId} s'arrête en ${lastFreeCell}.`);
+        log.push(`${key} : le tas a basculé, mais la case n'est pas libre — Titan ${titanId} s'arrête en ${lastFreeCell}.`);
       }
       stopped = true;
       break;
@@ -2270,6 +2625,31 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
     titan.bagarre += bagarreSet.size;
     log.push(`+${bagarreSet.size} Bagarre (Titan ${titanId} → ${titan.bagarre}) — ${bagarreSet.size} Titan(s) distinct(s) déplacé(s) (direct + chaîne, FAQ #12).`);
   }
+
+  /* LA COURSE DU CHARGEUR SE VOIT AUSSI (Nikola, 2026-08-28). Les Titans et les
+     débris QU'IL PROJETTE laissaient déjà leur trace — c'est
+     `projectInDirection` qui la dépose — mais son propre parcours ne passe par
+     aucune projection : il avance de case en case dans la boucle ci-dessus. On
+     l'ajoute donc à la main, EN TÊTE, pour qu'il se lise avant ce qu'il a
+     bousculé — c'est l'ordre dans lequel ça s'est produit. */
+  if (Array.isArray(trajectoires) && titan.cell !== depart) {
+    const chemin = [depart];
+    const r0 = rowIndex(depart[0]);
+    const c0 = Number(depart.slice(1));
+    for (let d = 1; d <= maxRange; d++) {
+      const rr = r0 + dr * d;
+      const cc = c0 + dc * d;
+      if (rr < 0 || rr > 8 || cc < 1 || cc > 9) break;
+      const cle = rowFromIndex(rr) + cc;
+      chemin.push(cle);
+      if (cle === titan.cell) break;
+    }
+    if (chemin.length > 1) {
+      trajectoires.unshift({ cases: chemin, arrivee: titan.cell, titanId, initiatorId: titanId });
+    }
+  }
+
+  log.push(...basculerToursSousTitans(titanId, gameState));
 
   return { log, decisions };
 }
@@ -2331,11 +2711,17 @@ function resolveGraouhhhMoveTitan(titanId, targetId, gameState, dr, dc, reculDis
   bagarreSet.add(targetId);
   const fatigue = resolveFatigue(titanId, targetId, mancheNumber, titans);
   const dilOk = canDil(targetId, gameState);
+  /* La Fatigue remonte à l'appelant dès qu'elle est REFUSABLE : c'est la cible
+     qui décide si elle paie 1 Adrénaline pour récupérer sa carte (ruling du
+     2026-08-28), et le résolveur n'a personne à qui demander. */
+  const fatigues = fatigue.ok && fatigue.refusable
+    ? [{ attackerId: titanId, targetId, cardId: fatigue.cardId, cardLabel: "Graouhhh" }]
+    : [];
   log.push(
     `Titan ${targetId} touché → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${dilOk ? "DIL en attente" : "DIL impossible (< 2 couleurs différentes en Repaire)"} · recule de ${reculDistance} case(s) → ${occupant.cell}` +
       (landing.hasBounced ? " (après rebond)" : "")
   );
-  return { log, bagarreIds: [...bagarreSet] };
+  return { log, bagarreIds: [...bagarreSet], fatigues };
 }
 
 // Bagarre + bonus d'Adrénaline, une fois TOUS les Titans touchés traités.
@@ -2361,6 +2747,7 @@ function finalizeGraouhhh(titanId, gameState, bagarreIds, touchedCount) {
     titan.adrenaline = (titan.adrenaline || 0) + bonusAdrenaline;
     log.push(`Bonus : ${touchedCount} Titans touchés (≥2) → +${bonusAdrenaline} Adrénaline (cumulatif, +1 par Titan au-delà du premier) — Titan ${titanId} stock ${titan.adrenaline}.`);
   }
+  log.push(...basculerToursSousTitans(titanId, gameState));
   return { log };
 }
 
@@ -2387,10 +2774,42 @@ function advanceGraouhhh(gameState, payload) {
   // n'a pas encore bougé : renvoyer la décision suffisait à la trancher,
   // mais pas à déplacer la cible. C'est ici, et seulement ici, qu'on le fait
   // — avant de s'occuper du suivant.
+  /* ── UN REPLI DE TITAN DOIT SE RÉSOUDRE AVANT LE TITAN SUIVANT ──
+     Bug remonté par Nikola le 2026-08-28 : « j'ai fait Graouhhh sur 2 Titans
+     collés, mais un bâtiment a bloqué le premier, le plus loin ; je l'ai
+     déplacé, et après je n'ai pas pu déplacer le second — il a considéré qu'il
+     n'y avait pas la place, sauf que si, vu que je venais de déplacer le
+     premier. »
+
+     Il a exactement raison, et la cause est une question d'ORDRE, pas de
+     géométrie. Un Titan arrêté faute de puissance ne bouge pas tout de suite :
+     le résolveur dépose une demande de repli et laisse le Titan sur place,
+     parce que c'est l'initiateur qui choisit où le poser. Or la boucle
+     enchaînait sur le Titan suivant SANS attendre ce choix, et l'appelant ne
+     traitait les replis qu'une fois tout le monde traité. Le second Titan
+     voyait donc le premier encore à sa place d'origine — celle-là même que
+     le repli allait libérer une seconde plus tard.
+
+     La boucle s'arrête donc sur un repli comme elle s'arrête déjà sur un
+     Dilemme, et repart avec la même mécanique de continuation. C'est le
+     ruling du 2026-08-18 appliqué jusqu'au bout : « impossible de passer au
+     Titan suivant tant que ce n'est pas résolu » — un repli en attente est
+     tout autant non résolu qu'un Dilemme. */
+  const nbReplis = () => (gameState.replis || []).length;
+
   if (pendingMoveId != null) {
+    const avant = nbReplis();
     const step = resolveGraouhhhMoveTitan(titanId, pendingMoveId, gameState, dr, dc, reculDistance, mancheNumber);
     log.push(...step.log);
     bagarreIds = [...bagarreIds, ...step.bagarreIds];
+    if (nbReplis() > avant) {
+      return {
+        log,
+        done: false,
+        repliEnAttente: true,
+        continuation: { titanId, dr, dc, reculDistance, mancheNumber, remaining, bagarreIds, touchedCount, pendingMoveId: null },
+      };
+    }
   }
 
   while (remaining.length > 0) {
@@ -2406,10 +2825,19 @@ function advanceGraouhhh(gameState, payload) {
         continuation: { titanId, dr, dc, reculDistance, mancheNumber, remaining: rest, bagarreIds, touchedCount, pendingMoveId: targetId },
       };
     }
+    const avant = nbReplis();
     const step = resolveGraouhhhMoveTitan(titanId, targetId, gameState, dr, dc, reculDistance, mancheNumber);
     log.push(...step.log);
     bagarreIds = [...bagarreIds, ...step.bagarreIds];
     remaining = rest;
+    if (nbReplis() > avant) {
+      return {
+        log,
+        done: false,
+        repliEnAttente: true,
+        continuation: { titanId, dr, dc, reculDistance, mancheNumber, remaining, bagarreIds, touchedCount, pendingMoveId: null },
+      };
+    }
   }
 
   const fin = finalizeGraouhhh(titanId, gameState, bagarreIds, touchedCount);
@@ -2601,6 +3029,7 @@ function resolveJeNePartagePas(titanId, selectedCellKeys, gameState) {
   if (applied && derniere) {
     deplacerSiDerniereCaseLibre(titanId, derniere, gameState, log);
   }
+  log.push(...basculerToursSousTitans(titanId, gameState));
 
   return { log, applied, decisions: [] };
 }
@@ -2738,6 +3167,12 @@ function isStandingBuilding(key, board) {
    juste derriere — et elles coutent la meme chose. Le choix est au joueur, pas
    au moteur. */
 function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, titans = [] }) {
+  /* SEUL LE BÂTIMENT DEBOUT INTERDIT L'ATTERRISSAGE. Un Amas non : sauter
+     dessus est justement le geste qui déclenche l'Écroulement (ruling du
+     2026-08-16), et le Titan ne reste sur la tour que le temps de la
+     répartir. Le ruling du 2026-08-27 lui interdit d'y COHABITER, pas d'y
+     sauter — c'est même le seul moyen qu'il a de la faire tomber sans
+     charger dedans. */
   const estBatimentDebout = (key) => isStandingBuilding(key, board);
   const estObstacle = (key) => isBoingBoingObstacle(key, { board, looseBlocks, titans });
 
@@ -2856,6 +3291,9 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
   const occupantId = titansByCell[destKey];
   const decisions = [];
   let fatiguedProgrammed = []; // Bug remonté : voir resolveFatigue plus bas
+  // Fatigues que la cible peut refuser en payant 1 Adrénaline (ruling du
+  // 2026-08-28) : le résolveur les remonte, il n'a personne à qui demander.
+  const fatigues = [];
 
   // Bug remonté (session) : l'ordre de test (Amas/Bloc AVANT Titan)
   // faisait qu'atterrir sur une case contenant À LA FOIS un Titan ET un
@@ -2945,6 +3383,9 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
     else if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, occupantId, "Boing Boing", destKey));
     const fatigue = resolveFatigue(titanId, occupantId, mancheNumber, titans);
     fatiguedProgrammed = fatigue.ok && fatigue.fromProgrammed ? [occupantId] : [];
+    if (fatigue.ok && fatigue.refusable) {
+      fatigues.push({ attackerId: titanId, targetId: occupantId, cardId: fatigue.cardId, cardLabel: "Boing Boing" });
+    }
     titan.bagarre += bagarreSet.size;
     const verdict = seuil4
       ? (rageOk ? "RAGE en attente" : "RAGE sans effet (aucune ressource à prendre)")
@@ -2958,7 +3399,7 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
     if (stack && stack.length > 0) {
       log.push(`${destKey} : ${stack.length} débris au sol laissé(s) en place — utilisable ensuite via "Ramasser" (passif Récupération).`);
     }
-  } else if (stack && stack.length >= 2) {
+  } else if (estAmas(stack)) {
     /* AMAS DE BÉTON → ÉCROULEMENT, AU CHOIX DU JOUEUR
        Ruling de Nikola du 2026-08-16. L'ancienne répartition automatique en
        round-robin est remplacée par un choix explicite, débris par débris.
@@ -2984,6 +3425,7 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
       applied: true,
       decisions,
       fatiguedProgrammed,
+      fatigues,
       ecroulement: {
         cellKey: destKey,
         blocs: [...stack].reverse(), // du sommet vers le bas
@@ -3007,7 +3449,8 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
     log.push(`Titan ${titanId} saute jusqu'à ${destKey} (case libre).`);
   }
 
-  return { log, applied: true, decisions, fatiguedProgrammed };
+  log.push(...basculerToursSousTitans(titanId, gameState));
+  return { log, applied: true, decisions, fatiguedProgrammed, fatigues };
 }
 
 /**
@@ -3052,7 +3495,13 @@ function getEcroulementCells(cellKey, gameState, dejaServies = []) {
  * séquentielle qui interdit d'empiler deux débris sur le même Titan — il a
  * déjà bougé quand le second arrive.
  */
-function resolveEcroulementAmas(titanId, ecroulement, choix, gameState) {
+/* `options.retirerAmas` — l'Amas ne quitte sa case QU'UNE FOIS. Depuis que la
+   répartition s'applique débris par débris (2026-08-28), cette fonction est
+   appelée une fois PAR débris au lieu d'une fois pour tout le tas : le retrait
+   appartient au premier appel, les suivants poseraient sinon leur bloc sur une
+   case qu'ils viennent eux-mêmes de vider. */
+function resolveEcroulementAmas(titanId, ecroulement, choix, gameState, options = {}) {
+  const { retirerAmas = true } = options;
   const { board, titans, looseBlocks, replis, trajectoires } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const log = [];
@@ -3065,7 +3514,7 @@ function resolveEcroulementAmas(titanId, ecroulement, choix, gameState) {
     return { log, applied: false, decisions };
   }
 
-  delete looseBlocks[cellKey]; // l'Amas quitte sa case
+  if (retirerAmas) delete looseBlocks[cellKey]; // l'Amas quitte sa case, une seule fois
   const bagarreSet = new Set();
   const servies = [];
 
@@ -3075,13 +3524,11 @@ function resolveEcroulementAmas(titanId, ecroulement, choix, gameState) {
     const { eligibles } = getEcroulementCells(cellKey, gameState, servies);
     if (!eligibles.includes(cible)) {
       log.push(`⚠️ ${cible} n'est pas une case valide pour ce débris — il reste en ${cellKey}.`);
-      if (!looseBlocks[cellKey]) looseBlocks[cellKey] = [];
-      looseBlocks[cellKey].push(bloc);
+      poserDebrisAuSol(looseBlocks, cellKey, bloc);
       continue;
     }
 
-    if (!looseBlocks[cible]) looseBlocks[cible] = [];
-    looseBlocks[cible].push(bloc);
+    poserDebrisAuSol(looseBlocks, cible, bloc);
     servies.push(cible);
     log.push(`${cellKey} : écroulement — bloc ${bloc} posé en ${cible}.`);
 
@@ -3106,7 +3553,97 @@ function resolveEcroulementAmas(titanId, ecroulement, choix, gameState) {
     titan.bagarre = (titan.bagarre || 0) + bagarreSet.size;
     log.push(`+${bagarreSet.size} Bagarre (Titan ${titanId} → ${titan.bagarre}) — Titan(s) touché(s) par l'écroulement.`);
   }
+  log.push(...basculerToursSousTitans(titanId, gameState));
   return { log, applied: true, decisions };
+}
+
+/* ---- LA TOUR QUI BASCULE (ruling du 2026-08-28) -------------------
+   « Si un Titan peut cohabiter avec une tour de débris, il peut également
+   se déplacer volontairement dessus grâce à son passif. En revanche, si le
+   déplacement n'est pas effectué volontairement via son passif, la tour
+   bascule, comme lorsque j'ai joué une action dessus ou lorsqu'un autre
+   effet m'a projeté dessus. »
+
+   POURQUOI UNE PASSE DE FIN, ET PAS UN TEST DANS LA TRAJECTOIRE. Le moteur
+   de projection ne déplace pas le Titan : il calcule un point de chute, et
+   c'est son APPELANT qui écrit `titan.cell` au retour. Au moment où la
+   trajectoire voit la tour, le Titan n'est donc pas encore dessus, et huit
+   résolveurs différents écrivent cette case. Tester à l'arrivée demanderait
+   de modifier les huit ; tester à la fin ne demande qu'un appel.
+
+   ET LE TEST DE FIN EST EXACT, pas approché. Le seul chemin par lequel un
+   Titan monte VOLONTAIREMENT sur une tour est son Mouvement gratuit, qui
+   vit dans `resolveFreeMovement` et n'appelle aucun résolveur de carte.
+   Donc : un Titan debout sur un Amas à la fin d'une résolution de carte y
+   est arrivé subi, sans exception. Il n'y a rien à mémoriser.
+
+   COMMENT ELLE BASCULE. Exactement comme l'Écroulement que Boing Boing
+   déclenche depuis le ruling du 2026-08-16 — mêmes cases éligibles, même
+   résolution débris par débris, même Bagarre à qui a provoqué la chute. La
+   seule différence est que personne ne choisit : celui qui a projeté ne
+   visait pas la tour, et celui qui tombe dessus la subit. Les débris vont
+   donc à la première case éligible, dans l'ordre du plateau.
+
+   Énergie 1 : une tour qui s'effondre pousse d'une case ce qu'elle touche,
+   elle ne projette pas comme un Patatras — celui-là demande le Seuil 4 et
+   reste la mécanique de la carte. */
+function choixEcroulementAutomatique(cellKey, blocs, gameState) {
+  const choix = [];
+  for (let i = 0; i < blocs.length; i++) {
+    const { eligibles } = getEcroulementCells(cellKey, gameState, choix);
+    if (eligibles.length === 0) return null;
+    choix.push(eligibles[0]);
+  }
+  return choix;
+}
+
+/* Une bascule peut en déclencher une autre : les débris qui tombent poussent
+   un Titan, qui peut atterrir sur une seconde tour. On repasse donc, mais un
+   nombre BORNÉ de fois — quatre, soit une par Titan, ce qui est le maximum
+   de tours distinctes qu'un plateau peut faire tomber en cascade. */
+const PASSES_BASCULE_MAX = 4;
+
+/* `resolveEcroulementAmas` se termine lui aussi par une bascule (les débris
+   qu'il répartit peuvent en former une). Ce drapeau évite la récursion quand
+   c'est la bascule elle-même qui l'appelle : elle repasse déjà en boucle. */
+let basculeEnCours = false;
+
+function basculerUneTour(initiatorId, gameState, log) {
+  const { titans = [], looseBlocks = {} } = gameState;
+  for (const titan of titans) {
+    if (!estSurLePlateau(titan)) continue;
+    const cellKey = titan.cell;
+    const pile = looseBlocks[cellKey];
+    if (!estAmas(pile)) continue;
+
+    const blocs = [...pile].reverse(); // du sommet vers le bas, comme le Patatras
+    const choix = choixEcroulementAutomatique(cellKey, blocs, gameState);
+    if (!choix) {
+      // Tour cernée : aucune case où répartir. Elle tient, le Titan reste
+      // dessus. Mieux vaut une tour debout qu'un débris effacé du plateau.
+      log.push(`${cellKey} : la tour de débris ne peut basculer nulle part — elle tient sous le Titan ${titan.id}.`);
+      continue;
+    }
+    log.push(`${cellKey} : Titan ${titan.id} y arrive sans l'avoir choisi — la tour de ${blocs.length} débris bascule.`);
+    const res = resolveEcroulementAmas(initiatorId ?? titan.id, { cellKey, blocs, energie: 1 }, choix, gameState);
+    log.push(...res.log);
+    return true;
+  }
+  return false;
+}
+
+function basculerToursSousTitans(initiatorId, gameState) {
+  const log = [];
+  if (basculeEnCours) return log;
+  basculeEnCours = true;
+  try {
+    for (let passe = 0; passe < PASSES_BASCULE_MAX; passe++) {
+      if (!basculerUneTour(initiatorId, gameState, log)) break;
+    }
+  } finally {
+    basculeEnCours = false;
+  }
+  return log;
 }
 
 /* ============================================================
@@ -3358,24 +3895,67 @@ function getActiveTeleporterCells(board) {
 //    bloqués) : Confirmé Nikola — l'occupant est éjecté sur une case libre
 //    adjacente à sa position, au choix de l'attaquant, plutôt que de
 //    refuser la destination.
-/* ---- COHABITATION AVEC UN ELEMENT AU SOL (WIP 2026-08-19) --------
-   Ruling Nikola du 2026-08-19, explicitement marque WIP : un Titan peut se
-   deplacer volontairement sur une case contenant un debris, s'y arreter et la
-   traverser, « sans aucune condition particuliere ». Il ne ramasse pas pour
-   autant : le ramassage reste une action a part.
+/* ---- QU'EST-CE QU'UN AMAS ----------------------------------------
+   Deux debris ou plus empiles sur une meme case. Le seuil vivait en litteral
+   `stack.length >= 2` a quatre endroits ; il est nomme ici, et les quatre s'y
+   referent desormais. C'est le piege classique de ce projet — une regle
+   recopiee, dont on ne corrige qu'un exemplaire. */
+const TAILLE_AMAS = 2;
 
-   Avant ce ruling, un bloc Vert encore au sol bloquait l'arret (les Socles
-   libres, eux, cohabitaient deja depuis la FAQ #9). La regle etait recopiee a
-   QUATRE endroits avec le meme commentaire duplique : c'est le piege classique
-   de ce projet, ou corriger un emplacement en laisse quatre en arriere.
+function estAmas(looseStack) {
+  return Array.isArray(looseStack) && looseStack.length >= TAILLE_AMAS;
+}
 
-   Elle ne vit donc plus qu'ici. Revenir en arriere, si Nikola tranche
-   autrement, se fait en retablissant la ligne commentee ci-dessous — une
-   seule, ce qui est la condition pour qu'un WIP reste reellement reversible. */
+/* ---- COHABITATION AVEC UN ELEMENT AU SOL -------------------------
+   Ruling Nikola du 2026-08-19 : un Titan se deplace volontairement sur une
+   case portant un debris, s'y arrete et la traverse, « sans aucune condition
+   particuliere ». Il ne ramasse pas pour autant : le ramassage reste une
+   action a part.
+
+   PRECISION DU 2026-08-28, et elle vaut d'etre lue en entier parce que la
+   version precedente de cette fonction disait exactement l'inverse. « Un
+   Titan ne peut pas cohabiter avec une tour de debris » avait ete compris
+   comme « un Amas bloque le passage et l'arret ». Nikola a repris : « si un
+   Titan peut cohabiter avec une tour de debris, il peut egalement se
+   deplacer volontairement dessus grace a son passif. En revanche, si le
+   deplacement n'est pas effectue volontairement via son passif, la tour
+   bascule ».
+
+   Ce n'est donc pas une regle d'OBSTACLE, c'est une regle d'ARRIVEE :
+   · j'y vais par mon Mouvement gratuit, je monte dessus, la tour tient ;
+   · j'y arrive projete, ou par l'effet d'une carte, la tour BASCULE et ses
+     debris se repartissent autour (cf. `ecroulementParProjection`).
+
+   Cette fonction ne repond qu'a la premiere question — « ai-je le droit de
+   m'arreter la ? » — et la reponse est oui, sans condition. C'est ce qu'elle
+   rendait avant, et ce qu'elle rend a nouveau.
+
+   Avant le 2026-08-19, un bloc Vert isole bloquait l'arret ; cette
+   condition-la reste retiree. */
 function elementAuSolBloqueArret(looseStack) {
   // Avant le 2026-08-19 : return (looseStack || []).some((e) => e === "vert");
   void looseStack;
   return false;
+}
+
+/* ---- POSER UN DEBRIS AU SOL, EN UN SEUL ENDROIT ------------------
+   Onze endroits du moteur ecrivaient `looseBlocks[k].push(bloc)` a la main :
+   la fin d'une trajectoire, le bloc casse par un ricochet, la repartition
+   d'un ecroulement, un repli, le Socle libere par un batiment rase. Tant que
+   poser un debris ne consistait qu'a empiler, la duplication ne coutait rien.
+
+   Le ruling du 2026-08-27 lui donne une consequence : « un Titan ne peut pas
+   cohabiter avec une tour de debris ». Un debris qui arrive sur la case d'un
+   Titan qui en porte deja un forme cette tour — et onze endroits auraient eu
+   a s'en souvenir.
+
+   Ils passent donc tous par ici. Le point d'entree unique reste utile meme
+   maintenant que poser un debris n'a plus de consequence particuliere : la
+   prochaine regle qui en aura une n'aura qu'un endroit a modifier, au lieu
+   de onze a retrouver. */
+function poserDebrisAuSol(looseBlocks, cellKey, bloc) {
+  if (!looseBlocks[cellKey]) looseBlocks[cellKey] = [];
+  looseBlocks[cellKey].push(bloc);
 }
 
 function getFreeAdjacentCells(centerKey, board, titansByCell, looseBlocks) {
@@ -3477,6 +4057,34 @@ function getMovementReachable(startCell, maxRange, board, titansByCell, looseBlo
 
 // Retourne le chemin case par case de startCell à destKey (pour animation)
 // Utilise BFS parent-tracking. Retourne [] si pas de chemin.
+/* ── L'ORDRE DANS LEQUEL ON EXPLORE DÉCIDE DU CHEMIN AFFICHÉ ──
+   Nikola, 2026-08-28 : « le visuel de déplacement des Titans quand ils font le
+   passif est parfois pas logique — la case de fin est bonne, mais au lieu
+   d'aller par exemple tout droit il fait une diagonale. Ça revient au même sur
+   le plan des règles, mais ce n'est pas logique : on va au plus court tout en
+   restant valide. »
+
+   Il a raison sur les deux points, et c'est justement pour ça que le défaut
+   était invisible au moteur. En distance de Chebyshev — celle du jeu, où une
+   diagonale coûte comme un pas droit — E5 vers E7 fait deux pas, qu'on passe par
+   E6 ou par D6. Les deux chemins sont VALIDES ET DE MÊME LONGUEUR ; aucun test
+   de règle ne pouvait les départager. Seul l'œil les distingue.
+
+   Le parcours en largeur garde le premier parent trouvé à distance égale, et il
+   énumérait les voisins par `dr` puis `dc` : la première case examinée était
+   donc toujours la diagonale haut-gauche. Les huit directions sont désormais
+   ordonnées ORTHOGONALES D'ABORD. À longueur égale c'est le pas droit qui
+   gagne, et la diagonale ne sert plus que là où elle est nécessaire — un
+   déplacement réellement en biais la retrouve tout seul, puisqu'aucun
+   orthogonal ne peut alors atteindre la cible dans le même nombre de pas.
+
+   Rien d'autre ne change : ni les cases atteignables, ni le coût, ni les
+   règles. Uniquement le tracé qu'on montre. */
+const DIRECTIONS_PAS = [
+  [-1, 0], [1, 0], [0, -1], [0, 1],   // droit devant, d'abord
+  [-1, -1], [-1, 1], [1, -1], [1, 1], // puis en biais
+];
+
 function getMovePath(startCell, destKey, maxRange, board, titansByCell, looseBlocks = {}) {
   const teleporters = getActiveTeleporterCells(board);
   const teleporterSet = new Set(teleporters);
@@ -3491,9 +4099,8 @@ function getMovePath(startCell, destKey, maxRange, board, titansByCell, looseBlo
       if (d >= maxRange) continue;
       const r = rowIndex(cell[0]);
       const c = Number(cell.slice(1));
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          if (dr === 0 && dc === 0) continue;
+      for (const [dr, dc] of DIRECTIONS_PAS) {
+        {
           const nr = r + dr, nc = c + dc;
           if (nr < 0 || nr > 8 || nc < 1 || nc > 9) continue;
           const key = rowFromIndex(nr) + nc;
@@ -3556,8 +4163,7 @@ function resolveFreeMovement(titanId, destKey, gameState) {
     return { log: [`⚠️ Titan ${titanId} : Mouvement vers ${destKey} bloqué — bâtiment présent.`] };
   }
   const looseStack = looseBlocks ? (looseBlocks[destKey] || []) : [];
-  const hasNonDebris = elementAuSolBloqueArret(looseStack);
-  if (hasNonDebris) {
+  if (elementAuSolBloqueArret(looseStack)) {
     return { log: [`⚠️ Titan ${titanId} : Mouvement vers ${destKey} bloqué — élément non-débris présent.`] };
   }
   /* Deux Titans ne partagent jamais une case (invariant vérifié par
@@ -3574,6 +4180,30 @@ function resolveFreeMovement(titanId, destKey, gameState) {
     return { log: [`⚠️ Titan ${titanId} : Mouvement vers ${destKey} bloqué — case occupée par le Titan ${occupant.id}.`] };
   }
   const titan = gameState.titans.find((t) => t.id === titanId);
+
+  /* ── UN TITAN HORS DE BIG CITY NE SE DÉPLACE PAS ──
+     Bug remonté par Nikola le 2026-08-28, pour la deuxième fois : « j'aurais
+     dû revenir sur le plateau visuellement mais je ne le suis pas […] j'ai
+     encore dû faire défausser et je n'étais quand même pas visible ensuite ».
+     Son journal montre la signature exacte : « Titan 1 : Mouvement gratuit
+     → B3 » SANS la ligne « revient sur BIG CITY » qui la précède toujours.
+
+     `cell` d'un Titan sorti ne désigne pas où il est — il n'est nulle part —
+     mais PAR OÙ il rentrera (cf. `rentrerEnJeu`). Écrire dedans déplaçait donc
+     sa future case d'entrée, sans jamais le remettre en jeu : `horsPlateau`
+     restait vrai, `estSurLePlateau` restait faux, et le Titan continuait de
+     n'être ni dessiné, ni ciblable, ni capable de jouer autre chose qu'une
+     défausse. Le tour était perdu sans que rien ne signale pourquoi.
+
+     La rentrée est orchestrée par le contrôleur à l'ouverture du tour. Ce
+     refus est le filet : même argument que l'occupant juste au-dessus — une
+     fonction exportée qui peut casser un invariant du jeu doit le refuser
+     elle-même, plutôt que de faire confiance à la séquence de ses appelants.
+     Il transforme un tour silencieusement perdu en une ligne de journal. */
+  if (titan.horsPlateau) {
+    return { log: [`⚠️ Titan ${titanId} : Mouvement impossible — il est hors de BIG CITY et doit d'abord y rentrer.`] };
+  }
+
   titan.cell = destKey;
   return { log: [`Titan ${titanId} : Mouvement gratuit → ${destKey}.`] };
 }
@@ -3700,10 +4330,28 @@ function programCards(titanId, cardIds, gameStateTitans) {
     return { ok: false, reason: "Ce Titan a déjà joué cette Manche — attends la Manche suivante pour reprogrammer." };
   }
   if (cardIds.length !== 3) return { ok: false, reason: "Il faut exactement 3 cartes." };
+
+  /* ── UNE MAIN PEUT CONTENIR DEUX FOIS LA MÊME CARTE ──
+     Depuis que le vol de Phase Repos transfère la carte au voleur
+     (2026-08-28), un Titan peut détenir deux exemplaires du même titre. La
+     programmation devait donc apprendre à compter.
+
+     Elle validait par `hand.includes(id)`, ce qui laisse passer une paire
+     dont un seul exemplaire existe, puis retirait par
+     `hand.filter((id) => !cardIds.includes(id))` — un filtre qui supprime
+     TOUTES les copies. Programmer un exemplaire détruisait donc l'autre :
+     l'invariant de comptage a vu la table passer de 24 cartes à 23, puis à
+     22, en deux Manches.
+
+     On retire donc UN exemplaire par carte demandée, et on refuse la
+     demande si la main n'en contient pas autant. */
+  const restante = [...titan.hand];
   for (const id of cardIds) {
-    if (!titan.hand.includes(id)) return { ok: false, reason: `${CARD_LABEL[id]} n'est pas en main.` };
+    const i = restante.indexOf(id);
+    if (i === -1) return { ok: false, reason: `${CARD_LABEL[id]} n'est pas en main.` };
+    restante.splice(i, 1);
   }
-  titan.hand = titan.hand.filter((id) => !cardIds.includes(id));
+  titan.hand = restante;
   titan.programmed = [...cardIds]; // pool, pas une file — ordre de jeu libre (confirmé Nikola)
   return { ok: true };
 }
@@ -3846,9 +4494,23 @@ function ensureProgrammableHand(titan) {
      possible de voler une carte en zone repos, c'est forcément une
      des cartes de la Manche actuelle" — confirmé Nikola).
 ============================================================ */
-function resolveVolPhaseRepos(mancheNumber, direction, ordreJeu, gameStateTitans) {
+/* `modeVol` : "repos" (la carte part au frigo chez sa victime) ou "main"
+   (elle est empruntée par le voleur pour une Manche). Choisi sur l'écran
+   d'accueil, transmis jusqu'ici sans valeur par défaut cachée — le défaut
+   vit à UN endroit, l'état du contrôleur. */
+function resolveVolPhaseRepos(mancheNumber, direction, ordreJeu, gameStateTitans, modeVol = "main") {
   const order = direction === "gauche" ? [...ordreJeu].reverse() : [...ordreJeu];
   const log = [];
+  /* QUI A PRIS QUOI À QUI, sous forme exploitable — Nikola, 2026-08-28 :
+     « je dois avoir une information claire de quelle carte quel Titan m'a pris
+     à la phase repos ».
+
+     Le vol était déjà intégralement journalisé, mais UNIQUEMENT en texte, noyé
+     dans un journal qui compte des centaines de lignes en fin de partie — et
+     que le joueur devait ouvrir pour y trouver ce qui le concerne le plus
+     directement de toute la Manche. Ce résumé rend la même information
+     structurée, pour que l'interface la montre au lieu de la faire chercher. */
+  const resume = [];
   for (let i = 0; i < order.length; i++) {
     const thiefId = order[i];
     const victimId = order[(i + 1) % order.length];
@@ -3866,13 +4528,42 @@ function resolveVolPhaseRepos(mancheNumber, direction, ordreJeu, gameStateTitans
       const idxDiscard = (victim.discardedHidden || []).indexOf(cardId);
       if (idxDiscard !== -1) victim.discardedHidden.splice(idxDiscard, 1);
     }
-    // +2 (et non +1) : la carte doit rester indisponible pendant TOUTE la
-    // Manche suivante, pas juste jusqu'au tout début de celle-ci (même
-    // correctif de timing que sendCardToOwnRepos, voir plus haut).
-    victim.repos.push({ cardId, faceUp: true, returnAtManche: mancheNumber + 2 });
-    log.push(`Vol Phase Repos : Titan ${thiefId} pioche à l'aveugle chez Titan ${victimId} → ${CARD_LABEL[cardId]}, posée face visible en Zone Repos (Titan ${victimId}) jusqu'à la Manche ${mancheNumber + 2}.`);
+    /* ── DEUX MODES, CHOISIS AVANT LA PARTIE (Nikola, 2026-08-28) ──
+       « Soit c'est la carte de la victime qui va dans sa zone Repos, soit
+       ça va dans la main du Titan qui a sélectionné la carte. »
+
+       · "repos" — la carte part en Zone Repos CHEZ SA VICTIME. Elle en est
+         privée une Manche, personne ne la gagne. C'est la règle d'origine.
+       · "main" — la carte passe EN MAIN DU VOLEUR pour la Manche qui
+         vient, puis retourne à son propriétaire à la fin de celle-ci. Un
+         EMPRUNT, pas une confiscation : « on la rendra forcément fin de
+         Manche même si pas joué ».
+
+       `proprietaire` est ce qui rend l'emprunt réversible. Une carte
+       empruntée est marquée du Titan qui la possède vraiment, et la
+       restitution de fin de Manche la lui renvoie, jouée ou non. Sans
+       cette marque, la carte se dissoudrait dans la main du voleur et le
+       jeu perdrait le compte de qui possède quoi.
+
+       LA FATIGUE NE CHANGE PAS : elle met toujours une carte au frigo chez
+       son propriétaire, sans jamais la transférer (cf. `resolveFatigue`). */
+    if (modeVol === "main") {
+      const thief = gameStateTitans.find((t) => t.id === thiefId);
+      if (thief) {
+        thief.hand.push(cardId);
+        thief.empruntees = [...(thief.empruntees || []), { cardId, proprietaire: victimId }];
+      }
+      log.push(`Vol Phase Repos : Titan ${thiefId} pioche à l'aveugle chez Titan ${victimId} → ${CARD_LABEL[cardId]}, empruntée pour la Manche ${mancheNumber + 1} puis rendue.`);
+      resume.push({ thiefId, victimId, cardId, mode: "main", revientALaManche: mancheNumber + 1 });
+    } else {
+      // +2 : la carte doit rester indisponible pendant TOUTE la Manche
+      // suivante, pas juste jusqu'à son début (cf. sendCardToOwnRepos).
+      victim.repos.push({ cardId, faceUp: true, returnAtManche: mancheNumber + 2 });
+      log.push(`Vol Phase Repos : Titan ${thiefId} pioche à l'aveugle chez Titan ${victimId} → ${CARD_LABEL[cardId]}, posée face visible en Zone Repos (Titan ${victimId}) jusqu'à la Manche ${mancheNumber + 2}.`);
+      resume.push({ thiefId, victimId, cardId, mode: "repos", revientALaManche: mancheNumber + 2 });
+    }
   }
-  return { log };
+  return { log, resume };
 }
 
 function resolveFatigue(attackerId, targetId, mancheNumber, gameStateTitans) {
@@ -3890,8 +4581,87 @@ function resolveFatigue(attackerId, targetId, mancheNumber, gameStateTitans) {
     ok: true,
     fromProgrammed,
     targetId,
+    /* LA CIBLE PEUT REFUSER, SI ELLE A DE QUOI (Nikola, 2026-08-28 :
+       « l'Adrénaline permet de refuser une Fatigue »).
+
+       C'est le troisième emploi de l'Adrénaline, et le premier qui soit
+       DÉFENSIF sur une carte : jusqu'ici elle n'achetait que de la portée et de
+       l'énergie, plus l'annulation d'un Dilemme. Depuis que le barème est
+       progressif elle se thésaurise — il lui fallait une dépense qui vaille la
+       peine d'entamer une réserve.
+
+       La Fatigue est APPLIQUÉE ici quand même, et le refus la défait ensuite :
+       la carte est tirée au sort, donc le refus doit pouvoir se décider en
+       SACHANT laquelle est partie — sinon on refuse à l'aveugle, ce qui n'est
+       pas un choix. Un appelant qui ignore `refusable` se comporte exactement
+       comme avant : la Fatigue tient. */
+    refusable: (target.adrenaline || 0) >= 1,
+    cardId,
     log: `Fatigue (Titan ${attackerId} → Titan ${targetId}) : carte ${CARD_LABEL[cardId]} piochée au hasard, face cachée, indisponible en Zone Repos (Titan ${targetId}) jusqu'à la Manche ${mancheNumber + 2}.`,
   };
+}
+
+/**
+ * Défait une Fatigue : la cible paie 1 Adrénaline à l'attaquant et récupère la
+ * carte en main. Symétrique exact de l'annulation d'un Dilemme — le jeton PASSE
+ * à l'attaquant, il ne s'évapore pas (même correction que celle faite le
+ * 2026-08-17 sur le DIL, où l'Adrénaline disparaissait du jeu).
+ */
+function refuserFatigue(attackerId, targetId, cardId, gameStateTitans) {
+  const target = gameStateTitans.find((t) => t.id === targetId);
+  const attacker = gameStateTitans.find((t) => t.id === attackerId);
+  if (!target || (target.adrenaline || 0) < 1) {
+    return { ok: false, reason: `Titan ${targetId} n'a pas d'Adrénaline à dépenser.` };
+  }
+  const i = (target.repos || []).findIndex((e) => e.cardId === cardId);
+  if (i === -1) {
+    return { ok: false, reason: `${CARD_LABEL[cardId]} n'est plus en Zone Repos.` };
+  }
+  target.repos.splice(i, 1);
+  target.hand.push(cardId);
+  target.adrenaline -= 1;
+  if (attacker) attacker.adrenaline = (attacker.adrenaline || 0) + 1;
+  return {
+    ok: true,
+    log: `Titan ${targetId} refuse la Fatigue : 1 Adrénaline donnée à Titan ${attackerId}, ${CARD_LABEL[cardId]} revient en main.`,
+  };
+}
+
+/* ---- RENDRE LES CARTES EMPRUNTEES ------------------------------
+   Nikola, 2026-08-28, deux precisions qui vont ensemble :
+
+   « On la rendra forcément fin de Manche même si pas joué » — un emprunt
+   dure une Manche, qu'on s'en soit servi ou non.
+
+   « Si j'ai joué une carte d'un autre Titan, le vol ne se fait plus que sur
+   2 cartes du coup ; on rend la carte AVANT le fait de piquer une carte. »
+   L'ordre compte donc, et il n'est pas indifferent : si l'on volait d'abord,
+   on pourrait se faire piquer la carte d'un tiers, qui ne nous appartient
+   pas. On rend, puis on vole — et le pool de vol d'un Titan qui a joue une
+   carte empruntee ne compte plus que ses deux cartes a lui.
+
+   La carte revient a son proprietaire EN MAIN, ou qu'elle soit : encore en
+   main du voleur, programmee, jouee, ou defaussee face cachee. */
+function rendreCartesEmpruntees(titans) {
+  const log = [];
+  for (const titan of titans) {
+    for (const emprunt of titan.empruntees || []) {
+      const proprietaire = titans.find((t) => t.id === emprunt.proprietaire);
+      if (!proprietaire) continue;
+      const listes = ["hand", "programmed", "playedThisManche", "discardedHidden"];
+      let rendue = false;
+      for (const nom of listes) {
+        const i = (titan[nom] || []).indexOf(emprunt.cardId);
+        if (i !== -1) { titan[nom].splice(i, 1); rendue = true; break; }
+      }
+      if (rendue) {
+        proprietaire.hand.push(emprunt.cardId);
+        log.push(`Titan ${titan.id} rend ${CARD_LABEL[emprunt.cardId]} à son propriétaire, Titan ${proprietaire.id}.`);
+      }
+    }
+    titan.empruntees = [];
+  }
+  return log;
 }
 
 function applyRestitution(titan, mancheNumber) {
@@ -4142,16 +4912,53 @@ function countRepaireColors(titan) {
 // élément par bloc Vert du Repaire de ce Titan (placement secret).
 // rainbowWinnerId : Titan déjà crédité du Trophée Arc-en-ciel en cours de
 // partie (suivi live, cf. useEffect dans le composant), ou null.
-/* Valeur d'une Adrenaline conservee au decompte final.
-   Ruling Nikola du 2026-08-19 : 2 points, contre 3 auparavant. Elle etait
-   trop rentable a garder, ce qui decourageait de la depenser.
+/* ── BARÈME PROGRESSIF DE L'ADRÉNALINE ─────────────────────
+   Ruling Nikola du 2026-08-28 : « faut qu'on fasse plus un barème progressif
+   de détention d'adrénaline que juste 2 par adrénaline ».
 
-   Constante EXPORTEE et non nombre en dur : la valeur vivait a deux endroits
-   dans le code, ici et comme etalon `VALEUR_ADRENALINE` du planificateur
-   d'IA, qui arbitre entre payer une Adrenaline et encaisser la perte. Les
-   deux ont donc desormais une seule source, sans quoi baisser l'une sans
-   l'autre fait jouer l'IA sur un bareme qui n'existe plus. */
-const POINTS_PAR_ADRENALINE = 2;
+   Le forfait plat de 2 points ne récompensait aucune intention : trois
+   Adrénalines gardées par négligence valaient exactement autant que trois
+   Adrénalines gardées par plan. Le barème est donc CUMULATIF comme celui des
+   couleurs — l'entrée `n-1` donne le TOTAL que vaut une réserve de `n`, pas
+   la valeur du n-ième jeton.
+
+     réserve   1   2   3   4   5   6   7   8
+     total     1   3   5   8  11  15  19  24
+     marginal  1   2   2   3   3   4   4   5
+
+   CE QUE CE PROFIL PRÉSERVE, et c'est ce qui a fait écarter une courbe plus
+   raide (triangulaire 1/3/6/10/15…) : le ruling du 2026-08-19 avait baissé la
+   valeur de 3 à 2 parce qu'une Adrénaline « était trop rentable à garder, ce
+   qui décourageait de la dépenser ». Ce risque vit dans les PETITES réserves,
+   celles qu'on traîne sans y penser — ce sont précisément celles qui rendent
+   ici MOINS qu'avant (1 et 2 jetons valent 1 et 3, contre 2 et 4). Il faut
+   monter à 5 pour dépasser l'ancien forfait. Thésauriser reste donc un pari
+   qu'il faut assumer sur toute la partie, pas une rente de consolation.
+
+   Le barème plafonne à 8 : au-delà, chaque jeton supplémentaire vaut encore
+   5, ce qui évite qu'une partie exotique fasse diverger le score.
+
+   EXPORTÉ, jamais recopié en dur : la valeur vit aussi chez le planificateur
+   d'IA (`valeurMarginaleAdrenaline`), qui arbitre entre payer une Adrénaline
+   et encaisser la perte, dans le texte des règles et dans le livret. Une
+   source unique côté code, et un test qui vérifie les trois autres. */
+const BAREME_ADRENALINE = [1, 3, 5, 8, 11, 15, 19, 24];
+
+/** Points de victoire d'une réserve de `n` Adrénalines au décompte final. */
+function scoreAdrenaline(n) {
+  if (!n || n <= 0) return 0;
+  return BAREME_ADRENALINE[Math.min(n, BAREME_ADRENALINE.length) - 1];
+}
+
+/* Ce que vaut LA PROCHAINE Adrénaline pour qui en détient déjà `stock` — donc
+   aussi ce que coûte d'en lâcher une quand on en a `stock + 1`. C'est cette
+   valeur-là, et jamais le forfait, que doit lire tout arbitrage « payer ou
+   encaisser » : sur un barème progressif, la première et la cinquième n'ont
+   pas le même prix, et raisonner sur une moyenne les fait toutes deux jouer
+   faux. */
+function valeurMarginaleAdrenaline(stock = 0) {
+  return scoreAdrenaline(stock + 1) - scoreAdrenaline(stock);
+}
 
 function computeFinalScore(players, vertAssignments, rainbowWinnerId) {
   const baseCounts = {};
@@ -4238,7 +5045,7 @@ function computeFinalScore(players, vertAssignments, rainbowWinnerId) {
     const rainbowBonus = rainbowWinnerId === t.id ? 5 : 0;
     const bagarrePts = bagarreRank[t.id] || 0;
     const destructionPts = destructionRank[t.id] || 0;
-    const adrenalinePts = POINTS_PAR_ADRENALINE * (t.adrenaline || 0);
+    const adrenalinePts = scoreAdrenaline(t.adrenaline || 0);
     const bareme = b.bleu + b.rose + b.orange + b.rouge;
     totals[t.id] = {
       bareme,
@@ -4334,7 +5141,9 @@ function classementFinal(players, totals) {
 // px ; le sprite garde son ratio d'aspect propre à l'intérieur.
 
 export {
-  POINTS_PAR_ADRENALINE,
+  BAREME_ADRENALINE,
+  scoreAdrenaline,
+  valeurMarginaleAdrenaline,
   STOCK_INITIAL,
   COULEURS,
   COLOR_HEX,
@@ -4369,6 +5178,8 @@ export {
   EVENT_NAMES,
   CARD_FORCE,
   placeTitans,
+  getPlacementCells,
+  placerTitanInitial,
   nextDetonateur,
   rowIndex,
   rowFromIndex,
@@ -4421,13 +5232,17 @@ export {
   getNonPlayedPool,
   sendCardToOwnRepos,
   resolveVolPhaseRepos,
+  rendreCartesEmpruntees,
   resolveFatigue,
+  refuserFatigue,
   applyRestitution,
   getProgrammedSum,
   getFPMCTargets,
   resolveFautPasMeChauffer,
   retirerPileVide,
   releverPercussion,
+  listerCiblesToutCasser,
+  resolveToutCasserCase,
   BAREME,
   BAREME_ORANGE_PAIRES,
   STANDARD_COLORS,

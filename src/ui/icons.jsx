@@ -17,6 +17,12 @@
    point près, aucune n'imite un dessin.
 ============================================================ */
 import React from "react";
+import { COLOR_HEX } from "../domain/gameRules.js";
+
+/* Les cinq couleurs de blocs, telles que le moteur les définit. L'icône du
+   Trophée Arc-en-ciel les reprend : une copie locale dériverait le jour où
+   une couleur du jeu bouge. */
+const COULEURS_BLOC = COLOR_HEX;
 
 const P = {
   /* ── Le tour ─────────────────────────────────────────── */
@@ -49,17 +55,29 @@ const P = {
      jeu (`public/assets/rules/adrenaline.png`), via `<AdrenalineIcon>` plus
      bas. C'est un dessin du livret, il vaut mieux que ma paraphrase. */
 
-  /* Bagarre : le gant de boxe (demande de Nikola). Trois tentatives ont
+  /* Bagarre : le gant de boxe (demande de Nikola). Cinq tentatives ont
      précédé — un poing à quatre tracés imbriqués qui se refermait en pâté à
-     13 px, deux chevrons qui se lisaient comme une paire de ciseaux, puis un
-     poing en blocs qu'on prenait pour une prise électrique. Le gant a une
-     silhouette que personne ne confond : mitaine ronde, pouce sur le côté,
-     poignet net en dessous. */
+     13 px, deux chevrons qui se lisaient comme une paire de ciseaux, un
+     poing en blocs qu'on prenait pour une prise électrique, un gant dressé
+     dont la mitaine et la manchette faisaient deux rectangles empilés, puis
+     une version couchée à trois volumes dont le pouce sortait sur le côté.
+
+     Huit variantes ont été mises côte à côte, rendues de 11 à 48 px, et
+     Nikola a tranché : la « C droite », « mais sans le petit arc de cercle
+     sous le gros ». Elle tient en DEUX volumes seulement — la manchette, un
+     rectangle debout à gauche, et la mitaine, un demi-disque franc qui part
+     vers la droite comme un gant qui frappe. L'arc retiré figurait les
+     doigts repliés sous la masse : à 13 px il venait se coller au bord bas
+     du demi-disque et refermait la silhouette en pâté, c'est-à-dire qu'il
+     coûtait exactement ce qu'il prétendait ajouter.
+
+     Deux volumes qui ne se touchent qu'en un point survivent à toutes les
+     réductions ; c'est la propriété qui manquait à chacune des cinq
+     précédentes. */
   brawl: (
     <>
-      <path d="M7 4h7a5 5 0 0 1 5 5v3a4 4 0 0 1-4 4H7z" />
-      <path d="M7 8H5a2.5 2.5 0 0 0 0 5h2" />
-      <path d="M7 16h11v3a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1z" />
+      <path d="M3 8h4v9H3z" />
+      <path d="M7 5h6a6 6 0 0 1 0 12H7z" />
     </>
   ),
   /* Destruction : l'explosion (demande de Nikola). L'escalier descendant se
@@ -203,16 +221,6 @@ const P = {
       <path d="M9 9l3-3 3 3" />
     </>
   ),
-  /* 05 Faut Pas Me Chauffer — le duel : deux blocs qui se font face et se
-     mesurent. La version précédente empilait quatre équerres et se lisait
-     comme un cadre cassé. */
-  duel: (
-    <>
-      <rect x="2" y="7" width="7" height="10" />
-      <rect x="15" y="7" width="7" height="10" />
-      <path d="M11 9v6M13 9v6" />
-    </>
-  ),
   /* 06 Je Ne Partage Pas — le coffre fermé du Repaire. La version précédente
      dessinait une maison et se lisait « accueil ». */
   hoard: (
@@ -284,12 +292,67 @@ export function AdrenalineIcon({ size = 16, style }) {
   );
 }
 
+/** Le Trophée Arc-en-ciel : les CINQ couleurs de blocs, sur UN arc.
+ *
+ *  Il était rendu par l'émoji 🌈 dans le décompte et le livret, et par
+ *  l'icône `lantern` — la Lanterne Rouge, qui n'a rien à voir — dans le
+ *  bandeau des Titans. Deux dessins pour un trophée, dont aucun ne disait ce
+ *  qu'il récompense.
+ *
+ *  Ce trophée se gagne en possédant un bloc de CHAQUE couleur : son icône
+ *  reprend donc le code couleur du jeu. Comme `BlockIcon` et la seringue
+ *  d'Adrénaline, elle porte ses propres couleurs et n'hérite donc pas de
+ *  `currentColor` — ce sont des DONNÉES DE JEU, pas la teinte d'un signal.
+ *
+ *  CINQ BANDES CONCENTRIQUES, PUIS CINQ SEGMENTS. La première version
+ *  empilait les couleurs en arcs emboîtés, et se heurtait à une limite de
+ *  résolution : cinq bandes sur une grille de 24 rendue à 13 px donnent une
+ *  bande intérieure d'un demi-pixel. Le Vert avait donc été sorti de l'arc
+ *  et posé en cœur plein, ce qui le faisait lire comme autre chose que ses
+ *  quatre voisines.
+ *
+ *  Cinq variantes ont été mises côte à côte, de 11 à 48 px. Nikola a tranché
+ *  la « R2 segments » : un SEUL arc, épais, découpé en cinq tronçons bout à
+ *  bout. Les cinq couleurs sont alors à égalité — même rayon, même épaisseur,
+ *  même longueur — et l'épaisseur ne dépend plus du nombre de couleurs, donc
+ *  aucune ne disparaît à la réduction. Les tronçons se partagent le même
+ *  cercle de rayon 8 centré en (12,16) ; leurs extrémités sont les points de
+ *  ce cercle, ce qui les rend jointifs sans recouvrement. */
+export function RainbowIcon({ size = 16, style, title }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      strokeLinecap="butt"
+      aria-hidden={title ? undefined : "true"}
+      role={title ? "img" : undefined}
+      focusable="false"
+      style={{ flexShrink: 0, display: "block", ...style }}
+    >
+      {title ? <title>{title}</title> : null}
+      <g strokeWidth={5}>
+        <path d="M4 16A8 8 0 0 1 5.53 11.3" stroke={COULEURS_BLOC.bleu} />
+        <path d="M5.53 11.3A8 8 0 0 1 9.53 8.39" stroke={COULEURS_BLOC.rose} />
+        <path d="M9.53 8.39A8 8 0 0 1 14.47 8.39" stroke={COULEURS_BLOC.orange} />
+        <path d="M14.47 8.39A8 8 0 0 1 18.47 11.3" stroke={COULEURS_BLOC.rouge} />
+        <path d="M18.47 11.3A8 8 0 0 1 20 16" stroke={COULEURS_BLOC.vert} />
+      </g>
+    </svg>
+  );
+}
+
 /** L'icône de la carte, par identifiant de carte. */
 export const CARD_ICON = {
   tout_casser: "smash",
   tete_en_avant: "charge",
   graouhhh: "roar",
   boing_boing: "hop",
-  faut_pas_me_chauffer: "duel",
+  /* Faut Pas Me Chauffer réutilise le gant de boxe (demande de Nikola).
+     Elle avait son propre pictogramme, deux blocs qui se mesuraient : c'est
+     la carte de Bagarre du jeu, et la voir porter le signe de la Bagarre dit
+     d'un coup d'œil sur quelle piste elle marque. */
+  faut_pas_me_chauffer: "brawl",
   je_ne_partage_pas: "hoard",
 };

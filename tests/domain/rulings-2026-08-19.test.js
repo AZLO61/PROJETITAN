@@ -4,8 +4,9 @@
    Un test par règle modifiée, comme l'impose le README du livret : ce sont
    eux qui empêchent la prochaine passe de refaire le trajet inverse.
 
-   Ce fichier couvre la VALEUR DE L'ADRÉNALINE au décompte final, passée de
-   3 à 2 points de victoire.
+   Ce fichier couvre la VALEUR DE L'ADRÉNALINE au décompte final. Elle est
+   passée de 3 à 2 points le 2026-08-19, puis du forfait plat au BARÈME
+   PROGRESSIF le 2026-08-28 — les tests suivent le ruling en vigueur.
 
    Le dernier test du fichier est le plus important : il vérifie que la
    valeur est la même AUX QUATRE ENDROITS où la règle vit (moteur, étalon
@@ -19,7 +20,9 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  POINTS_PAR_ADRENALINE,
+  BAREME_ADRENALINE,
+  scoreAdrenaline,
+  valeurMarginaleAdrenaline,
   computeFinalScore,
   getJeNePartagePasCount,
   getJeNePartagePasPool,
@@ -44,12 +47,47 @@ const t = (id, cell, extra = {}) => ({
   ...extra,
 });
 
-describe("Adrénaline conservée : 2 points de victoire, pas 3", () => {
-  it("la constante du moteur vaut 2", () => {
-    expect(POINTS_PAR_ADRENALINE).toBe(2);
+describe("Adrénaline conservée : barème PROGRESSIF, pas un forfait", () => {
+  /* Ruling remplacé le 2026-08-28. Le forfait plat de 2 points datait du
+     2026-08-19 ; Nikola : « faut qu'on fasse plus un barème progressif de
+     détention d'adrénaline que juste 2 par adrénaline ».
+
+     Ce que ces tests protègent, au-delà des chiffres : le PROFIL de la
+     courbe. Une petite réserve doit valoir moins que sous l'ancien forfait
+     (sinon on retombe sur le défaut que le ruling du 19 corrigeait : garder
+     est trop rentable, donc on ne dépense jamais), et une grosse réserve
+     doit valoir plus (sinon le barème n'est pas progressif du tout). */
+  it("le barème est cumulatif et strictement croissant", () => {
+    expect(BAREME_ADRENALINE).toEqual([1, 3, 5, 8, 11, 15, 19, 24]);
+    for (let i = 1; i < BAREME_ADRENALINE.length; i++) {
+      expect(BAREME_ADRENALINE[i]).toBeGreaterThan(BAREME_ADRENALINE[i - 1]);
+    }
   });
 
-  it("le décompte final compte 2 points par Adrénaline restante", () => {
+  it("chaque Adrénaline supplémentaire vaut au moins autant que la précédente", () => {
+    // C'est la définition même de « progressif » : la valeur marginale ne
+    // redescend jamais. Sans ce test, une faute de frappe dans le tableau
+    // passerait inaperçue tant que la somme reste croissante.
+    let precedente = 0;
+    for (let n = 0; n < BAREME_ADRENALINE.length; n++) {
+      const marginale = valeurMarginaleAdrenaline(n);
+      expect(marginale).toBeGreaterThanOrEqual(precedente);
+      precedente = marginale;
+    }
+  });
+
+  it("une petite réserve rapporte MOINS que l'ancien forfait de 2 par jeton", () => {
+    expect(scoreAdrenaline(1)).toBeLessThan(2 * 1);
+    expect(scoreAdrenaline(2)).toBeLessThan(2 * 2);
+    expect(scoreAdrenaline(3)).toBeLessThan(2 * 3);
+  });
+
+  it("une grosse réserve rapporte PLUS que l'ancien forfait", () => {
+    expect(scoreAdrenaline(5)).toBeGreaterThan(2 * 5);
+    expect(scoreAdrenaline(8)).toBeGreaterThan(2 * 8);
+  });
+
+  it("le décompte final applique le barème, pas une multiplication", () => {
     const joueurs = [t(1, "A1", { adrenaline: 4 }), t(2, "A3", { adrenaline: 0 })];
     const res = computeFinalScore(joueurs, {}, null);
     expect(res.totals[1].adrenalinePts).toBe(8);
@@ -57,13 +95,20 @@ describe("Adrénaline conservée : 2 points de victoire, pas 3", () => {
   });
 
   it("la ligne Adrénaline pèse bien dans le total, sans écraser le reste", () => {
-    /* Deux Titans identiques à l'Adrénaline près : l'écart de total doit
-       être exactement 2 par Adrénaline, ni plus (double comptage) ni moins
+    /* Deux Titans identiques à l'Adrénaline près : l'écart de total doit être
+       exactement ce que dit le barème, ni plus (double comptage) ni moins
        (ligne oubliée dans la somme). C'est la somme `total` qui est vérifiée
        ici, pas seulement le détail : les deux avaient déjà divergé. */
     const sans = computeFinalScore([t(1, "A1", { adrenaline: 0 }), t(2, "A3")], {}, null);
     const avec = computeFinalScore([t(1, "A1", { adrenaline: 3 }), t(2, "A3")], {}, null);
-    expect(avec.totals[1].total - sans.totals[1].total).toBe(6);
+    expect(avec.totals[1].total - sans.totals[1].total).toBe(scoreAdrenaline(3));
+  });
+
+  it("au-delà du barème, la réserve ne diverge pas", () => {
+    // Une partie exotique ne doit pas faire exploser le score : le dernier
+    // palier se répète au lieu de continuer à monter.
+    const marginaleAuPlafond = valeurMarginaleAdrenaline(BAREME_ADRENALINE.length);
+    expect(marginaleAuPlafond).toBe(0);
   });
 
   it("aucune Adrénaline ne rapporte rien du tout", () => {
@@ -73,45 +118,56 @@ describe("Adrénaline conservée : 2 points de victoire, pas 3", () => {
 });
 
 describe("La valeur de l'Adrénaline ne vit qu'à une seule source dans le code", () => {
-  it("le planificateur d'IA importe la constante au lieu de la recopier", () => {
+  it("le planificateur d'IA lit la valeur MARGINALE, jamais un forfait recopié", () => {
     const src = lire("src/domain/aiPlanner.js");
-    expect(src).toContain("VALEUR_ADRENALINE = POINTS_PAR_ADRENALINE");
-    // Un nombre en dur ici, et l'IA arbitre sur un barème qui n'existe plus.
-    expect(src).not.toMatch(/VALEUR_ADRENALINE\s*=\s*\d/);
+    expect(src).toContain("valeurMarginaleAdrenaline");
+    /* Sur un barème progressif, arbitrer sur une constante est faux des deux
+       côtés : trop cher quand l'IA est pauvre, trop bon marché quand elle est
+       riche. Aucune constante locale ne doit donc réapparaître. */
+    expect(src).not.toMatch(/VALEUR_ADRENALINE\s*=/);
   });
 
-  it("le moteur ne contient plus l'ancien facteur en dur", () => {
+  it("le moteur ne multiplie plus, il lit le barème", () => {
     const src = lire("src/domain/gameRules.js");
     expect(src).not.toMatch(/\d+\s*\*\s*\(t\.adrenaline/);
-    expect(src).toContain("POINTS_PAR_ADRENALINE * (t.adrenaline");
+    expect(src).toContain("scoreAdrenaline(t.adrenaline");
+  });
+
+  it("le contrôleur ne chiffre plus le coût d'une Adrénaline en dur", () => {
+    /* Il portait `voitAdversaires ? 6 : 3` — deux nombres qui ne
+       correspondaient déjà plus au forfait de 2, et qui n'ont plus aucun sens
+       sur un barème progressif. */
+    const src = lire("src/application/useBoardGeneratorController.jsx");
+    expect(src).not.toMatch(/coutAdrenaline\s*=\s*voitAdversaires\s*\?\s*\d/);
+    expect(src).toContain("valeurMarginaleAdrenaline");
   });
 });
 
-describe("Les quatre emplacements de la règle annoncent la même valeur", () => {
-  /* Le moteur applique, mais ce sont ces trois autres endroits que lisent
-     les joueurs. Une valeur juste dans le code et fausse au livret est un
+describe("Les quatre emplacements de la règle annoncent le même barème", () => {
+  /* Le moteur applique, mais ce sont ces autres endroits que lisent les
+     joueurs. Une valeur juste dans le code et fausse au livret est un
      mensonge à la table. */
-  it("les règles affichées dans l'application annoncent 2 points", () => {
+  const paliers = BAREME_ADRENALINE.join(" · ");
+
+  it("les règles affichées dans l'application annoncent le barème", () => {
     const src = lire("src/ui/rules/rulesContent.js");
-    const entree = src.split("\n").find((l) => l.includes('nom: "Adrénaline"'));
+    const entree = src.split(/\r?\n/).find((l) => l.includes('nom: "Adrénaline"'));
     expect(entree).toBeTruthy();
-    expect(entree).toMatch(/2 points de victoire/);
-    expect(entree).not.toMatch(/3 points/);
+    expect(entree).toContain(paliers);
+    expect(entree).not.toMatch(/rapporte 2 points de victoire/);
   });
 
-  it("le livret annonce 2 points partout où il chiffre l'Adrénaline", () => {
+  it("le livret annonce le même barème", () => {
     const livret = lire("docs/livret/ProjetTitan_Livret.html");
-    // Toute phrase du livret qui chiffre l'Adrénaline en points doit dire 2.
-    const lignes = livret.split("\n").filter((l) => /Adr[ée]naline/i.test(l) && /\d+\s*points?/i.test(l));
-    expect(lignes.length).toBeGreaterThan(0);
-    lignes.forEach((l) => {
-      const chiffres = [...l.matchAll(/(\d+)\s*points?/gi)].map((m) => Number(m[1]));
-      // On ne contraint que les lignes qui parlent bien du barème Adrénaline.
-      if (/restante|d[ée]compte/i.test(l)) {
-        expect(chiffres).toContain(POINTS_PAR_ADRENALINE);
-        expect(chiffres).not.toContain(3);
-      }
-    });
+    expect(livret).toContain(paliers);
+    // L'ancien forfait ne doit plus traîner nulle part.
+    expect(livret).not.toMatch(/2 points par <img src="Adr/);
+  });
+
+  it("le tableau de décompte affiche le barème plutôt qu'un multiplicateur", () => {
+    const src = lire("src/ui/panels/DecisionPanels.jsx");
+    expect(src).toContain("BAREME_ADRENALINE.join");
+    expect(src).not.toContain("POINTS_PAR_ADRENALINE");
   });
 });
 

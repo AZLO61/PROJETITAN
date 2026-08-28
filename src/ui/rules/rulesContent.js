@@ -13,18 +13,18 @@ const ICON = (name) => `${import.meta.env.BASE_URL}assets/rules/${name}.png`;
 export const LEXIQUE = [
   { icon: ICON("energie"), nom: "Énergie", def: "Détermine le seuil actif de l'action jouée, au moment où tu la joues." },
   { icon: ICON("seuil4"), nom: "Seuil 4", def: "Palier atteint à 4 ou plus : active l'effet le plus fort de la carte jouée." },
-  { icon: ICON("adrenaline"), nom: "Adrénaline", def: "Permet de modifier la valeur d'énergie d'une action. Tu en gagnes 1 à chaque début de Manche. Elle se conserve d'une Manche à l'autre, et chaque Adrénaline encore en réserve à la fin de la partie rapporte 2 points de victoire." },
-  { icon: ICON("fatigue"), nom: "Fatigue", def: "La cible perd 1 carte non jouée, piochée au hasard et placée en Repos." },
+  { icon: ICON("adrenaline"), nom: "Adrénaline", def: "Permet de modifier la valeur d'énergie d'une action. Tu en gagnes 1 à chaque début de Manche. Elle se conserve d'une Manche à l'autre, et la réserve encore en main à la fin de la partie rapporte des points selon un barème progressif : 1 · 3 · 5 · 8 · 11 · 15 · 19 · 24 points pour 1 à 8 Adrénalines. Une petite réserve ne vaut presque rien, une grosse réserve vaut cher — garder deux jetons par négligence ne paie pas, thésauriser sur toute la partie paie." },
+  { icon: ICON("fatigue"), nom: "Fatigue", def: "La cible perd 1 carte non jouée, piochée au hasard et placée en Repos. À sa défense : elle peut donner 1 Adrénaline à l'attaquant pour reprendre la carte aussitôt. Le tirage est fait AVANT le choix — elle voit ce qu'elle perd, sinon ce ne serait pas un choix mais un pari." },
   { icon: ICON("perimetre"), nom: "Périmètre", def: "Les 8 cases autour de ton Titan, utilisées pour le calcul d'énergie et la récupération." },
   { icon: ICON("repaire"), nom: "Repaire", def: "Ta réserve personnelle, où sont stockés les blocs et socles que tu collectes." },
   { icon: ICON("batiment"), nom: "Bâtiment", def: "Empilement de blocs colorés, jusqu'à 4 étages, sur une case bâtiment du plateau." },
   { icon: ICON("bloc_bleu"), nom: "Bloc de béton", def: "Ressource de base récupérable. Sa couleur decide de son barème de score. Peut s'empiler pour former un Amas. Un bloc au sol ne bloque aucun déplacement : un Titan le traverse et peut s'arrêter dessus sans le ramasser." },
-  { icon: ICON("amas"), nom: "Amas de béton", def: "Plusieurs Blocs de béton empilés sur une même case." },
+  { icon: ICON("amas"), nom: "Amas de béton", def: "Deux Blocs de béton ou plus empilés sur une même case — une tour de débris. Un Titan peut y monter avec son Mouvement gratuit, et elle tient : il l'a choisie. Le reste dépend du GESTE. On la PERCUTE (une charge, un Titan projeté dessus) : elle bascule DANS L'AXE de la percussion, chaque débris partant d'autant de cases que sa hauteur dans le tas — sans condition d'énergie, le Seuil 4 ne commande plus rien ici. On SAUTE dessus (Boing Boing) : elle s'ÉCROULE autour, sur les 8 cases voisines, au choix du joueur. Un Titan qui y arrive sans l'avoir choisi et sans qu'elle bascule la fait tomber sous lui." },
   { icon: ICON("titan"), nom: "Titan", def: "Le personnage que tu incarnes : un colosse qui détruit BIG CITY." },
   { icon: ICON("socle"), nom: "Socle", def: "Placé sous chaque bâtiment à sa construction. Sa valeur est fixe, même si le bâtiment perd des blocs ensuite." },
   { icon: ICON("rebond"), nom: "Arrêt faute de puissance", def: "Un élément qui percute un bâtiment ou atteint un bord de plateau sans l'énergie du Seuil 4 s'arrête net, sur une case adjacente à la fois à celle où il était et à celle qu'il visait. Il ne repart pas en sens inverse." },
   { icon: ICON("projection"), nom: "Projection", def: "Un TITAN qui arrive sur une case occupée pousse ce qui s'y trouve, d'un nombre de cases égal à l'énergie restante, et toujours d'au moins 1 case même s'il ne lui reste qu'une énergie de 1. Un DÉBRIS en vol, lui, ne pousse pas ce qu'il croise : il s'empile dessus et forme un Amas. La chaîne de poussée peut se poursuivre de proche en proche, et chaque Titan DISTINCT TOUCHÉ rapporte 1 Bagarre à l'initiateur, qu'il ait été déplacé ou non — mais un Titan déjà en mouvement dans la réaction n'est jamais poussé une seconde fois." },
-  { icon: ICON("amas"), nom: "Formation d'Amas", def: "Bloc + Bloc = Amas, Bloc + Amas = Amas. Un débris projeté qui rencontre du béton au sol s'arrête dessus et s'y empile : il ne le chasse pas plus loin." },
+  { icon: ICON("amas"), nom: "Formation d'Amas", def: "Bloc + Bloc = Amas, Bloc + Amas = Amas. Un DÉBRIS projeté qui rencontre du béton au sol s'arrête dessus et s'y empile : il ne le chasse pas plus loin. Un TITAN projeté, lui, RENVERSE le tas dans l'axe de son vol s'il lui reste de l'énergie, et prend la case ; à bout de course il monte dessus, et la tour lui tombe sous les pieds. Le béton s'empile, le Titan bouscule." },
   { icon: ICON("titan"), nom: "Hors de BIG CITY", def: "Un Titan poussé hors du plateau réapparaît de l'autre côté et attend SON tour pour rentrer, jamais avant. Seul l'axe par lequel il est sorti boucle : sorti par la gauche depuis la ligne G, il revient en G9 ; sorti par un coin, où les deux axes dépassent, il revient au coin opposé. Sa rentrée lui coûte 1 case de son Mouvement gratuit, et 1 case de plus par obstacle à contourner." },
   { icon: ICON("detonateur"), nom: "Détonateur", def: "Désigne le Titan qui commence la Manche. Passe au joueur suivant à chaque Manche." },
 ];
@@ -41,7 +41,7 @@ export const BADGES = [
   {
     code: "→",
     nom: "Où va le bloc perdu",
-    def: "Tout Casser : au sol dans les deux cas (DIL comme RAGE). Tête en Avant : DIL au sol, RAGE dans le Repaire de l'attaquant. Boing Boing : DIL au sol, RAGE dans le Repaire de l'attaquant. Graouhhh : au sol, cette carte n'a pas de RAGE. Faut Pas Me Chauffer : dans le Repaire de l'attaquant dans les deux cas. « Au sol » veut dire sur la case où la cible a encaissé le coup, AVANT sa projection éventuelle — le bloc y redevient ramassable par n'importe qui. Un Socle perdu en Dilemme suit la même route et conserve sa valeur.",
+    def: "Tout Casser : au sol (cette carte n'a plus que le Dilemme, au Seuil 4 — sous le seuil elle ne vole rien). Tête en Avant : DIL au sol, RAGE dans le Repaire de l'attaquant. Boing Boing : DIL au sol, RAGE dans le Repaire de l'attaquant. Graouhhh : au sol, cette carte n'a pas de RAGE. Faut Pas Me Chauffer : dans le Repaire de l'attaquant dans les deux cas. « Au sol » veut dire sur la case où la cible a encaissé le coup, AVANT sa projection éventuelle — le bloc y redevient ramassable par n'importe qui. Un Socle perdu en Dilemme suit la même route et conserve sa valeur.",
     color: "#16E08C",
   },
 ];
@@ -65,8 +65,8 @@ export const CARTES = [
     effets: [
       "Bâtiment (Seuil 4) : casse 1 bloc du haut, projeté. +1 Destruction.",
       "Bloc libre : projeté d'autant de cases que l'énergie transmise.",
-      "Amas (Seuil 4) : Patatras, éjection du haut vers le bas.",
-      "Titan touché : DIL, ou RAGE au Seuil 4. Déplacé, +1 Bagarre.",
+      "Amas : Patatras, éjection du haut vers le bas. Plus de Seuil 4 — percuter un tas le fait basculer quelle que soit l'énergie.",
+      "Titan touché : déplacé, +1 Bagarre. Sous le Seuil 4, AUCUN vol. À 4 ou plus, un Dilemme — cette carte n'a pas de RAGE.",
     ],
     note: "🛡 Immunité : tu ne peux pas être projeté par ton propre Tout Casser. Un élément qui revient sur ta case s'y arrête immédiatement. 🎯 Un bloc arraché par ricochet se pose où TU veux, parmi les cases autour du bâtiment touché.",
   },
@@ -79,7 +79,7 @@ export const CARTES = [
     resume: "Tu fonces en ligne droite sur 3 cases (+1 par Adrénaline dépensée).",
     effets: [
       "Bâtiment 1 bloc : arrêt, +1 Destruction.",
-      "Bâtiment plus haut : le bloc du dessous est projeté en direction opposée.",
+      "Bâtiment plus haut (Seuil 4) : le bloc du dessous est projeté DANS L'AXE de la charge, jamais à contre-sens.",
       "Bloc libre : récupéré, tu prends sa place et tu t'arrêtes.",
       "Titan touché : DIL, ou RAGE au Seuil 4. +1 Bagarre.",
     ],
@@ -171,9 +171,13 @@ export const BAREME_VERT = {
   detail: "Ne suit aucun barème. Chaque bloc Vert vaut +1 case, au choix, sur le barème d'une couleur ou sur une Piste ADN.",
 };
 
+/* `trait` désigne un pictogramme du jeu d'icônes plutôt qu'un émoji : les
+   deux trophées sont affichés ailleurs dans l'interface (bandeau des Titans,
+   tableau de décompte) et doivent s'y reconnaître au même signe. Le livret
+   était le dernier endroit à les dessiner autrement. */
 export const TROPHEES = [
-  { pts: "+5", icon: "🌈", nom: "Arc-en-ciel", def: "1er à posséder 1 bloc de chaque couleur. Attribué en cours de partie." },
-  { pts: "+5", icon: "🗿", nom: "Collectionneur", def: "Plus grand nombre de socles (pas la valeur). Égalité = valeur la plus haute, puis divisé. Fin de partie." },
+  { pts: "+5", trait: "arcenciel", nom: "Arc-en-ciel", def: "1er à posséder 1 bloc de chaque couleur. Attribué en cours de partie." },
+  { pts: "+5", trait: "socle", nom: "Collectionneur", def: "Plus grand nombre de socles (pas la valeur). Égalité = valeur la plus haute, puis divisé. Fin de partie." },
 ];
 
 export const PISTES_ADN = [

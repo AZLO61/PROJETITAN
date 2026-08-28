@@ -35,6 +35,11 @@ describe("Ramassage après un DIL tranché", () => {
     const user = userEvent.setup();
     render(<Harnais />);
     await user.click(screen.getByRole("button", { name: /Lancer la partie/ }));
+  /* Mise en place dépassée (ruling du 2026-08-28) : à 4 humains, la partie
+     s'ouvre désormais sur le placement des Titans, un clic par joueur. Ce
+     test-ci pose lui-même les positions qu'il veut examiner, la mise en
+     place n'est donc pas son sujet — on la solde d'un coup. */
+  act(() => vmCourant.terminerPlacement());
     const [attackerId, targetId] = vmCourant.titanState.ordreJeu;
 
     act(() => {

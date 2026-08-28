@@ -5,7 +5,7 @@ import {
 } from "./rulesContent.js";
 import BlockIcon from "../BlockIcon.jsx";
 import { T, marquee, label, prose } from "../theme.js";
-import Icon from "../icons.jsx";
+import Icon, { RainbowIcon } from "../icons.jsx";
 
 /* ============================================================
    PAGE RÈGLES — version numérique du livret V36
@@ -453,6 +453,19 @@ function SectionTransversales() {
           rencontre du béton s'arrête dessus et forme un Amas. Bloc + Bloc = Amas, Bloc + Amas =
           Amas. Seule la cible directement frappée par une carte est projetée.
         </div>
+        <div style={{ marginTop: 10 }}>
+          <strong style={{ color: C.m1 }}>Une tour de débris tient si on l'a choisie.</strong>{" "}
+          Un débris au sol ne gêne personne : on le traverse, on s'arrête dessus, on ne le ramasse
+          pas pour autant. Dès qu'ils sont <strong style={{ color: C.y1 }}>deux ou plus</strong>,
+          c'est un Amas — une tour. Un Titan peut y grimper avec son{" "}
+          <strong>Mouvement gratuit</strong>, et elle tient sous lui.
+          <br />
+          En revanche, s'il y arrive <strong style={{ color: C.y1 }}>sans l'avoir choisi</strong> —
+          projeté par une chaîne, poussé par une charge, replié dessus — la tour{" "}
+          <strong>bascule</strong> : ses débris tombent un par un sur les cases autour, et chaque
+          Titan touché est bousculé d'une case, au profit de qui a provoqué la chute. C'est le même
+          Écroulement que déclenche un Boing Boing qui atterrit sur un tas.
+        </div>
       </Panel>
       <Panel style={{ marginBottom: 10 }}>
         <strong style={{ color: C.m1 }}>🥊 Poussé hors du ring —</strong> un Titan projeté au-delà du
@@ -631,8 +644,9 @@ function SectionScoring() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12 }}>
         {TROPHEES.map((t) => (
           <Panel key={t.nom}>
-            <div style={{ fontFamily: "'Bowlby One', sans-serif", color: C.y1, marginBottom: 4 }}>
-              {t.icon} {t.nom} <span style={{ color: C.g1 }}>{t.pts}</span>
+            <div style={{ fontFamily: "'Bowlby One', sans-serif", color: C.y1, marginBottom: 4, display: "flex", alignItems: "center", gap: 8 }}>
+              {t.trait === "arcenciel" ? <RainbowIcon size={19} /> : <Icon name={t.trait} size={19} />}
+              {t.nom} <span style={{ color: C.g1 }}>{t.pts}</span>
             </div>
             <div style={{ fontSize: ".82rem", color: C.muted, lineHeight: 1.45 }}>{t.def}</div>
           </Panel>

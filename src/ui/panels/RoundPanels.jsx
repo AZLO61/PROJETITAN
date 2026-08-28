@@ -4,13 +4,15 @@ import React, { Suspense, lazy } from "react";
 // télécharge jamais Three.js. Aucun changement de rendu, seul le moment du
 // téléchargement bouge.
 const Board3D = lazy(() => import("../board3d/Board3D.jsx"));
-import BlockStockBar from "../cards/BlockStockBar.jsx";
 import TitanResourceBand from "../titans/TitanResourceBand.jsx";
 import { TitanIcon, TitanBadge } from "../titans/TitanVisuals.jsx";
+import { TITAN_COLORS } from "../titans/constants.js";
 import { COLOR_HEX, ROWS, isBuildingCell, isSocleMarker, socleValue } from "../../domain/index.js";
 import { BLOCK_NAME } from "../blockNames.js";
 import { btnStyle, cancelBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
+// Le Socle n'a pas d'icône de bloc : il porte la sienne, celle du jeu de traits.
+import Icon from "../icons.jsx";
 import { T, readout, eclaircir, ECLAT_2D, BLOC_SANS_RETOUCHE } from "../theme.js";
 
 /* ── LE SOL DE BIG CITY ────────────────────────────────────
@@ -102,8 +104,6 @@ export default function RoundPanels({ vm }) {
     currentRepli,
     choisirRepli,
     ecroulementPoserDebris,
-    ecroulementAnnulerDernier,
-    ecroulementValider,
     state,
     titanState,
     mancheNumber,
@@ -171,16 +171,6 @@ export default function RoundPanels({ vm }) {
      `el` est l'élément DOM cliqué, dont la composition d'un bâtiment tire sa
      position à l'écran. La 3D n'en a pas : elle passe null, et ce seul
      affichage-là reste propre à la 2D. */
-  /* Ordre d'initiative REEL de la Manche : l'ordre de jeu pivote sur le
-     Detonateur, qui ouvre chaque round (cf. `advanceActionRound`). C'est lui
-     que le panneau de stock affiche, pas l'ordre fige de la partie. */
-  const ordreInitiative = (() => {
-    const ordre = titanState?.ordreJeu ?? [];
-    const depart = ordre.indexOf(titanState?.detonateur);
-    if (depart <= 0) return ordre;
-    return [...ordre.slice(depart), ...ordre.slice(0, depart)];
-  })();
-
   const clicCase = (key, el = null) => {
     /* Partie finie : le plateau reste CONSULTABLE mais ne se joue plus
        (point 4.4 du 2026-08-19). On saute tous les modes d'action et on ne
@@ -189,7 +179,18 @@ export default function RoundPanels({ vm }) {
     if (vm.gameOver) {
       const fin = state.board[key];
       if (fin && fin.blocks.length > 0) { openComposition(key, el); return; }
-      if (titansByCell[key]) setSelectedTitanId(titansByCell[key]);
+      /* RECLIQUER LE TITAN SÉLECTIONNÉ LE DÉSÉLECTIONNE — Nikola, 2026-08-28 :
+       « j'aimerais pouvoir désélectionner un Titan au lieu d'avoir forcément un
+       périmètre affiché, parce que je dois toujours en avoir 1 de sélectionné ».
+
+       Le périmètre teinte neuf cases en permanence. C'est ce qu'on veut quand on
+       prépare son coup, et ça gêne quand on veut juste LIRE le plateau — compter
+       les bâtiments debout, repérer un tas. Le même clic sert donc aux deux
+       sens, comme partout ailleurs dans ce jeu (une carte du chemin de Boing
+       Boing, une option de Dilemme). */
+    if (titansByCell[key]) {
+      setSelectedTitanId((actuel) => (actuel === titansByCell[key] ? null : titansByCell[key]));
+    }
       return;
     }
     // DIL/RAGE et Faut Pas Me Chauffer se tranchent dans leur bandeau dédié,
@@ -199,6 +200,19 @@ export default function RoundPanels({ vm }) {
     // avant que la décision ne soit tranchée — l'attaquant perdait alors la
     // fenêtre pour récupérer son bloc au tour (demande de Nikola).
     if (vm.decisionBloquante === "dil" || vm.decisionBloquante === "fpmc") return;
+    /* PLACEMENT D'OUVERTURE : rien d'autre ne se joue tant que les quatre
+       Titans ne sont pas posés. Le clic ne fait donc qu'une chose, et
+       seulement sur un emplacement d'angle encore libre. */
+    if (vm.decisionBloquante === "placement") {
+      if (vm.placementCells.includes(key)) vm.placerTitanJoueur(key);
+      return;
+    }
+    /* Tout Casser élément par élément : le clic désigne LEQUEL part maintenant.
+       Rien d'autre n'est cliquable tant que la file n'est pas vide. */
+    if (vm.decisionBloquante === "toutcasser") {
+      if (vm.toutCasserFile?.cibles.some((c) => c.key === key)) vm.toutCasserResoudre(key);
+      return;
+    }
     if (currentRepli) { if (currentRepli.cases.includes(key)) choisirRepli(key); return; }
     if (ecroulement) { if (ecroulementCells.includes(key)) ecroulementPoserDebris(key); return; }
     if (jnpMode) { if (jnpPool.has(key)) jnpToggleCell(key); return; }
@@ -217,20 +231,62 @@ export default function RoundPanels({ vm }) {
     }
     const cellData = state.board[key];
     if (cellData && cellData.blocks.length > 0) { openComposition(key, el); return; }
-    if (titansByCell[key]) setSelectedTitanId(titansByCell[key]);
+    /* RECLIQUER LE TITAN SÉLECTIONNÉ LE DÉSÉLECTIONNE — Nikola, 2026-08-28 :
+       « j'aimerais pouvoir désélectionner un Titan au lieu d'avoir forcément un
+       périmètre affiché, parce que je dois toujours en avoir 1 de sélectionné ».
+
+       Le périmètre teinte neuf cases en permanence. C'est ce qu'on veut quand on
+       prépare son coup, et ça gêne quand on veut juste LIRE le plateau — compter
+       les bâtiments debout, repérer un tas. Le même clic sert donc aux deux
+       sens, comme partout ailleurs dans ce jeu (une carte du chemin de Boing
+       Boing, une option de Dilemme). */
+    if (titansByCell[key]) {
+      setSelectedTitanId((actuel) => (actuel === titansByCell[key] ? null : titansByCell[key]));
+    }
   };
 
   /* Les cases que le plateau 3D doit allumer, avec leur couleur. Mêmes
      ensembles que ceux qui peignent la grille 2D juste en dessous : ce que
      le joueur voit en 3D ne peut pas diverger de ce que le moteur accepte. */
+  /* LA COULEUR SUIT L'ÉLÉMENT, CASE PAR CASE (Nikola, 2026-08-28). Même
+     apparence et même intensité que le jaune des débris — seul le ton change,
+     pour dire CE QUI est passé là :
+       · débris → jaune, comme avant ;
+       · Titan  → sa couleur ;
+       · faille → violet du téléporteur, quand un saut l'a empruntée.
+     Le `73` final est l'alpha hexadécimal, soit 0,45 : exactement celui du jaune
+     d'origine, pour qu'aucun des trois ne crie plus fort que les autres. */
+  const traceParCase = new Map((traceVol || []).map((e) => [e.key, e]));
+  const teinteTrace = (entree) => {
+    if (entree?.teleporteur) return "rgba(184,140,255,.45)";
+    const accent = entree?.titanId ? TITAN_COLORS[entree.titanId]?.accent : null;
+    return accent ? `${accent}73` : "rgba(255,217,61,.45)";
+  };
+  const teinteTrace3D = (entree) => {
+    if (entree?.teleporteur) return 0xb88cff;
+    const accent = entree?.titanId ? TITAN_COLORS[entree.titanId]?.accent : null;
+    return accent ? Number(`0x${accent.slice(1)}`) : 0xffd93d;
+  };
+
   const cellulesActives = (() => {
     const out = [];
     const add = (key, couleur, opacite) => out.push({ key, couleur, opacite });
     /* La trace de vol se dessine dans les DEUX vues : elle est ajoutee en
        PREMIER pour que les cases d'action, ajoutees ensuite, restent visibles
        par-dessus si les deux se superposent. */
-    if (traceVol && traceVol.length > 0) traceVol.forEach((k) => add(k, 0xffd93d, 0.7));
-    if (currentRepli) {
+    /* La trace prend la couleur du Titan quand c'est LUI qui s'est déplacé, le
+       jaune générique quand c'est un élément projeté — même intensité dans les
+       deux cas (Nikola, 2026-08-28). */
+    if (traceVol && traceVol.length > 0) {
+      traceVol.forEach((e) => add(e.key, teinteTrace3D(e), 0.7));
+    }
+    if (vm.decisionBloquante === "placement") {
+      // Jaune du tour : c'est une action primaire, la seule ouverte.
+      vm.placementCells.forEach((k) => add(k, 0xffd93d, 0.55));
+    } else if (vm.decisionBloquante === "toutcasser") {
+      // Orange de la percussion : ce sont les cibles qui attendent leur tour.
+      (vm.toutCasserFile?.cibles || []).forEach((c) => add(c.key, 0xfb923c, 0.5));
+    } else if (currentRepli) {
       currentRepli.cases.forEach((k) =>
         add(k, 0xfb923c, k === currentRepli.defaut ? 0.75 : 0.45));
     } else if (ecroulement) {
@@ -291,46 +347,15 @@ export default function RoundPanels({ vm }) {
       )}
 
 
-      {/* ── BANDEAU RESSOURCES TITANS ── */}
-      <TitanResourceBand
-        titans={titanState.players}
-        selectedTitanId={selectedTitanId}
-        onSelect={setSelectedTitanId}
-        activePlayerId={activePlayerId}
-        phase={phase}
-        titanDisplayName={titanDisplayName}
-        titanModes={titanModes}
-        titanProfiles={titanProfiles}
-        profilsReveles={profilsReveles}
-        revelerProfil={revelerProfil}
-        profileLabel={profileLabel}
-        waitingNextTitan={waitingNextTitan}
-        titansEnAttente={titansEnAttente}
-        rainbowWinnerId={vm.rainbowWinnerId}
-        phaseValidated={vm.phaseValidated}
-        detonateurId={titanState.detonateur}
-        validatePhase={vm.validatePhase}
-        canValidatePhase={vm.canValidatePhase}
-        getPhaseBlockReason={vm.getPhaseBlockReason}
-      />
+      {/* LA BANDE DES TITANS A QUITTÉ CETTE COLONNE — Nikola, 2026-08-28.
+          Elle est montée dans la colonne des commandes (cf. TitanBandPanel,
+          monté par GameView) : elle n'avait jamais besoin de la largeur du
+          plateau, et elle lui prenait une hauteur entière. */}
 
-
-      {/* ── STOCK BLOCS ── */}
-      <BlockStockBar
-        board={state.board}
-        looseBlocks={looseBlocks}
-        mancheNumber={mancheNumber}
-        totalManches={manchesMaxPartie}
-        detonateurName={titanDisplayName(titanState.detonateur)}
-        occupiedCount={occupiedCount}
-        apocalypseThreshold={apocalypseThreshold}
-        ordreInitiative={ordreInitiative}
-        phaseValidated={vm.phaseValidated}
-        titanModes={titanModes}
-        detonateurId={titanState.detonateur}
-        titanDisplayName={titanDisplayName}
-      />
-
+      {/* LE STOCK DE BLOCS A QUITTÉ CETTE COLONNE — Nikola, 2026-08-28. Il
+          prenait une rangée entière au-dessus du plateau pour cinq jauges qui
+          n'ont pas besoin de sa largeur. Il vit désormais dans la colonne des
+          commandes, en deux colonnes compactes (cf. GameView). */}
 
       {/* ── RÉPARTITION D'UN AMAS ÉCROULÉ ──
           Boing Boing sur un tas : le joueur place les débris un par un, et
@@ -347,25 +372,72 @@ export default function RoundPanels({ vm }) {
             <strong style={{ color: "#ffb877", fontFamily: "'Bowlby One', sans-serif" }}>
               🧱 Écroulement de l'Amas
             </strong>
+            {/* QUEL DÉBRIS, PRÉCISÉMENT — Nikola, 2026-08-28 : « quand je
+                saute sur un amas de débris, je ne sais pas quel débris
+                précisément je mets à quelle place ».
+
+                Le panneau annonçait « Débris 2 sur 3 » : un rang, pas un
+                objet. Or les débris d'un Amas ne se valent pas — un Rouge
+                vaut 3 au barème, un Socle porte un chiffre, et c'est
+                justement ce qui décide de la case où on l'envoie. La pile
+                se vide du SOMMET vers le bas (même ordre que le Patatras),
+                donc l'ordre n'est pas au choix : il faut voir ce qui tombe.
+
+                La file complète est affichée, celui qu'on place est en
+                relief, ceux déjà tombés sont éteints avec leur case. */}
             <span style={{ color: "rgba(255,255,255,.75)" }}>
-              Débris {Math.min(ecroulement.choix.length + 1, ecroulement.blocs.length)} sur {ecroulement.blocs.length} :
-              clique la case où il tombe.
+              Clique la case où tombe ce débris :
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              {ecroulement.blocs.map((bloc, i) => {
+                const place = i < ecroulement.choix.length;
+                const courant = i === ecroulement.choix.length;
+                return (
+                  <span
+                    key={i}
+                    title={
+                      isSocleMarker(bloc)
+                        ? `Socle de valeur ${socleValue(bloc)}${place ? ` — posé en ${ecroulement.choix[i]}` : ""}`
+                        : `${BLOCK_NAME[bloc] ?? bloc}${place ? ` — posé en ${ecroulement.choix[i]}` : ""}`
+                    }
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 3,
+                      padding: courant ? "2px 6px" : "2px 4px",
+                      border: `2px solid ${courant ? "#ffb877" : "transparent"}`,
+                      borderRadius: 8,
+                      opacity: place ? 0.4 : 1,
+                      cursor: "help",
+                    }}
+                  >
+                    {isSocleMarker(bloc)
+                      ? <Icon name="socle" size={17} style={{ color: "#ffb877" }} />
+                      : <BlockIcon color={bloc} size={17} />}
+                    {place && (
+                      <span style={readout("0.6rem", "rgba(255,255,255,.55)")}>
+                        {ecroulement.choix[i]}
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
             </span>
           </div>
           <div style={{ marginTop: 6, color: "rgba(255,255,255,.6)", fontSize: ".74rem" }}>
             Un débris qui tombe sur un Titan le pousse de {ecroulement.energie} case(s) et te rapporte la Bagarre.
             {ecroulementCells.length > 0 && ecroulement.choix.length < ecroulement.blocs.length
-              && " Les cases déjà servies ne sont proposées que s'il n'en reste plus de vierge."}
+              && " Chaque clic pose le débris et applique ses effets tout de suite — les cases suivantes se recalculent sur le plateau qui en résulte. Les cases déjà servies ne sont proposées que s'il n'en reste plus de vierge."}
           </div>
           <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-            {ecroulement.choix.length > 0 && (
-              <button onClick={ecroulementAnnulerDernier} style={btnStyle()}>↩️ Annuler le dernier</button>
-            )}
-            {ecroulement.choix.length === ecroulement.blocs.length && (
-              <button onClick={ecroulementValider} style={btnStyle("#16E08C", "#00C97A", true)}>
-                ✅ Valider l'écroulement
-              </button>
-            )}
+            {/* NI « ANNULER LE DERNIER » NI « VALIDER » — depuis le 2026-08-28,
+                chaque clic pose son débris ET applique ses effets sur-le-champ
+                (Nikola : « on clique juste pour l'ordre et ça s'applique cas par
+                cas »). Il n'y a donc plus de choix en attente à confirmer, et
+                plus rien à défaire sélectivement : un débris tombé sur un Titan
+                l'a déplacé, et a pu faire basculer une tour derrière.
+
+                L'annulation générale du tour reste la bonne porte de sortie :
+                l'instantané est pris au tout premier débris, elle défait donc
+                la répartition entière d'un coup. */}
             {/* Sortie de secours. Sans elle, un Amas cerné de bâtiments
                 encore debout n'offre aucune case cliquable, « Valider »
                 reste masqué tant que tous les débris ne sont pas placés et
@@ -391,8 +463,21 @@ export default function RoundPanels({ vm }) {
            rentrera (demande de Nikola). La grille gagne donc une piste de
            chaque côté, en dehors du 9×9, où l'on pose son icône en
            translucide. Elles restent vides tant que personne n'est sorti. */
+        /* PLUSIEURS TITANS PEUVENT ATTENDRE SUR LA MÊME CASE DE REBORD.
+           Bug remonté par Nikola le 2026-08-28 : « j'ai fait exprès de faire
+           sortir 2 Titans sur l'exacte même case de rebord, il n'y avait qu'une
+           des 2 icônes visible ».
+
+           `cell` d'un Titan sorti désigne PAR OÙ IL RENTRERA, pas où il est — et
+           rien n'interdit à deux Titans de viser la même entrée, puisqu'ils ne
+           sont ni l'un ni l'autre sur le plateau. C'est même courant : deux
+           poussades dans le même axe sortent par le même bord. L'index écrasait
+           donc le premier avec le second, et un joueur croyait un Titan
+           disparu. Un tableau par case, et la gouttière les empile. */
         const attenteParCase = {};
-        (titansEnAttente || []).forEach((t) => { attenteParCase[t.cell] = t; });
+        (titansEnAttente || []).forEach((t) => {
+          (attenteParCase[t.cell] ||= []).push(t);
+        });
         /* UN TITAN N'ATTEND QUE DANS UNE SEULE GOUTTIÈRE.
            Les quatre pistes se recoupent aux coins : A1 appartient à la fois
            à la gouttière haute (colonne 1) et à celle de gauche (ligne A).
@@ -410,15 +495,50 @@ export default function RoundPanels({ vm }) {
           if (col === 9) return "droite";
           return cle[0] === "A" ? "haut" : "bas";
         };
+        /* LES GOUTTIÈRES NE PRENNENT DE LA PLACE QUE QUAND ELLES SERVENT.
+           Nikola, 2026-08-27 : « le plateau 2D est trop loin des chiffres
+           1 2 3 4 5 6 7 8 9, rapproche-le de 50 % — ça va permettre aussi de
+           mieux voir quel Titan peut être en attente en bas du plateau. »
+
+           Les quatre pistes d'attente étaient figées à 24 px, occupées ou
+           non. Or elles sont VIDES la plupart du temps : personne n'est hors
+           de BIG CITY. La ligne des numéros se retrouvait donc à 28 px du
+           plateau (2 + 24 + 2) quand la colonne des lettres, elle, n'en était
+           qu'à 20 — le repère horizontal décroché, le vertical collé.
+
+           Une gouttière vide tombe donc à 12 px, la moitié, ce qui remet les
+           numéros à la distance des lettres. Une gouttière OCCUPÉE s'ouvre en
+           grand, à 30 px : l'icône du Titan qui attend n'y est plus à
+           l'étroit, et c'est justement le moment où l'on veut la voir. */
+        const zonesOccupees = new Set(
+          Object.keys(attenteParCase).map((cle) => zoneDe(cle))
+        );
+        /* La gouttière occupée passe de 30 à 34 px et l'icône de 26 à 30
+           (Nikola, 2026-08-28 : « ajuste les visuels […] ou icône de Titan en
+           dehors du plateau, car le plateau a grandi »). À 26 px contre une case
+           de 68, le Titan qui attend son retour se lisait comme une vignette
+           décorative alors que c'est une information de tour. */
+        const piste = (zone) => (zonesOccupees.has(zone) ? 34 : 12);
         const Gouttiere = ({ cle, zone }) => {
-          const t = attenteParCase[cle];
-          if (!t || zoneDe(cle) !== zone) return <div />;
+          const attendants = attenteParCase[cle];
+          if (!attendants || attendants.length === 0 || zoneDe(cle) !== zone) return <div />;
+          /* À plusieurs, les icônes se serrent et se chevauchent légèrement
+             plutôt que de rétrécir : la gouttière ne fait que 34 px, et deux
+             icônes de 15 px seraient illisibles. Le chevauchement dit « ils
+             sont deux au même endroit », ce qui est précisément le cas. */
+          const seul = attendants.length === 1;
           return (
             <div
-              title={`${titanDisplayName(t.id)} attend hors de BIG CITY — rentre par ${cle} au début de son tour`}
-              style={{ display: "grid", placeItems: "center", opacity: 0.5 }}
+              title={attendants
+                .map((t) => `${titanDisplayName(t.id)} attend hors de BIG CITY — rentre par ${cle} au début de son tour`)
+                .join(" · ")}
+              style={{ display: "flex", placeItems: "center", justifyContent: "center", opacity: 0.5 }}
             >
-              <TitanIcon titanId={t.id} size={26} />
+              {attendants.map((t, i) => (
+                <span key={t.id} style={{ marginLeft: i === 0 ? 0 : -10, display: "inline-flex" }}>
+                  <TitanIcon titanId={t.id} size={seul ? 30 : 24} />
+                </span>
+              ))}
             </div>
           );
         };
@@ -430,16 +550,35 @@ export default function RoundPanels({ vm }) {
            9×9 se lisait comme une grille d'aplats très plats, où les icônes de
            blocs et les badges de Titan se noyaient. Chaque case tient
            désormais sa hauteur de sa largeur (`aspectRatio`), et la grille est
-           bornée pour que la case ne dépasse pas ~52 px — au-delà, le plateau
-           repousse les contrôles hors de l'écran sur une tablette. */
+           bornée pour que la case ne dépasse pas la valeur ci-dessous —
+           au-delà, le plateau repoussait les contrôles hors de l'écran sur une
+           tablette.
+
+           PLAFOND RELEVÉ DE 52 À 68 PX le 2026-08-28 (« agrandis le plateau »).
+           Ce que 52 protégeait, c'était la place des CONTRÔLES sous le plateau
+           en colonne unique. Depuis le réagencement, cette colonne ne porte
+           plus que le plateau : la bande des Titans est passée à côté, le
+           décompte et le journal se posent par-dessus à la demande. Le
+           plafond n'a donc plus rien à protéger sur grand écran. Il tient
+           quand même : sous 1100 px la grille redevient une pile, et
+           `minmax(30px, 1fr)` laisse la case rétrécir librement — 68 est un
+           plafond, jamais une largeur imposée. */
+        const CASE_MAX = 68;
         return (
       <div className="titan-grid" style={{
         display: "grid",
-        gridTemplateColumns: "24px 18px repeat(9, minmax(30px, 1fr)) 24px",
+        /* REPÈRES SYMÉTRIQUES — Nikola, 2026-08-28 : « soit ABCDEFGHI est trop
+           collé au plateau, soit les chiffres sont trop éloignés ». Les deux, en
+           fait, et pour la même raison : la colonne des lettres était posée
+           APRÈS la gouttière gauche, donc à 2 px de la grille, tandis que la
+           ligne des chiffres était posée AVANT la gouttière haute, donc à la
+           largeur de celle-ci. Les repères encadrent désormais les gouttières
+           des deux côtés : même écart au plateau, quelle que soit l'axe. */
+        gridTemplateColumns: `18px ${piste("gauche")}px repeat(9, minmax(30px, 1fr)) ${piste("droite")}px`,
         gridAutoRows: "auto",
-        gridTemplateRows: "18px 24px repeat(9, auto) 24px",
+        gridTemplateRows: `18px ${piste("haut")}px repeat(9, auto) ${piste("bas")}px`,
         gap: 2, marginBottom: 14,
-        maxWidth: 24 + 18 + 24 + 9 * 52 + 12 * 2,
+        maxWidth: piste("gauche") + 18 + piste("droite") + 9 * CASE_MAX + 12 * 2,
         marginLeft: "auto", marginRight: "auto",
         overflowX: "auto",
       }}>
@@ -455,8 +594,8 @@ export default function RoundPanels({ vm }) {
         <div />
         {ROWS.map((r) => (
           <React.Fragment key={r}>
-            <Gouttiere cle={`${r}1`} zone="gauche" />
             <div style={{ display: "grid", placeItems: "center", ...readout("0.62rem", T.dim) }}>{r}</div>
+            <Gouttiere cle={`${r}1`} zone="gauche" />
             {[1,2,3,4,5,6,7,8,9].map((c) => {
               const key = r + c;
               const titan = titanCorners[key];
@@ -508,6 +647,15 @@ export default function RoundPanels({ vm }) {
               const repliSelectable = Boolean(currentRepli) && currentRepli.cases.includes(key);
               const repliDefaut = Boolean(currentRepli) && currentRepli.defaut === key;
               const repliCible = Boolean(currentRepli) && currentRepli.cible === key;
+              /* MISE EN PLACE D'OUVERTURE. La grille 2D ne lisait pas
+                 `cellulesActives` — celle-ci ne sert qu'à la vue 3D — et
+                 chaque mode d'action y a son propre test. Le placement
+                 n'avait donc AUCUNE surbrillance en 2D, là où la partie se
+                 joue (remonté par Nikola). */
+              const placementSelectable = vm.decisionBloquante === "placement"
+                && vm.placementCells.includes(key);
+              const tcSelectable = vm.decisionBloquante === "toutcasser"
+                && Boolean(vm.toutCasserFile?.cibles.some((c) => c.key === key));
 
               // Périmètre 2D : couleur du Titan sélectionné
               const perimAccent = tcSel ? tcSel.accent : "#FFD93D";
@@ -519,11 +667,16 @@ export default function RoundPanels({ vm }) {
                  resolution. Testee en premier : c'est un evenement bref, il
                  doit passer par-dessus les surlignages permanents, sinon il
                  disparait derriere le perimetre du Titan actif. */
-              const dansLaTrace = traceVol && traceVol.includes(key);
+              const entreeTrace = traceParCase.get(key);
 
               let cellBg;
-              if (dansLaTrace) {
-                cellBg = "rgba(255,217,61,.45)"; // jaune vif, le temps du vol
+              if (placementSelectable) {
+                // Jaune du tour : c'est l'action primaire, et la seule ouverte.
+                cellBg = "rgba(255,217,61,.30)";
+              } else if (tcSelectable) {
+                cellBg = "rgba(251,146,60,.28)"; // orange de la percussion
+              } else if (entreeTrace) {
+                cellBg = teinteTrace(entreeTrace);
               } else if (repliCible) {
                 cellBg = "rgba(239,68,68,.22)"; // la case qu'il n'a pas pu atteindre
               } else if (repliDefaut) {
@@ -579,7 +732,7 @@ export default function RoundPanels({ vm }) {
 
               // Cases sur lesquelles un clic declenche une ACTION (selectionner
               // un Titan n'en est pas une).
-              const estActionnable = repliSelectable || jnpSelectable || bbSelectable
+              const estActionnable = placementSelectable || tcSelectable || repliSelectable || jnpSelectable || bbSelectable
                 || teaSelectable || moveSelectable || recupSelectable || ecroulSelectable;
 
               return (
@@ -622,7 +775,15 @@ export default function RoundPanels({ vm }) {
                        d'un arret volontaire : on ne l'obtient pas par accident,
                        et le clic reste la voie immediate pour qui la veut tout
                        de suite. */
-                    if (!cellData || cellData.blocks.length === 0) return;
+                    /* UN TAS DE DÉBRIS S'INSPECTE COMME UN BÂTIMENT
+                       (Nikola, 2026-08-28 : « le survol d'un tas de débris,
+                       au bout d'une seconde, je dois avoir le détail comme
+                       pour un bâtiment »). Le survol ne s'ouvrait que sur du
+                       béton DEBOUT ; or ce qui traîne au sol est ce qu'on va
+                       ramasser, et un tas peut mêler trois couleurs et un
+                       Socle sans qu'aucune ne se voie à 30 px. */
+                    const tas = looseBlocks[key] || [];
+                    if ((!cellData || cellData.blocks.length === 0) && tas.length === 0) return;
                     const cible = e.currentTarget;
                     annulerAttenteSurvol();
                     survolTimerRef.current = setTimeout(() => {
@@ -660,9 +821,13 @@ export default function RoundPanels({ vm }) {
                        "@keyframes pulseAction" en bas du composant. */
                     animation: estActionnable ? "pulseAction 2.4s ease-in-out infinite" : undefined,
                     zIndex: hoverCell === key ? 55 : undefined,
-                    cursor: repliSelectable || jnpSelectable || bbSelectable || bbInPath || teaSelectable || moveSelectable || recupSelectable || titansByCell[key] ? "pointer" : "default",
+                    cursor: placementSelectable || tcSelectable || repliSelectable || jnpSelectable || bbSelectable || bbInPath || teaSelectable || moveSelectable || recupSelectable || titansByCell[key] ? "pointer" : "default",
                     background: cellBg,
-                    border: repliSelectable
+                    border: placementSelectable
+                      ? "2px solid #FFD93D"
+                      : tcSelectable
+                      ? "2px solid #FB923C"
+                      : repliSelectable
                       ? `2px ${repliDefaut ? "solid" : "dashed"} #fb923c`
                       : jnpIsSelected || bbIsSelected
                       ? "2px solid #16E08C"
@@ -786,12 +951,27 @@ export default function RoundPanels({ vm }) {
                         {/* Blocs libres au sol : meme icone que dans le stock
                             et le Repaire, pour qu'un bloc se reconnaisse
                             partout au meme dessin. */}
-                        <div style={{ position: "absolute", bottom: 1, left: 2, display: "flex", gap: 1, flexWrap: "wrap", maxWidth: "80%", alignItems: "center", zIndex: 4 }}>
-                          {colorBlocks.slice(-2).map((c, i) => (
-                            <BlockIcon key={i} color={c} size={16} />
+                        {/* TROIS DÉBRIS DE FRONT — Nikola, 2026-08-28 : « ajuste
+                            les visuels des débris car le plateau a grandi,
+                            j'aimerais qu'on puisse voir 3 débris à l'horizontale
+                            sur une case ».
+
+                            La case est passée de 52 à 68 px le même jour, et
+                            l'affichage n'avait pas suivi : deux icônes de 16 px
+                            puis un « +N » dès le troisième. Or trois est
+                            précisément le seuil qui compte — c'est à partir de
+                            deux qu'un tas existe, et la hauteur décide de la
+                            portée de la bascule. Trois icônes de 17 px et deux
+                            écarts de 1 px tiennent en 53 px : ça rentre, sans
+                            retour à la ligne (`flexWrap` retiré, il aurait poussé
+                            la troisième sous les deux autres au premier pixel
+                            manquant). */}
+                        <div style={{ position: "absolute", bottom: 1, left: 2, display: "flex", gap: 1, maxWidth: "94%", alignItems: "center", zIndex: 4 }}>
+                          {colorBlocks.slice(-3).map((c, i) => (
+                            <BlockIcon key={i} color={c} size={17} />
                           ))}
-                          {colorBlocks.length > 2 && (
-                            <span style={{ fontSize: "9px", color: "rgba(255,255,255,.75)", fontWeight: 700, lineHeight: "11px" }}>+{colorBlocks.length - 2}</span>
+                          {colorBlocks.length > 3 && (
+                            <span style={{ fontSize: "9px", color: "rgba(255,255,255,.75)", fontWeight: 700, lineHeight: "11px" }}>+{colorBlocks.length - 3}</span>
                           )}
                         </div>
                       </>
@@ -819,7 +999,21 @@ export default function RoundPanels({ vm }) {
       {/* Composition du bâtiment cliqué, en position fixe pour ne pas être
           tronquée par le défilement horizontal de la grille. Les blocs sont
           listés du haut vers le bas, avec les vraies icônes. */}
-      {hoverCell && hoverPos && state.board[hoverCell] && state.board[hoverCell].blocks.length > 0 && (
+      {hoverCell && hoverPos && (
+        (state.board[hoverCell] && state.board[hoverCell].blocks.length > 0)
+        || (looseBlocks[hoverCell] || []).length > 0
+      ) && (() => {
+        /* La même fiche sert au bâtiment DEBOUT et au tas au sol. Les deux
+           se lisent de haut en bas — le sommet d'abord, c'est-à-dire ce
+           qu'on prendra en premier — et le Socle n'apparaît que là où il
+           existe, sous un bâtiment. */
+        const bati = state.board[hoverCell];
+        const debout = bati && bati.blocks.length > 0;
+        const contenu = debout ? bati.blocks : (looseBlocks[hoverCell] || []);
+        const titre = debout
+          ? `${hoverCell} · socle ${bati.socle}`
+          : `${hoverCell} · ${contenu.length} débris au sol`;
+        return (
         <>
           {hoverSource === "clic" && (
             <div
@@ -839,19 +1033,24 @@ export default function RoundPanels({ vm }) {
             }}
           >
             <div style={{ fontSize: ".66rem", color: "#FFD93D", fontWeight: 700, marginBottom: 5, whiteSpace: "nowrap", textAlign: "center" }}>
-              {hoverCell} · socle {state.board[hoverCell].socle}
+              {titre}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {[...state.board[hoverCell].blocks].reverse().map((c, i) => (
+              {[...contenu].reverse().map((c, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}>
-                  <BlockIcon color={c} size={20} />
-                  <span style={{ fontSize: ".66rem", color: "rgba(255,255,255,.7)" }}>{BLOCK_NAME[c]}</span>
+                  {isSocleMarker(c)
+                    ? <Icon name="socle" size={20} style={{ color: "#FFD93D" }} />
+                    : <BlockIcon color={c} size={20} />}
+                  <span style={{ fontSize: ".66rem", color: "rgba(255,255,255,.7)" }}>
+                    {isSocleMarker(c) ? `Socle · valeur ${socleValue(c)}` : BLOCK_NAME[c]}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
         </>
-      )}
+        );
+      })()}
 
       {/* Popup de choix — bug remonté "2 débris différents sur la même
           case, je dois pouvoir choisir". N'apparaît que quand la case

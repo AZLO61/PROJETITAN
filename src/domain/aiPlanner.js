@@ -48,7 +48,8 @@
 ============================================================ */
 
 import {
-  POINTS_PAR_ADRENALINE,
+  valeurMarginaleAdrenaline,
+  computeFinalScore,
   PORTEE_BOING_BOING,
   appliquerReplElement,
   getBoingBoingReach,
@@ -57,7 +58,6 @@ import {
   getEcroulementCells,
   resolveEcroulementAmas,
   getFPMCTargets,
-  getProgrammedSum,
   getJeNePartagePasPool,
   getMovementReachable,
   getRecuperationPool,
@@ -73,24 +73,75 @@ import {
   resolveTeteEnAvant,
   resolveToutCasser,
 } from "./gameRules.js";
-import { chooseAmongBest, evaluatePosition, makeProfile } from "./aiEvaluation.js";
+import { chooseAmongBest, evaluatePosition, gagnantArcEnCiel, makeProfile, reglagesDe } from "./aiEvaluation.js";
 
 const DIRS = Object.freeze([
   { dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 },
   { dr: -1, dc: -1 }, { dr: -1, dc: 1 }, { dr: 1, dc: -1 }, { dr: 1, dc: 1 },
 ]);
 
-// Plafond des mises d'Adrénaline explorées. Le livret n'en fixe aucun,
-// mais chaque point supplémentaire multiplie le nombre de coups à
-// simuler, et au-delà de 2 le gain de portée ne compense presque jamais
-// les 3 points de score que vaut une Adrénaline conservée.
-const MISE_ADRENALINE_MAX = 2;
+/* Plafond des mises d'Adrénaline explorées. Le livret n'en fixe aucun ;
+   chaque point de plus multiplie le nombre de coups à simuler.
 
+   Il valait 2 pour tout le monde, en argumentant qu'au-delà « le gain de
+   portée ne compense presque jamais les points que vaut une Adrénaline
+   conservée ». C'était une décision prise À LA PLACE de l'évaluation, et
+   c'est exactement ce que le module s'interdit partout ailleurs :
+   `computeFinalScore` compte déjà l'Adrénaline conservée, donc une mise qui
+   ne vaut pas le coup se note toute seule moins bien. Le plafond n'a de
+   raison d'être que le TEMPS DE CALCUL.
+
+   Il vit donc dans les réglages de force (`miseAdrenalineMax`), la référence
+   explorant plus loin que les niveaux du dessous. Nikola, 2026-08-28 : « il
+   faut qu'elle gère beaucoup mieux l'utilisation de l'Adrénaline afin
+   d'éviter certains vols de points ou certaines situations où elle dépense
+   mal ou pas ses ressources ». */
+const MISE_ADRENALINE_DEFAUT = 2;
+
+/* Le clone est la boucle chaude de tout le module : chaque coup candidat en
+   demande un, et un tour d'Expert en évalue plusieurs centaines.
+   `structuredClone` sait tout copier, y compris ce qui n'existe pas ici —
+   Map, Date, références cycliques — et le paie. Une copie écrite à la main
+   pour CETTE forme-là est nettement plus rapide, et c'est ce qui rend
+   abordable la recherche conjointe déplacement + carte.
+
+   Elle doit rester exhaustive sur les tableaux : en oublier un ferait
+   partager une référence entre l'état simulé et l'état réel, c'est-à-dire
+   une IA qui modifie la partie en réfléchissant. Tout tableau ajouté à un
+   Titan doit être copié ici. */
 function cloneEtat(gameState) {
+  const board = {};
+  const src = gameState.board ?? {};
+  for (const k in src) {
+    const c = src[k];
+    board[k] = { ...c, blocks: c.blocks ? c.blocks.slice() : [] };
+  }
+
+  const looseBlocks = {};
+  const loose = gameState.looseBlocks ?? {};
+  for (const k in loose) looseBlocks[k] = (loose[k] || []).slice();
+
+  const titans = (gameState.titans ?? []).map((t) => ({
+    ...t,
+    repaire: (t.repaire || []).slice(),
+    socles: (t.socles || []).slice(),
+    hand: (t.hand || []).slice(),
+    programmed: (t.programmed || []).slice(),
+    playedThisManche: (t.playedThisManche || []).slice(),
+    discardedHidden: (t.discardedHidden || []).slice(),
+    repos: (t.repos || []).map((e) => ({ ...e })),
+  }));
+
+  // `aJouerEncore` traverse la simulation : c'est lui qui dit à l'évaluation
+  // qui peut encore ramasser ce que ce coup laisse traîner.
+  // `finDePartie` aussi : sans lui, l'évaluation ne saurait pas à quelle
+  // distance du seuil d'Apocalypse se trouve le plateau qu'on lui montre, et
+  // ne pourrait pas juger si ce coup rapproche la fin (cf.
+  // `valeurFinDePartie`).
   return {
-    board: structuredClone(gameState.board ?? {}),
-    looseBlocks: structuredClone(gameState.looseBlocks ?? {}),
-    titans: structuredClone(gameState.titans ?? []),
+    board, looseBlocks, titans,
+    aJouerEncore: gameState.aJouerEncore,
+    finDePartie: gameState.finDePartie,
   };
 }
 
@@ -131,8 +182,9 @@ function noterApres(titanId, etat, profile, muter) {
   return evaluatePosition(titanId, etat, profile);
 }
 
-function misesPossibles(titan) {
-  const dispo = Math.min(titan?.adrenaline || 0, MISE_ADRENALINE_MAX);
+function misesPossibles(titan, profile) {
+  const plafond = reglagesDe(profile).miseAdrenalineMax ?? MISE_ADRENALINE_DEFAUT;
+  const dispo = Math.min(titan?.adrenaline || 0, plafond);
   return Array.from({ length: dispo + 1 }, (_, i) => i);
 }
 
@@ -191,6 +243,78 @@ export function planMovement(titanId, gameState, profile = makeProfile(), portee
   return chooseAmongBest(candidats, profile);
 }
 
+/* ── LE TOUR ENTIER, D'UN SEUL BLOC ───────────────────────────
+   C'est le défaut le plus coûteux de l'ancienne IA, et il était invisible
+   parce qu'il n'était pas dans une formule : il était dans l'ORDRE.
+
+   Un tour vaut Mouvement gratuit, puis carte, puis Récupération. Le
+   planificateur les décidait l'un après l'autre, chacun en aveugle du
+   suivant : `planMovement` choisissait la case qui note le mieux SANS SA
+   CARTE, puis `planCardPlay` faisait de son mieux depuis là. Or les deux
+   décisions n'en font qu'une. Tout Casser tire son énergie du nombre de
+   cases occupées du Périmètre : se placer au contact de trois bâtiments
+   double sa puissance, et aucun déplacement ne pouvait le savoir. Tête en
+   Avant veut un axe aligné, Boing Boing veut de la place. L'IA se plaçait
+   pour ramasser, puis jouait sa carte depuis une case qui ne lui servait
+   à rien.
+
+   C'est ce qu'un joueur humain fait sans y penser — il regarde sa carte
+   AVANT de bouger — et c'est l'essentiel de l'écart que Nikola constate à
+   la table.
+
+   COMBIEN ÇA COÛTE. Le produit complet (toutes les cases par tous les
+   coups) est hors de prix : une vingtaine de cases par une centaine de
+   coups, des centaines de fois par partie. On garde donc les
+   `largeurJointe` meilleures cases au tri statique — celles qui valent
+   déjà quelque chose en elles-mêmes — et on ne développe la carte que sur
+   celles-là. Rester sur place fait toujours partie des candidates : c'est
+   souvent le bon coup quand la carte veut la position actuelle.
+
+   Le tri statique et le développement utilisent la MÊME évaluation, donc
+   une case écartée l'est parce qu'elle vaut moins, pas parce qu'un critère
+   différent l'a jugée. */
+export function planTour(titanId, gameState, profile = makeProfile(), mancheNumber = 1, porteeMouvement = 2) {
+  const reglages = reglagesDe(profile);
+  const largeur = reglages.largeurJointe ?? 0;
+  if (largeur <= 0) return null; // niveaux du bas : le tour reste séquentiel
+
+  const titan = gameState.titans.find((t) => t.id === titanId);
+  if (!titan || !estSurLePlateau(titan)) return null;
+
+  // `null` = rester sur place, toujours dans la liste.
+  const destinations = [null];
+  if (porteeMouvement > 0) {
+    const { reachable } = getMovementReachable(
+      titan.cell, porteeMouvement, gameState.board,
+      indexerTitans(gameState.titans), gameState.looseBlocks
+    );
+    reachable.forEach((k) => destinations.push(k));
+  }
+
+  // Tri statique : ce que vaut la case en elle-même, carte non jouée.
+  const triees = [];
+  for (const destKey of destinations) {
+    const etat = cloneEtat(gameState);
+    const note = noterApres(titanId, etat, profile, (e) => {
+      if (destKey) resolveFreeMovement(titanId, destKey, e);
+    });
+    if (note !== null) triees.push({ destKey, note });
+  }
+  if (triees.length === 0) return null;
+  triees.sort((a, b) => b.note - a.note);
+
+  const candidats = [];
+  for (const { destKey, note: noteSeule } of triees.slice(0, largeur)) {
+    const base = cloneEtat(gameState);
+    if (destKey) resolveFreeMovement(titanId, destKey, base);
+    const coup = planCardPlay(titanId, base, profile, mancheNumber);
+    // Pas de carte jouable depuis là : la case vaut ce qu'elle vaut seule.
+    candidats.push({ destKey, coup, note: coup ? coup.note : noteSeule });
+  }
+
+  return chooseAmongBest(candidats, profile);
+}
+
 /* ── CARTE ACTION ─────────────────────────────────────────── */
 
 /* ── VALEUR ATTENDUE DES DÉCISIONS DIL ET RAGE ────────────── */
@@ -224,46 +348,122 @@ function perteSiRetire(repaire, couleur) {
   return scoreBareme(couleur, n) - scoreBareme(couleur, n - 1);
 }
 
-/* Valeur d'une Adrenaline au decompte final. Sert d'etalon quand un
-   defenseur arbitre entre payer une Adrenaline et encaisser la perte.
-   Importee du moteur, jamais recopiee : elle a baisse de 3 a 2 le
-   2026-08-19, et une copie locale aurait laisse l'IA arbitrer sur l'ancien
-   bareme. Effet voulu du passage a 2 : l'IA paie plus volontiers, donc elle
-   en conserve moins en fin de partie. */
-const VALEUR_ADRENALINE = POINTS_PAR_ADRENALINE;
+/* Ce que vaut une Adrenaline pour CE Titan-la, maintenant. Sert d'etalon
+   quand un defenseur arbitre entre payer une Adrenaline et encaisser la
+   perte, et quand un attaquant estime ce qu'il gagne a en prendre une.
+
+   C'etait une constante — le forfait du moteur, importe et jamais recopie.
+   Depuis que le bareme est PROGRESSIF (2026-08-28), un forfait ne veut plus
+   rien dire : la premiere Adrenaline vaut 1 point, la cinquieme en vaut 3.
+   Une IA qui arbitre sur la moyenne paie trop cher quand elle est pauvre et
+   pas assez cher quand elle est riche — exactement a l'envers de ce que le
+   bareme recompense. La valeur est donc lue au stock reel, a chaque fois.
+
+   `valeurMarginaleAdrenaline(stock)` = ce que rapporte LA PROCHAINE, donc
+   aussi ce que coute d'en lacher une quand on en detient `stock + 1`. */
+const valeurAdrenalinePour = (titan) => valeurMarginaleAdrenaline(Math.max(0, (titan?.adrenaline || 0) - 1));
+const gainAdrenalinePour = (titan) => valeurMarginaleAdrenaline(titan?.adrenaline || 0);
+
+/* ── CE QU'UN BLOC VAUT VRAIMENT, DES DEUX CÔTÉS ──────────────
+   Demande de Nikola, 2026-08-28 : « si elle donne ce bloc, combien de
+   points elle perd, combien elle en donne à l'adversaire, si l'action est
+   effectuée en RAGE ou en DIL ».
+
+   `gainSiAjoute` et `perteSiRetire` ne lisent que le BARÈME de la couleur.
+   C'est faux dès qu'un bonus de fin entre en jeu, et ces bonus sont
+   précisément ce qui décide une partie : le Rose qui fait basculer les
+   +10 du plus grand nombre, la couleur qui complète l'Arc-en-ciel à
+   5 points, le Socle qui prend le trophée Collectionneur. Un bloc peut
+   valoir 0 au barème et 10 au décompte, et l'IA arbitrait un vol à 0.
+
+   `faiseurDeDelta` chiffre un transfert par ce qu'il fait aux TOTAUX des
+   deux Titans, bonus compris. Il est mémoïsé par couleur et par camp : au
+   plus dix calculs de score par décision, sur une décision qui n'existe
+   que sur les cartes offensives. */
+function faiseurDeDelta(etat) {
+  const memo = new Map();
+  const base = computeFinalScore(etat.titans, {}, gagnantArcEnCiel(etat.titans)).totals;
+
+  return (titanId, mutation, cle) => {
+    const cleComplete = `${titanId}|${cle}`;
+    if (memo.has(cleComplete)) return memo.get(cleComplete);
+    const liste = etat.titans.map((t) => (t.id === titanId ? mutation(t) : t));
+    const apres = computeFinalScore(liste, {}, gagnantArcEnCiel(liste)).totals;
+    const delta = (apres[titanId]?.total ?? 0) - (base[titanId]?.total ?? 0);
+    memo.set(cleComplete, delta);
+    return delta;
+  };
+}
+
+/* Ce qu'un point coûté à un adversaire me rapporte à moi. Pas un point : à
+   quatre joueurs, le lui retirer profite autant aux deux autres qu'à moi.
+   Même demi-coefficient que la nuisance de l'évaluation. */
+const PART_PERTE_ADVERSE = 0.5;
 
 /**
  * Applique la résolution la plus probable des décisions générées par un
  * coup. On ne devine pas : chaque camp est supposé jouer son intérêt, ce
  * qui est l'hypothèse la moins arbitraire disponible.
  */
-export function appliquerDecisions(decisions, etat) {
+export function appliquerDecisions(decisions, etat, profile = makeProfile()) {
+  const auScoreComplet = reglagesDe(profile).decisionsAuScoreComplet ?? false;
+
   for (const d of decisions || []) {
     const attaquant = etat.titans.find((t) => t.id === d.attackerId);
     const defenseur = etat.titans.find((t) => t.id === d.defenderId);
     if (!attaquant || !defenseur) continue;
 
+    const delta = auScoreComplet ? faiseurDeDelta(etat) : null;
+    // Ce que me rapporte un bloc de cette couleur, et ce qu'il coûte à
+    // celui qui le perd. Au barème pour les niveaux du bas, au total réel
+    // pour la référence.
+    const monGain = (couleur) => (delta
+      ? delta(attaquant.id, (t) => ({ ...t, repaire: [...t.repaire, couleur] }), `+${couleur}`)
+      : gainSiAjoute(attaquant.repaire, couleur));
+    const saPerte = (couleur) => {
+      if (!delta) return perteSiRetire(defenseur.repaire, couleur);
+      if (defenseur.repaire.indexOf(couleur) === -1) return 0;
+      return -delta(defenseur.id, (t) => {
+        const r = [...t.repaire];
+        r.splice(r.indexOf(couleur), 1);
+        return { ...t, repaire: r };
+      }, `-${couleur}`);
+    };
+
     if (d.type === "RAGE") {
-      // Livret : l'attaquant choisit librement, et prend UNE ressource.
-      // Il vise donc celle qui lui rapporte le plus à lui — ce qui n'est
-      // pas forcément celle qui coûte le plus au défenseur, mais c'est
-      // bien la règle.
-      if (defenseur.repaire.length >= 1) {
-        let meilleurIdx = 0;
-        let meilleurGain = -Infinity;
-        defenseur.repaire.forEach((couleur, idx) => {
-          const gain = gainSiAjoute(attaquant.repaire, couleur);
-          if (gain > meilleurGain) {
-            meilleurGain = gain;
-            meilleurIdx = idx;
-          }
+      /* Livret : l'attaquant choisit librement UNE ressource. Il visait
+         celle qui lui rapportait le plus à LUI, en ignorant ce qu'elle
+         coûtait à l'autre — deux Bleus équivalents pour moi ne le sont pas
+         si l'un fait tomber son bonus Rose. Il arbitre désormais sur les
+         deux moitiés, la perte adverse comptée à demi (cf.
+         PART_PERTE_ADVERSE).
+
+         L'ADRÉNALINE EST UNE OPTION À PART ENTIÈRE, plus un pis-aller. La
+         FAQ #5 la rend ciblable, et le code ne s'en servait que si le
+         Repaire était vide : voler la dernière Adrénaline de quelqu'un qui
+         s'apprête à annuler un Dilemme vaut souvent mieux qu'un bloc de
+         plus. C'est un des « vols de points » que Nikola signale. */
+      const options = [];
+      defenseur.repaire.forEach((couleur, idx) => {
+        options.push({ idx, valeur: monGain(couleur) + saPerte(couleur) * PART_PERTE_ADVERSE });
+      });
+      if ((defenseur.adrenaline || 0) >= 1) {
+        /* Ce que l'attaquant GAGNE en l'ajoutant a sa propre reserve, plus ce
+           que le defenseur PERD en la lachant : sur un bareme progressif ces
+           deux nombres different, alors qu'un forfait les confondait. */
+        options.push({
+          idx: -1,
+          valeur: gainAdrenalinePour(attaquant) + valeurAdrenalinePour(defenseur) * PART_PERTE_ADVERSE,
         });
-        const [pris] = defenseur.repaire.splice(meilleurIdx, 1);
-        attaquant.repaire.push(pris);
-      } else if ((defenseur.adrenaline || 0) >= 1) {
-        // FAQ #5 : l'Adrénaline de la cible est elle-même ciblable.
+      }
+      if (options.length === 0) continue;
+      const meilleur = options.reduce((a, b) => (b.valeur > a.valeur ? b : a));
+      if (meilleur.idx === -1) {
         defenseur.adrenaline -= 1;
         attaquant.adrenaline = (attaquant.adrenaline || 0) + 1;
+      } else {
+        const [pris] = defenseur.repaire.splice(meilleur.idx, 1);
+        attaquant.repaire.push(pris);
       }
       continue;
     }
@@ -287,13 +487,14 @@ export function appliquerDecisions(decisions, etat) {
       let meilleurGainNet = -Infinity;
       for (let i = 0; i < presentes.length; i++) {
         for (let j = i + 1; j < presentes.length; j++) {
-          const a = perteSiRetire(defenseur.repaire, presentes[i]);
-          const b = perteSiRetire(defenseur.repaire, presentes[j]);
+          const a = saPerte(presentes[i]);
+          const b = saPerte(presentes[j]);
           // La cible arbitre seule, sur SA perte : elle ignore ce que
           // l'attaquant en tirera.
           const choixDeLaCible = a <= b ? presentes[i] : presentes[j];
           const coutSubi = Math.min(a, b);
-          const gainNet = coutSubi + (gagneAttaquant ? gainSiAjoute(attaquant.repaire, choixDeLaCible) : 0);
+          const gainNet = coutSubi * PART_PERTE_ADVERSE
+            + (gagneAttaquant ? monGain(choixDeLaCible) : 0);
           if (gainNet > meilleurGainNet) {
             meilleurGainNet = gainNet;
             couleurPerdue = choixDeLaCible;
@@ -301,11 +502,14 @@ export function appliquerDecisions(decisions, etat) {
         }
       }
       if (!couleurPerdue) continue;
-      const meilleurMinimum = perteSiRetire(defenseur.repaire, couleurPerdue);
+      const meilleurMinimum = saPerte(couleurPerdue);
 
-      // La cible paie plutôt que d'encaisser si la perte dépasse la
-      // valeur d'une Adrénaline.
-      if (meilleurMinimum > VALEUR_ADRENALINE && (defenseur.adrenaline || 0) >= 1) {
+      /* La cible paie plutôt que d'encaisser si la perte dépasse la valeur
+         d'une Adrénaline. Comparaison désormais au VRAI coût : perdre un
+         Rose qui fait basculer dix points ne se compare pas à une
+         Adrénaline de la même façon que perdre un Bleu impair, et la
+         version au barème ne savait pas les distinguer. */
+      if (meilleurMinimum > valeurAdrenalinePour(defenseur) && (defenseur.adrenaline || 0) >= 1) {
         defenseur.adrenaline -= 1;
         continue;
       }
@@ -343,7 +547,7 @@ export function appliquerCoup(coup, titanId, etat, mancheNumber, profile = makeP
      tomber ses débris n'importe où, et le simulateur mesurerait une force
      qui n'est pas celle qu'un joueur affronte. */
   const replis = [];
-  const res = simulerCarte(coup, titanId, { ...etat, replis }, mancheNumber);
+  const res = simulerCarte(coup, titanId, { ...etat, replis }, mancheNumber, profile);
   for (const repli of replis) {
     if (repli.cases.length <= 1) continue;
     const choix = choisirRepliIA(repli, etat, profile);
@@ -394,7 +598,7 @@ export function choisirRepartitionEcroulement(ecroulement, etat, initiatorId = n
   return choix;
 }
 
-function simulerCarte(coup, titanId, etat, mancheNumber) {
+function simulerCarte(coup, titanId, etat, mancheNumber, profile = makeProfile()) {
   const { cardId, dir, bbDest, jnpCells, mise = 0 } = coup;
   const moi = etat.titans.find((t) => t.id === titanId);
   let res = null;
@@ -452,11 +656,12 @@ function simulerCarte(coup, titanId, etat, mancheNumber) {
       const decisions = [];
       const attaquant = etat.titans.find((t) => t.id === titanId);
       let stock = attaquant ? (attaquant.adrenaline || 0) : 0;
+      /* La mise vient du coup candidat, elle n'est plus décidée ici. Elle
+         est engagée sur CHAQUE cible tant que le stock suit : la carte est
+         résolue duel par duel, et une mise ne se partage pas. */
+      const miseVoulue = coup.miseFpmc ?? 0;
       for (const defId of cibles) {
-        const cible = etat.titans.find((t) => t.id === defId);
-        const ecart = getProgrammedSum(attaquant) - getProgrammedSum(cible);
-        let miseIA = 0;
-        if (stock > 0 && ecart <= 0) miseIA = ecart <= -2 && stock >= 2 ? 2 : 1;
+        const miseIA = Math.min(miseVoulue, stock);
         stock -= miseIA;
         const r = resolveFautPasMeChauffer(titanId, defId, cibles.length, etat, { attackerBid: miseIA });
         decisions.push(...(r.decisions || []));
@@ -469,15 +674,19 @@ function simulerCarte(coup, titanId, etat, mancheNumber) {
       break;
   }
 
-  appliquerDecisions(res?.decisions, etat);
-  if (mise > 0 && moi) moi.adrenaline = Math.max(0, (moi.adrenaline || 0) - mise);
+  appliquerDecisions(res?.decisions, etat, profile);
+  // Sur Faut Pas Me Chauffer, le duel a déjà débité la mise cible par cible :
+  // la retrancher ici la compterait deux fois.
+  if (mise > 0 && moi && cardId !== "faut_pas_me_chauffer") {
+    moi.adrenaline = Math.max(0, (moi.adrenaline || 0) - mise);
+  }
 }
 
 /** Tous les coups légaux offerts par une carte, paramètres compris. */
-export function candidatsPourCarte(cardId, titanId, gameState) {
+export function candidatsPourCarte(cardId, titanId, gameState, profile = makeProfile()) {
   const titan = gameState.titans.find((t) => t.id === titanId);
   if (!titan) return [];
-  const mises = misesPossibles(titan);
+  const mises = misesPossibles(titan, profile);
 
   if (cardId === "tout_casser") {
     return mises.map((mise) => ({ cardId, mise }));
@@ -527,9 +736,19 @@ export function candidatsPourCarte(cardId, titanId, gameState) {
     return combinaisons(pool, Math.min(nb, pool.length)).map((jnpCells) => ({ cardId, jnpCells, mise: 0 }));
   }
 
-  // Faut Pas Me Chauffer : les cibles sont imposées par le Périmètre, la
-  // mise cachée se joue dans la file de décisions, pas ici.
-  return [{ cardId, mise: 0 }];
+  /* Faut Pas Me Chauffer : les cibles sont imposées par le Périmètre, mais
+     la MISE CACHÉE est un vrai choix, et c'était le dernier de la carte à
+     être décidé par une règle écrite à la main (« engage 1 si mon avance est
+     nulle, 2 si je suis nettement derrière »). Elle devient un paramètre du
+     coup : la recherche essaie chaque mise et garde celle qui note le mieux,
+     exactement comme pour une portée de Tête en Avant.
+
+     C'est ce que Nikola demande sur l'Adrénaline — « qu'elle gère beaucoup
+     mieux son utilisation » — et c'est aussi la seule façon d'y intégrer ce
+     que la règle manuelle ne pouvait pas voir : qu'une Adrénaline misée est
+     une Adrénaline qui ne sera pas comptée au décompte, et que le duel n'est
+     pas toujours le meilleur emploi de la dernière. */
+  return mises.map((mise) => ({ cardId, mise, miseFpmc: mise }));
 }
 
 /**
@@ -542,9 +761,9 @@ export function planCardPlay(titanId, gameState, profile = makeProfile(), manche
 
   const candidats = [];
   for (const cardId of new Set(titan.programmed)) {
-    for (const coup of candidatsPourCarte(cardId, titanId, gameState)) {
+    for (const coup of candidatsPourCarte(cardId, titanId, gameState, profile)) {
       const etat = cloneEtat(gameState);
-      const note = noterApres(titanId, etat, profile, (e) => simulerCarte(coup, titanId, e, mancheNumber));
+      const note = noterApres(titanId, etat, profile, (e) => simulerCarte(coup, titanId, e, mancheNumber, profile));
       if (note !== null) candidats.push({ ...coup, note });
     }
   }
@@ -616,23 +835,88 @@ export function planProgrammation(titanId, gameState, profile = makeProfile(), m
 
   const notees = main.map((cardId) => {
     let meilleure = -Infinity;
-    for (const coup of candidatsPourCarte(cardId, titanId, gameState)) {
+    for (const coup of candidatsPourCarte(cardId, titanId, gameState, profile)) {
       const etat = cloneEtat(gameState);
-      const note = noterApres(titanId, etat, profile, (e) => simulerCarte(coup, titanId, e, mancheNumber));
+      const note = noterApres(titanId, etat, profile, (e) => simulerCarte(coup, titanId, e, mancheNumber, profile));
       if (note !== null && note > meilleure) meilleure = note;
     }
     return { cardId, note: meilleure };
   });
 
   // Une carte à la fois, chacune retirée de la pioche : à topN = 1 on
-  // retrouve exactement « les trois meilleures dans l'ordre », donc le
-  // comportement inchangé de l'Expert et du Confirmé.
+  // retrouve exactement « les trois meilleures dans l'ordre ».
   const restantes = [...notees];
   const choisies = [];
   while (choisies.length < nbCartes && restantes.length > 0) {
     const pick = chooseAmongBest(restantes, profile);
     choisies.push(pick.cardId);
     restantes.splice(restantes.indexOf(pick), 1);
+  }
+  return choisies;
+}
+
+/* ── PROGRAMMER LA MANCHE, PAS TROIS FOIS LE MÊME TOUR ────────
+   `planProgrammation` note les six cartes de la main dans l'état ACTUEL,
+   puis garde les trois meilleures. Chacune est donc évaluée comme si elle
+   était jouée la première, sur le plateau tel qu'il est.
+
+   Le défaut se voit dès qu'on l'écrit : les trois cartes retenues visent
+   toutes le même bâtiment, le même voisin, la même case. Une fois la
+   première jouée, ce qui faisait la valeur des deux autres a disparu, et
+   la Manche entière se joue avec deux cartes mortes. C'est une Manche sur
+   quatre, décidée avant le premier coup.
+
+   Un joueur humain ne fait pas ça : il choisit sa deuxième carte en
+   sachant ce que la première aura fait. On simule donc la même chose —
+   choisir la meilleure, JOUER son meilleur coup sur un clone, choisir la
+   deuxième depuis cet état, et ainsi de suite. Trois passes au lieu d'une,
+   pour une décision qui engage toute la Manche.
+
+   L'approximation restante est assumée et nommée : les autres Titans ne
+   jouent pas entre-temps dans cette projection. On ne sait pas ce qu'ils
+   feront — leurs cartes sont secrètes — et supposer qu'ils ne font rien
+   reste plus juste que de supposer que le plateau ne bouge pas du tout. */
+export function planProgrammationSequentielle(titanId, gameState, profile = makeProfile(), mancheNumber = 1, nbCartes = 3) {
+  const titan = gameState.titans.find((t) => t.id === titanId);
+  if (!titan || !titan.hand || titan.hand.length === 0) return [];
+  if (titan.hand.length <= nbCartes) return [...titan.hand];
+
+  const restantes = [...titan.hand];
+  const choisies = [];
+  let etatCourant = cloneEtat(gameState);
+
+  while (choisies.length < nbCartes && restantes.length > 0) {
+    const notees = [];
+    for (const cardId of restantes) {
+      let meilleure = -Infinity;
+      let meilleurCoup = null;
+      for (const coup of candidatsPourCarte(cardId, titanId, etatCourant, profile)) {
+        const etat = cloneEtat(etatCourant);
+        const note = noterApres(titanId, etat, profile, (e) => simulerCarte(coup, titanId, e, mancheNumber, profile));
+        if (note !== null && note > meilleure) {
+          meilleure = note;
+          meilleurCoup = coup;
+        }
+      }
+      notees.push({ cardId, coup: meilleurCoup, note: meilleure });
+    }
+
+    const pick = chooseAmongBest(notees, profile);
+    if (!pick) break;
+    choisies.push(pick.cardId);
+    restantes.splice(restantes.indexOf(pick.cardId), 1);
+
+    // Le plateau tel qu'il sera quand viendra le tour de la carte suivante.
+    if (pick.coup) {
+      const suite = cloneEtat(etatCourant);
+      try {
+        simulerCarte(pick.coup, titanId, suite, mancheNumber, profile);
+        etatCourant = suite;
+      } catch {
+        // Un coup qui ne se rejoue pas ne doit pas faire tomber la
+        // programmation : on garde l'état précédent et on continue.
+      }
+    }
   }
   return choisies;
 }

@@ -11,6 +11,9 @@
     "audit": "node scripts/audit-structure.mjs",
     "simulate": "node scripts/simulate.mjs",
     "diagnose": "node scripts/diagnose.mjs",
+    "ecarts": "node scripts/mesure-ecarts.mjs",
+    "composition": "node scripts/composition-score.mjs",
+    "forces": "node scripts/mesure-forces.mjs",
     "check": "npm run audit && npm run lint && npm test"
   },
   "dependencies": {

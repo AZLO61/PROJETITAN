@@ -42,6 +42,11 @@ async function partieAvecUneCibleAdjacente() {
   const user = userEvent.setup();
   render(<Harnais />);
   await user.click(screen.getByRole("button", { name: /Lancer la partie/ }));
+  /* Mise en place dépassée (ruling du 2026-08-28) : à 4 humains, la partie
+     s'ouvre désormais sur le placement des Titans, un clic par joueur. Ce
+     test-ci pose lui-même les positions qu'il veut examiner, la mise en
+     place n'est donc pas son sujet — on la solde d'un coup. */
+  act(() => vmCourant.terminerPlacement());
 
   const [t1, t2] = vmCourant.titanState.players;
   act(() => {
@@ -93,8 +98,16 @@ describe("Une décision en attente ne vole pas le tour", () => {
        demandait le 18 août, « panneau par panneau ». On les vide toutes,
        comme le joueur le ferait. */
     let garde = 0;
-    while (vmCourant.decisionBloquante && garde++ < 20) {
-      if (vmCourant.currentDecision) {
+    while (vmCourant.decisionBloquante && garde++ < 40) {
+      /* Depuis le 2026-08-29, Tout Casser ne se résout plus d'un bloc : le
+         joueur désigne l'ordre des éléments projetés, un clic par cible. Ce
+         harnais joue donc l'ordre le plus simple — celui du relévé — et
+         vérifie ce qu'il a toujours vérifié : qu'à la fin, tout est résolu et
+         le ramassage reste ouvert. */
+      if (vmCourant.toutCasserFile) {
+        const cible = vmCourant.toutCasserFile.cibles[0];
+        act(() => { vmCourant.toutCasserResoudre(cible.key); });
+      } else if (vmCourant.currentDecision) {
         act(() => { vmCourant.resolveDilDefenderPick("bleu"); });
       } else if (vmCourant.currentRepli) {
         const cible = vmCourant.currentRepli.defaut || vmCourant.currentRepli.cases[0];
@@ -105,7 +118,7 @@ describe("Une décision en attente ne vole pas le tour", () => {
         break;
       }
     }
-    expect(garde).toBeLessThan(20); // aucune résolution ne tourne en rond
+    expect(garde).toBeLessThan(40); // aucune résolution ne tourne en rond
 
     /* C'est la phrase exacte de Nikola : « je n'ai pas pu ramasser le bloc
        tombé au sol ». Le passif Récupération s'ouvre après avoir joué une

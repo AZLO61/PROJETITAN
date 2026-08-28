@@ -5,7 +5,7 @@ import { TitanIcon } from "./TitanVisuals.jsx";
 import BlockIcon from "../BlockIcon.jsx";
 import { baremeHint } from "../blockNames.js";
 import { T, marquee, readout, label } from "../theme.js";
-import Icon, { AdrenalineIcon } from "../icons.jsx";
+import Icon, { AdrenalineIcon, RainbowIcon } from "../icons.jsx";
 
 /* ============================================================
    LA RANGÉE DE JOUEURS — LE HUD DE LA BORNE
@@ -35,44 +35,79 @@ import Icon, { AdrenalineIcon } from "../icons.jsx";
 
 const COULEURS_REPAIRE = ["bleu", "rose", "orange", "rouge", "vert"];
 
-/* Une piste de score, comparée au meilleur de la table. */
+/* Une piste de score : UN CARRÉ PAR POINT.
+   ==========================================
+   C'était une barre proportionnelle, remplie par rapport au meilleur de la
+   table. Nikola, 2026-08-27 : « les loading barres inversées des pistes ADN,
+   fais plutôt ça avec des petits carrés — 2 sur la piste ADN, 2 carrés ;
+   5 sur la piste, 5 petits carrés. »
+
+   Il a raison, et le défaut est plus profond qu'une question de goût : une
+   barre PROPORTIONNELLE ment sur ce qu'elle mesure. Le meneur de la table
+   avait toujours la barre pleine, qu'il soit à 2 points ou à 14 ; deux
+   Titans à 3 et 4 points affichaient 75 % et 100 %, c'est-à-dire un écart
+   énorme pour un point. Et comme la barre du meneur ne bougeait plus, on
+   avait exactement l'effet de « chargement inversé » : tout le monde
+   régressait quand lui avançait.
+
+   Un carré par point est une échelle ABSOLUE : on compte, on ne compare pas
+   des longueurs. L'écart entre deux Titans se lit en carrés, donc en points,
+   ce qui est l'unité réelle de la piste.
+
+   Le meilleur de la table reste signalé, mais sur son COMPTE, à droite : un
+   cerne posé sur le dernier carré tombait sur le huitième dès qu'une piste
+   dépassait le plafond, c'est-à-dire sur un carré qui n'est pas le dernier.
+
+   PLAFOND. Une piste n'a pas de maximum connu. Au-delà de `MAX_CARRES` on
+   arrête la file et on écrit le reste en clair : mieux vaut « ▪▪▪▪▪▪▪▪ +6 »
+   qu'une file de carrés d'un pixel qu'on ne peut plus compter. */
+const MAX_CARRES = 8;
+
 function Piste({ icone, nom, valeur, meilleur, couleur }) {
-  const pct = meilleur > 0 ? Math.round((valeur / meilleur) * 100) : 0;
+  const montres = Math.min(valeur, MAX_CARRES);
+  const reste = valeur - montres;
+  const estMeilleur = meilleur > 0 && valeur === meilleur;
   return (
     <div
       title={`Piste ADN ${nom} : ${valeur} point${valeur > 1 ? "s" : ""}${
         meilleur > 0 && valeur < meilleur ? ` — le meilleur de la table en a ${meilleur}` : ""
-      }${meilleur > 0 && valeur === meilleur ? " — meilleur de la table" : ""}`}
+      }${estMeilleur ? " — meilleur de la table" : ""}`}
       style={{ display: "flex", alignItems: "center", gap: 6, cursor: "help" }}
     >
       <Icon name={icone} size={15} style={{ color: couleur }} />
       <span
         aria-hidden="true"
+        style={{ flex: 1, minWidth: 18, display: "flex", alignItems: "center", gap: 2, flexWrap: "nowrap" }}
+      >
+        {valeur === 0 ? (
+          // Une piste à zéro n'affiche pas une file de carrés vides : ce
+          // serait dessiner un maximum qui n'existe pas. Un seul creux dit
+          // « rien ici », et la file démarre au premier point marqué.
+          <span style={{ width: 7, height: 7, flexShrink: 0, border: `1px solid ${T.rule}`, opacity: 0.6 }} />
+        ) : (
+          Array.from({ length: montres }).map((_, i) => (
+            <span
+              key={i}
+              style={{
+                width: 7, height: 7, flexShrink: 0,
+                background: couleur,
+                border: `1px solid ${T.edge}`,
+              }}
+            />
+          ))
+        )}
+        {reste > 0 && (
+          <span style={{ ...readout("0.56rem", couleur), marginLeft: 3 }}>+{reste}</span>
+        )}
+      </span>
+      {/* Le compte, et le rang : le meneur de la table prend la couleur de sa
+          piste, les autres l'encre ordinaire. */}
+      <span
         style={{
-          flex: 1,
-          minWidth: 18,
-          height: 7,
-          background: "rgba(0,0,0,.45)",
-          border: `1px solid ${T.edge}`,
-          overflow: "hidden",
+          ...readout("0.62rem", valeur === 0 ? T.faint : estMeilleur ? couleur : T.text),
+          minWidth: 16, textAlign: "right",
         }}
       >
-        {/* La barre se remplit par `transform`, jamais par `width` : animer
-            une propriété de mise en page fait recalculer le flux à chaque
-            image, et il y a huit de ces barres à l'écran. */}
-        <span
-          style={{
-            display: "block",
-            height: "100%",
-            width: "100%",
-            transformOrigin: "left center",
-            transform: `scaleX(${pct / 100})`,
-            background: couleur,
-            transition: `transform 320ms ${T.easeOut}`,
-          }}
-        />
-      </span>
-      <span style={{ ...readout("0.62rem", valeur > 0 ? T.text : T.faint), minWidth: 16, textAlign: "right" }}>
         {valeur}
       </span>
     </div>
@@ -96,6 +131,29 @@ export default function TitanResourceBand({
      secret. On applique la même règle en Phase Action. */
   const estSonTour = (id) => selectedTitanId === id;
   const enAttenteIds = new Set((titansEnAttente || []).map((x) => x.id));
+
+  /* ── L'ORDRE DE PASSAGE, SUR LA PLAQUE DE CHAQUE TITAN ──
+     Demande de Nikola, 2026-08-27 : « sois sûr qu'on ait l'information de
+     l'ordre du tour des Titans par rapport au passage du bloc Détonateur
+     avec la nouvelle Manche ».
+
+     C'est le point qui se perd le plus vite à la table, parce que deux
+     ordres coexistent : l'ordre FIXE des Titans (1, 2, 3, 4), qui ne bouge
+     jamais, et l'ordre d'INITIATIVE de la Manche, qui pivote — le
+     Détonateur ouvre chaque round, et le jeton passe au Titan suivant à
+     chaque nouvelle Manche. En Manche 3 avec le Détonateur sur le Titan 3,
+     on joue 3, 4, 1, 2 : le Titan 1 est TROISIÈME, et rien à l'écran ne le
+     disait une fois la barre du haut supprimée.
+
+     Le rang se lit donc sur la plaque, à côté du nom, et le Détonateur
+     porte son pictogramme sur le rang 1 — les deux informations sont la
+     même, écrites au même endroit. `ordreInitiative` est calculé par
+     RoundPanels à partir de `ordreJeu` pivoté sur le Détonateur : la règle
+     du pivot ne vit pas ici, cette rangée ne fait que l'afficher. */
+  const rangDe = (id) => {
+    const i = (ordreInitiative || []).indexOf(id);
+    return i < 0 ? null : i + 1;
+  };
   const colorCount = (titan) => {
     const c = { bleu: 0, rose: 0, orange: 0, rouge: 0, vert: 0 };
     titan.repaire.forEach((x) => { if (c[x] !== undefined) c[x]++; });
@@ -120,18 +178,29 @@ export default function TitanResourceBand({
     if (n >= CLICS_POUR_REVELER) revelerProfil(id);
   };
 
+  /* UN PACK DE QUATRE CARRÉS, TOUJOURS — Nikola, 2026-08-28 : « refais le pack
+     de 4 carrés pour les informations Titans, même quand c'est moi qui joue ».
+
+     L'idée d'élargir la plaque du joueur actif a échoué deux fois de suite, et
+     pour la même raison de fond : cette rangée sert À COMPARER. Quatre plaques
+     de même taille se lisent d'un coup d'œil, colonne par colonne ; dès que
+     l'une change de format, il faut relire chaque étiquette pour savoir ce qu'on
+     compare. Le Titan actif est déjà signalé par le seul relief de l'écran et
+     par son cerne coloré — il n'avait pas besoin d'une taille en plus, il avait
+     besoin qu'on le laisse tranquille.
+
+     Deux colonnes et non `auto-fit` : à quatre Titans on veut un carré 2×2, pas
+     une rangée qui se replie différemment selon la largeur. Et `minmax(0, 1fr)`
+     sans plancher en pixels — c'est un plancher de 160 px qui faisait déborder
+     la colonne des commandes, et donc défiler la rangée horizontalement. */
+
   return (
     <div
       style={{
         display: "grid",
-        /* 160 et pas 190 : à 190, une tablette de 820 px n'en tenait que
-           trois par rangée et le quatrième Titan se retrouvait seul sur une
-           ligne, deux fois plus large que ses adversaires. Les quatre
-           plaques doivent rester comparables entre elles — c'est toute leur
-           fonction. */
-        gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))",
-        gap: T.s2,
-        marginBottom: T.s3,
+        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+        gap: T.s1,
+        marginBottom: T.s2,
         // La plaque active se lève : la rangée réserve la place au-dessus,
         // sinon elle pousse ce qui la précède à chaque changement de tour.
         paddingTop: 4,
@@ -149,11 +218,14 @@ export default function TitanResourceBand({
         return (
           <div
             key={t.id}
-            onClick={() => { compterClic(t.id); onSelect(t.id); }}
+            /* Recliquer la plaque du Titan déjà sélectionné le désélectionne
+               (Nikola, 2026-08-28) : le périmètre disparaît, le plateau se lit
+               à nu. Même geste que sur le plateau lui-même. */
+            onClick={() => { compterClic(t.id); onSelect(selectedTitanId === t.id ? null : t.id); }}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(t.id); }
+              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(selectedTitanId === t.id ? null : t.id); }
             }}
             aria-current={isActive ? "true" : undefined}
             aria-label={`${titanDisplayName ? titanDisplayName(t.id) : `Titan ${t.id}`}${isActive ? ", à lui de jouer" : ""}`}
@@ -167,7 +239,7 @@ export default function TitanResourceBand({
                  Titan avait changé de couleur. */
               border: `${T.edgeW} solid ${isSelected || isActive ? tc.accent : T.edge}`,
               borderRadius: T.rPlate,
-              padding: `${T.s2} 10px 10px`,
+              padding: `${T.s1} 9px 8px`,
               /* LE SEUL ÉLÉMENT EN RELIEF DE L'ÉCRAN. */
               boxShadow: isActive
                 ? `0 5px 0 -1px ${T.edge}, 0 10px 20px rgba(0,0,0,.5)`
@@ -208,6 +280,25 @@ export default function TitanResourceBand({
                   {titanDisplayName ? titanDisplayName(t.id) : `Titan ${t.id}`}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3 }}>
+                  {rangDe(t.id) != null && (
+                    <span
+                      title={
+                        `${rangDe(t.id)}${rangDe(t.id) === 1 ? "er" : "e"} à jouer cette Manche`
+                        + (detonateurId === t.id
+                          ? " — c'est le Détonateur, il ouvre chaque round jusqu'à ce que le jeton passe au Titan suivant à la Manche prochaine."
+                          : `, après ${ordreInitiative.slice(0, rangDe(t.id) - 1).map((x) => (titanDisplayName ? titanDisplayName(x) : `Titan ${x}`)).join(", ")}.`)
+                      }
+                      style={{
+                        ...readout("0.6rem", detonateurId === t.id ? T.warn : T.faint),
+                        border: `1px solid ${detonateurId === t.id ? T.warn : T.rule}`,
+                        padding: "0 4px",
+                        cursor: "help",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {rangDe(t.id)}
+                    </span>
+                  )}
                   {/* HORS DE BIG CITY — remplace un panneau entier.
                       Nikola le 2026-08-17 : « une petite icône sur l'encart du
                       Titan, c'est suffisant ». L'information utile — qui est
@@ -283,8 +374,12 @@ export default function TitanResourceBand({
 
             {/* ── Les deux pistes, comparées à la table ── */}
             <div style={{ display: "grid", gap: 5 }}>
-              <Piste icone="brawl" nom="Bagarre" valeur={t.bagarre || 0} meilleur={maxBagarre} couleur={T.warn} />
-              <Piste icone="wreck" nom="Destruction" valeur={t.destruction || 0} meilleur={maxDestruction} couleur={T.stop} />
+              {/* Rouge pour la Bagarre, orange pour la Destruction (Nikola,
+                  2026-08-27). Les deux étaient inversées : le gant portait
+                  l'orange de l'alerte et l'explosion le rouge de l'arrêt.
+                  Le rouge appartient au coup porté, l'orange au feu. */}
+              <Piste icone="brawl" nom="Bagarre" valeur={t.bagarre || 0} meilleur={maxBagarre} couleur={T.stop} />
+              <Piste icone="wreck" nom="Destruction" valeur={t.destruction || 0} meilleur={maxDestruction} couleur={T.warn} />
             </div>
 
             {/* ── Ligne d'état : cartes, Repos, trophée, validation ── */}
@@ -389,7 +484,7 @@ export default function TitanResourceBand({
                     ...label(T.go, "0.62rem"),
                   }}
                 >
-                  <Icon name="lantern" size={11} /> +5
+                  <RainbowIcon size={14} /> +5
                 </span>
               )}
 

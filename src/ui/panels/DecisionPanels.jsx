@@ -1,12 +1,12 @@
 import React from "react";
 import { TitanIcon } from "../titans/TitanVisuals.jsx";
 import { TITAN_COLORS } from "../titans/constants.js";
-import { countRepaireColors } from "../../domain/index.js";
+import { countRepaireColors, BAREME_ADRENALINE } from "../../domain/index.js";
 import { smallBtn, cancelBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
 import { BLOCK_NAME, scoreBloc } from "../blockNames.js";
 import { T, marquee, readout, label, prose } from "../theme.js";
-import Icon from "../icons.jsx";
+import Icon, { AdrenalineIcon, RainbowIcon } from "../icons.jsx";
 
 /* ============================================================
    MENU DEROULANT A LA CHARTE
@@ -59,6 +59,7 @@ function MenuDA({ valeur, options, placeholder, onChange }) {
           cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
         }}
       >
+        {choisie?.icone}
         {choisie ? choisie.label : placeholder}
         <span style={{ fontSize: ".6rem", opacity: .7 }}>{ouvert ? "▲" : "▼"}</span>
       </button>
@@ -91,8 +92,14 @@ function MenuDA({ valeur, options, placeholder, onChange }) {
                   fontSize: ".7rem", fontFamily: "inherit", textAlign: "left",
                   fontWeight: active ? 700 : 400,
                   cursor: o.disabled ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+                  display: "flex", alignItems: "center", gap: 7,
+                  // L'icône d'une option désactivée s'éteint avec son
+                  // libellé : sans ça, une destination interdite reste la
+                  // ligne la plus colorée de la liste.
+                  opacity: o.disabled ? 0.45 : 1,
                 }}
               >
+                {o.icone}
                 {o.label}
               </button>
             );
@@ -103,21 +110,31 @@ function MenuDA({ valeur, options, placeholder, onChange }) {
   );
 }
 
-export default function DecisionPanels({ vm }) {
+/* `vue` découpe ce fichier en deux panneaux indépendants, sans le scinder en
+   deux fichiers qui partageraient de toute façon la moitié de leurs données :
+   · "scoring" — le décompte seul,
+   · "journal" — le journal d'actions seul,
+   · "tout"    — les deux à la suite, comme avant.
+   Les deux premiers sont montés en superposition par-dessus le plateau (cf.
+   GameView), le troisième sert encore à l'écran de fin de partie, où il n'y a
+   plus de plateau à protéger et où tout doit se lire d'un trait. */
+export default function DecisionPanels({ vm, vue = "tout" }) {
   // Journal d'actions : replie par defaut. Sur une partie d'1h30 il grossit
   // sans fin et poussait le reste de la page vers le bas, alors qu'on ne le
   // consulte que ponctuellement pour verifier ce qui vient de se passer.
-  const [showLog, setShowLog] = React.useState(false);
+  // Déplié d'emblée quand le journal EST le panneau qu'on vient d'ouvrir :
+  // demander un second clic pour voir ce qu'on est venu chercher n'a de sens
+  // que dans le flux, où le repli protégeait la place du plateau.
+  const [showLog, setShowLog] = React.useState(vue === "journal");
+  // Le cadre et le titre appartiennent à la feuille qui nous porte (cf.
+  // Superposition) dès qu'on n'est plus dans le flux.
+  const enSuperposition = vue !== "tout";
   /* Filtre du journal par Titan (Nikola, 2026-08-24 : « journal d'actions
      filtrable par Titan » — tout etait melange). `null` = tout afficher.
      Le rattachement d'une ligne a un Titan reutilise EXACTEMENT la detection
      qui servait deja au code couleur : une seule regle, donc la couleur d'une
      ligne et le filtre ne peuvent pas diverger. */
   const [filtreTitan, setFiltreTitan] = React.useState(null);
-  const titanDeLaLigne = (ligne) => {
-    const m = ligne.match(/T(?:itan)?\.?\s*(\d)/);
-    return m ? m[1] : null;
-  };
   const {
     titanState,
     titanModes,
@@ -126,13 +143,18 @@ export default function DecisionPanels({ vm }) {
     showScoring,
     gameOver,
     vertAssignments,
+    vertsValides,
+    validerVerts,
     actionLog,
     setActionLog,
+    journal,
+    nommerLigne,
     titanProfiles,
     profileLabel,
     getVertCount,
     updateVertAssignment,
     finalScoreResult,
+    preScoreSansVerts,
     classementFinalPartie,
   } = vm;
 
@@ -150,6 +172,17 @@ export default function DecisionPanels({ vm }) {
   // Titan dont la fenêtre de placement est ouverte. Un seul à la fois :
   // c'est celui qui tient l'appareil.
   const [placeurOuvert, setPlaceurOuvert] = React.useState(null);
+
+  /* Le libellé d'une ligne de tableau : le pictogramme, puis le nom.
+     Ces libellés étaient écrits en émojis, ce que le reste de l'interface a
+     abandonné depuis longtemps : un émoji est dessiné par le système et non
+     par nous, et à 13 px 💪 et 💥 se ressemblaient. Ces lignes portent donc
+     les mêmes pictogrammes que le bandeau des Titans et que le menu des
+     Verts, dans les mêmes couleurs. Une piste se reconnaît au même signe
+     partout où elle apparaît. */
+  const ligneIcone = (icone, nom) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{icone}{nom}</span>
+  );
 
   /* Le nom d'un Titan dans un en-tête de tableau, avec son icône.
      Demande de Nikola du 2026-08-18 : à quatre colonnes de chiffres, le nom
@@ -313,17 +346,22 @@ export default function DecisionPanels({ vm }) {
           juste d'ouvrir (Nikola : « je dois défiler vers le bas pour voir le
           score »). Ce qu'on demande s'affiche en premier. */}
       {/* ── SCORING FINAL ── */}
-      {showScoring && (
-        <div style={{
+      {vue !== "journal" && showScoring && (
+        <div style={enSuperposition ? { fontSize: T.small } : {
           background: T.plate, border: `2px solid ${T.you}`,
           borderRadius: T.rPlate, padding: "14px 16px", marginBottom: 12, fontSize: T.small,
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
-            <Icon name="lantern" size={19} style={{ color: T.you }} />
-            <h2 style={marquee(T.h3, T.you)}>
-              {gameOver ? "Décompte final" : "Décompte — aperçu"}
-            </h2>
-          </div>
+          {/* En superposition, la feuille porte déjà le titre et le cadre :
+              les redoubler affichait « Décompte — aperçu » deux fois de suite,
+              et emboîtait deux bordures pour rien. */}
+          {!enSuperposition && (
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
+              <Icon name="lantern" size={19} style={{ color: T.you }} />
+              <h2 style={marquee(T.h3, T.you)}>
+                {gameOver ? "Décompte final" : "Décompte — aperçu"}
+              </h2>
+            </div>
+          )}
           {/* Les deux pavés qui expliquaient ici le sort des Blocs Verts ont
               été retirés (Nikola) : ils poussaient le tableau — la seule chose
               qu'on vient chercher — sous la ligne de flottaison du panneau. La
@@ -364,7 +402,10 @@ export default function DecisionPanels({ vm }) {
               const owned = countRepaireColors(t);
               const estIA = titanModes[t.id] === "ia";
               const poses = (vertAssignments[t.id] || []).filter(Boolean).length;
-              const fini = poses >= vertCount;
+              const complet = poses >= vertCount;
+              // `fini` ne veut plus dire « les menus sont remplis » mais
+              // « c'est validé, on n'y revient pas » (Nikola, 2026-08-28).
+              const fini = !!vertsValides?.[t.id];
               const ouvert = placeurOuvert === t.id;
               return (
                 <div key={t.id} style={{
@@ -399,11 +440,14 @@ export default function DecisionPanels({ vm }) {
                       <span style={{ fontSize: ".72rem", color: "rgba(255,255,255,.5)", marginLeft: "auto" }}>en cours…</span>
                     ) : ouvert ? (
                       <button
-                        onClick={() => setPlaceurOuvert(null)}
-                        disabled={poses < vertCount}
-                        style={{ ...smallBtn(poses >= vertCount, "#16E08C", "#00C97A"), marginLeft: "auto" }}
+                        onClick={() => { validerVerts(t.id); setPlaceurOuvert(null); }}
+                        disabled={!complet}
+                        title={complet
+                          ? "Valide définitivement : ton placement ne pourra plus être modifié."
+                          : `Place tes ${vertCount} Vert${vertCount > 1 ? "s" : ""} avant de valider.`}
+                        style={{ ...smallBtn(complet, "#16E08C", "#00C97A"), marginLeft: "auto" }}
                       >
-                        ✔ C'est placé
+                        ✔ Valider — définitif
                       </button>
                     ) : (
                       <button
@@ -422,15 +466,33 @@ export default function DecisionPanels({ vm }) {
                           valeur={vertAssignments[t.id]?.[i] ? `${vertAssignments[t.id][i].type}:${vertAssignments[t.id][i].target}` : ""}
                           placeholder={`Vert #${i + 1}…`}
                           onChange={(v) => updateVertAssignment(t.id, i, v)}
+                          /* CHAQUE DESTINATION PORTE SON PICTOGRAMME (Nikola,
+                             2026-08-27 : « dans le menu déroulant des Verts,
+                             utilise bien les icônes bloc pour les
+                             catégories »).
+
+                             La liste n'énonçait que des noms — « Barème
+                             Habitation », « Barème Boutique » — alors que
+                             tout le reste de l'écran désigne une couleur par
+                             son bloc isométrique : le tableau des Repaires
+                             juste en dessous, le bandeau des Titans, le
+                             plateau. Il fallait retraduire un nom de
+                             destination en couleur, de tête, à la seconde où
+                             l'on tranche le dernier geste de la partie.
+
+                             Les deux Pistes ADN prennent leurs pictogrammes
+                             de piste, ceux du bandeau : gant de boxe et
+                             explosion, dans leurs couleurs. */
                           options={[
                             ...["bleu", "rose", "orange", "rouge"].map((c) => ({
                               value: `color:${c}`,
+                              icone: <BlockIcon color={c} size={17} />,
                               label: `Barème ${BLOCK_NAME[c]}${owned[c] < 1 ? " (0 bloc)" : ""}`,
                               disabled: owned[c] < 1,
                               hint: owned[c] < 1 ? "Un Vert ne rejoint une couleur que si tu en possèdes déjà au moins une." : undefined,
                             })),
-                            { value: "adn:bagarre", label: "Piste Bagarre +1" },
-                            { value: "adn:destruction", label: "Piste Destruction +1" },
+                            { value: "adn:bagarre", icone: <Icon name="brawl" size={15} style={{ color: T.stop }} />, label: "Piste Bagarre +1" },
+                            { value: "adn:destruction", icone: <Icon name="wreck" size={15} style={{ color: T.warn }} />, label: "Piste Destruction +1" },
                           ]}
                         />
                       ))}
@@ -493,10 +555,10 @@ export default function DecisionPanels({ vm }) {
                     ))}
                   </tr>
                   {[
-                    ["🗿 Socles", (t) => (t.socles || []).length],
-                    ["💪 Bagarre", (t) => t.bagarre || 0],
-                    ["💥 Destruction", (t) => t.destruction || 0],
-                    ["💉 Adrénaline", (t) => t.adrenaline || 0],
+                    [ligneIcone(<Icon name="socle" size={17} style={{ color: T.dim }} />, "Socles"), (t) => (t.socles || []).length],
+                    [ligneIcone(<Icon name="brawl" size={15} style={{ color: T.stop }} />, "Bagarre"), (t) => t.bagarre || 0],
+                    [ligneIcone(<Icon name="wreck" size={15} style={{ color: T.warn }} />, "Destruction"), (t) => t.destruction || 0],
+                    [ligneIcone(<AdrenalineIcon size={15} />, "Adrénaline"), (t) => t.adrenaline || 0],
                   ].map(([label, fn], i) => (
                     <tr key={i} style={{ borderBottom: "1px solid rgba(255,255,255,.06)" }}>
                       <td style={{ padding: "3px 8px", color: "rgba(255,255,255,.6)" }}>{label}</td>
@@ -505,6 +567,60 @@ export default function DecisionPanels({ vm }) {
                       ))}
                     </tr>
                   ))}
+                  {/* ── PRÉ-SCORE, VERTS EXCLUS ──
+                      Nikola, 2026-08-27 : « au moment du placement des Verts,
+                      j'ai besoin de savoir les pré-scores des autres sans leur
+                      Vert pour mieux me projeter. »
+
+                      Les lignes au-dessus disent ce que chacun DÉTIENT. Celle-ci
+                      dit ce que ça VAUT : quatre barèmes, le bonus Rose, les
+                      Socles, deux classements de piste et l'Adrénaline,
+                      additionnés pour quatre Titans. C'est le calcul que
+                      personne ne fait de tête à la table, et c'est pourtant
+                      celui qui décide où va un Vert : rattraper deux points ou
+                      en creuser dix ne se jouent pas au même endroit.
+
+                      Aucun secret n'est éventé : ce total ne contient le Vert
+                      de personne, pas même celui de qui le lit. C'est aussi la
+                      photo sur laquelle les IA tranchent leur propre
+                      placement, depuis le même jour. */}
+                  {preScoreSansVerts && (() => {
+                    const meilleur = Math.max(
+                      ...titanState.players.map((x) => preScoreSansVerts.totals[x.id].total)
+                    );
+                    return (
+                      <tr style={{ background: "rgba(255,217,61,.08)" }}>
+                        <td style={{ padding: "5px 8px", color: T.you, fontWeight: 700 }}>
+                          Pré-score (Verts exclus)
+                        </td>
+                        {titanState.players.map((t) => {
+                          const total = preScoreSansVerts.totals[t.id].total;
+                          const ecart = total - meilleur;
+                          return (
+                            <td
+                              key={t.id}
+                              title={ecart === 0
+                                ? "En tête avant les Verts"
+                                : `${-ecart} point(s) derrière le meilleur pré-score`}
+                              style={{ padding: "5px 8px", textAlign: "center", cursor: "help" }}
+                            >
+                              <strong style={{ color: T.you, fontVariantNumeric: "tabular-nums" }}>{total}</strong>
+                              {/* L'écart au meneur, en petit : c'est lui qu'on
+                                  cherche quand on place un Vert, pas le total
+                                  absolu. */}
+                              <span style={{
+                                marginLeft: 5, fontSize: ".85em",
+                                color: ecart === 0 ? "#7ef2a8" : "rgba(255,255,255,.45)",
+                                fontVariantNumeric: "tabular-nums",
+                              }}>
+                                {ecart === 0 ? "meneur" : ecart}
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })()}
                 </tbody>
               </table>
             </div>
@@ -552,15 +668,22 @@ export default function DecisionPanels({ vm }) {
                     // écart de valeur, alors que c'est bien le nombre qui
                     // décide du trophée Collectionneur, ligne suivante.
                     (t) => celluleSocles(t)],
-                    ["🗿 Collectionneur", (t) => finalScoreResult.totals[t.id].collectionneurBonus || "—"],
-                    ["🌈 Arc-en-ciel", (t) => rainbowWinnerId === t.id ? 5 : "—"],
+                    [ligneIcone(<Icon name="socle" size={17} style={{ color: T.dim }} />, "Collectionneur"), (t) => finalScoreResult.totals[t.id].collectionneurBonus || "—"],
+                    [ligneIcone(<RainbowIcon size={17} />, "Arc-en-ciel"), (t) => rainbowWinnerId === t.id ? 5 : "—"],
                     // Les Pistes ADN ne donnaient que des POINTS de podium :
                     // impossible de vérifier le classement à l'œil, et un
                     // Vert placé sur une piste devenait invisible. On montre
                     // la position sur la piste, puis ce qu'elle rapporte.
-                    ["💪 Bagarre", (t) => cellulePiste(t, "bagarre", finalScoreResult.totals[t.id].bagarrePts)],
-                    ["💥 Destruction", (t) => cellulePiste(t, "destruction", finalScoreResult.totals[t.id].destructionPts)],
-                    ["💉 Adrénaline×3", (t) => finalScoreResult.totals[t.id].adrenalinePts],
+                    [ligneIcone(<Icon name="brawl" size={15} style={{ color: T.stop }} />, "Bagarre"), (t) => cellulePiste(t, "bagarre", finalScoreResult.totals[t.id].bagarrePts)],
+                    [ligneIcone(<Icon name="wreck" size={15} style={{ color: T.warn }} />, "Destruction"), (t) => cellulePiste(t, "destruction", finalScoreResult.totals[t.id].destructionPts)],
+                    /* Le barème est LU, jamais recopié : la ligne annonçait « ×3 »
+                       après le ruling du 2026-08-19 qui l'avait passé à 2, et
+                       promettait donc une valeur d'Adrénaline que le décompte
+                       juste en dessous ne payait pas. Depuis le 2026-08-28 il
+                       n'y a plus de multiplicateur du tout — la réserve suit un
+                       barème progressif, qu'on montre en entier plutôt que de
+                       le résumer par un nombre qui n'existe pas. */
+                    [ligneIcone(<AdrenalineIcon size={15} />, `Adrénaline ${BAREME_ADRENALINE.join(" · ")}`), (t) => finalScoreResult.totals[t.id].adrenalinePts],
                   ].map(([label, fn], rowIdx) => (
                     <tr key={rowIdx} style={{ borderBottom: "1px solid rgba(255,255,255,.06)" }}>
                       <td style={{ padding: "3px 8px", color: "rgba(255,255,255,.6)" }}>{label}</td>
@@ -643,20 +766,46 @@ export default function DecisionPanels({ vm }) {
           trois dernières lignes restent visibles en permanence. On voit ce qui
           vient de se passer sans rien ouvrir ; on ouvre pour remonter le
           temps. */}
-      {actionLog.length > 0 && (() => {
-        const lignes = actionLog.map((line, i) => ({
-          line,
-          i,
-          titanId: titanDeLaLigne(line),
-        }));
+      {/* UN JOURNAL VIDE DOIT LE DIRE. Dans le flux, ne rien afficher était
+          la bonne réponse : le panneau n'existait pas encore, il ne prenait
+          pas de place. Ouvert à la demande depuis une commande, le même
+          silence donne une feuille blanche qui ressemble à une panne. */}
+      {vue === "journal" && actionLog.length === 0 && (
+        <p style={{ ...prose(T.faint, T.small), margin: 0 }}>
+          Rien ne s'est encore passé dans cette partie — le journal se remplit
+          au premier déplacement.
+        </p>
+      )}
+      {vue !== "scoring" && actionLog.length > 0 && (() => {
+        /* UNE LIGNE PEUT APPARTENIR À PLUSIEURS TITANS. « Titan 1 prend 1
+           Adrénaline à Titan 2 » concerne les deux, et le filtre du Titan 2 doit
+           la montrer : c'est chez lui qu'elle fait le plus mal. L'ancienne
+           lecture ne gardait que le premier identifiant trouvé. */
+        const lignes = journal.filter((e) => !e.separateur);
         const visibles = filtreTitan === null
           ? lignes
-          : lignes.filter((l) => l.titanId === filtreTitan);
+          : lignes.filter((l) => l.acteurs.includes(filtreTitan));
         // Du plus récent au plus ancien : c'est le sens dans lequel on
         // consulte un journal de partie.
         const recentesDabord = [...visibles].reverse();
         const apercu = recentesDabord.slice(0, 3);
-        const compte = (id) => lignes.filter((l) => l.titanId === id).length;
+
+        /* Découpage en Manches. Le séparateur « — — — Manche N — — — » est
+           consommé comme un TITRE : il ouvre le bloc au lieu d'y figurer comme
+           une ligne. Tout ce qui précède le premier séparateur appartient à la
+           Manche 1, qui n'en a jamais eu — elle commence avec la partie. */
+        const segments = (() => {
+          const parManche = new Map();
+          for (const l of visibles) {
+            if (!parManche.has(l.manche)) parManche.set(l.manche, []);
+            parManche.get(l.manche).push(l);
+          }
+          // Du plus récent au plus ancien, dedans comme dehors.
+          return [...parManche.entries()]
+            .sort((a, b) => b[0] - a[0])
+            .map(([manche, lgs]) => ({ manche, lignes: [...lgs].reverse() }));
+        })();
+        const compte = (id) => lignes.filter((l) => l.acteurs.includes(id)).length;
 
         return (
           <div style={{
@@ -748,13 +897,45 @@ export default function DecisionPanels({ vm }) {
 
             {/* Replié : les trois dernières lignes, toujours là.
                 Déplié : tout, du plus récent au plus ancien. */}
+            {/* ── SEGMENTATION PAR MANCHE ──
+                Nikola, 2026-08-28 : « dans le journal, fais des segmentations
+                par manche ».
+
+                Le séparateur existait déjà dans le flux (« — — — Manche N — — — »,
+                posé par advanceManche) mais il était rendu comme une ligne
+                ordinaire : noyé entre deux résolutions de carte, et surtout
+                placé SOUS les lignes qu'il ouvre, puisque le journal se lit du
+                plus récent au plus ancien. Il ne servait donc à rien.
+
+                On découpe donc pour de bon, et chaque bloc porte son titre EN
+                TÊTE — un intertitre au-dessus des lignes qu'il annonce, comme
+                dans n'importe quel compte rendu. */}
             <div style={{
               maxHeight: showLog ? 300 : undefined,
               overflowY: showLog ? "auto" : "visible",
               marginTop: 2,
             }}>
-              {(showLog ? recentesDabord : apercu).map((l, rang) => (
-                <LigneJournal key={l.i} line={l.line} titanId={l.titanId} recente={rang === 0} />
+              {(showLog ? segments : [{ manche: null, lignes: apercu }]).map((seg, si) => (
+                <div key={seg.manche ?? `apercu-${si}`}>
+                  {seg.manche != null && (
+                    <div style={{
+                      position: "sticky", top: 0, zIndex: 2,
+                      background: T.screen,
+                      padding: "6px 0 4px",
+                      marginTop: si === 0 ? 0 : 6,
+                      borderTop: si === 0 ? "none" : `2px solid ${T.ruleStrong}`,
+                      ...label(T.you, T.micro),
+                    }}>
+                      Manche {seg.manche}
+                      <span style={{ color: T.faint, marginLeft: 6 }}>
+                        ({seg.lignes.length} ligne{seg.lignes.length > 1 ? "s" : ""})
+                      </span>
+                    </div>
+                  )}
+                  {seg.lignes.map((l, rang) => (
+                    <LigneJournal key={l.i} line={nommerLigne(l.texte)} titanId={l.acteurs[0] ?? null} recente={si === 0 && rang === 0} />
+                  ))}
+                </div>
               ))}
             </div>
 

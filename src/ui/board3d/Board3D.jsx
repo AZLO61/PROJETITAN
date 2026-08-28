@@ -473,6 +473,12 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     function rebuildTitans(titansData, boardData) {
       viderGroupe(titanGroup);
       titansData.forEach((t) => {
+        /* Placement d'ouverture : un Titan qui n'a pas encore choisi son
+           angle ne se dessine nulle part. Sa `cell` porte l'emplacement que
+           le tirage lui a réservé par défaut — l'afficher révélerait à ceux
+           qui posent avant lui où il compte aller, et l'ordre de placement ne
+           vaut que parce que cette information ne circule pas. */
+        if (t.aPlacer) return;
         const key = TITAN_SPRITE_KEY[t.id] || "escargot";
         const texture = getSpriteTexture(key);
         const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });

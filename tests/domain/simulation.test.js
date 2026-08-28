@@ -28,16 +28,27 @@ describe("simulateur — une partie complète", () => {
   });
 
   it("des cartes sont réellement jouées sur toute la partie", () => {
-    // Une partie à 4 Titans compte au plus 4 Manches × 3 rounds ×
-    // 4 Titans = 48 cartes. Le total peut être légèrement INFÉRIEUR sans
-    // que rien ne soit cassé : la Fatigue pioche parfois une carte encore
-    // programmée, et le Vol de Phase Repos peut laisser un Titan à moins
-    // de 3 cartes en main, donc incapable de programmer. C'est le jeu.
-    // Ce qu'on vérifie ici, c'est qu'on reste dans cette bande — un
-    // effondrement du compte signalerait une boucle qui s'interrompt.
-    const maximum = manchesMax(4) * 3 * 4;
+    /* Une Manche à 4 Titans compte 3 rounds × 4 Titans = 12 cartes. Le
+       total peut être légèrement INFÉRIEUR sans que rien ne soit cassé :
+       la Fatigue pioche parfois une carte encore programmée, et le Vol de
+       Phase Repos peut laisser un Titan à moins de 3 cartes en main, donc
+       incapable de programmer. C'est le jeu. Ce qu'on vérifie ici, c'est
+       qu'on reste dans cette bande — un effondrement du compte
+       signalerait une boucle qui s'interrompt.
+
+       LE PLAFOND SE LIT SUR LES MANCHES RÉELLEMENT JOUÉES, pas sur le
+       maximum théorique de la partie. Il était calculé sur `manchesMax`,
+       ce qui supposait que toute partie va au bout des 4 Manches : ce
+       n'est vrai que d'une IA qui casse peu. Depuis que la référence
+       cherche mieux (2026-08-28), une partie sur trois se termine avant
+       la dernière Manche — pénurie de blocs ou Apocalypse Urbaine — et le
+       test tombait sur 36 cartes en 3 Manches, c'est-à-dire sur un compte
+       PARFAIT lu contre un plafond qui n'existait plus. */
     const r = jouerPartie({ nbJoueurs: 4, seed: 11 });
+    const maximum = r.manchesJouees * 3 * 4;
     const total = Object.values(r.cartesJouees).reduce((s, v) => s + v, 0);
+    expect(r.manchesJouees).toBeGreaterThan(0);
+    expect(r.manchesJouees).toBeLessThanOrEqual(manchesMax(4));
     expect(total).toBeLessThanOrEqual(maximum);
     expect(total).toBeGreaterThan(maximum * 0.85);
   });
@@ -74,21 +85,29 @@ describe("simulateur — reproductibilité", () => {
     // NOTE désormais sa programmation au lieu de la tirer au hasard
     // (2026-08-18), ce qui alourdit mécaniquement toute campagne où il
     // joue. Coût assumé et mesuré, pas une régression à masquer.
-  }, 20000);
+    //
+    // Relevé à 90 s le 2026-08-28 : la référence développe dix cases avant
+    // de choisir sa carte et chiffre chaque bloc à portée au score complet,
+    // placements de Verts compris. Même mesure, IA qui réfléchit bien plus.
+  }, 90000);
 });
 
 describe("simulateur — l'échelle de force est bien ordonnée", () => {
-  it("un Expert bat un Novice sur une série de parties", () => {
-    // La raison d'être des trois niveaux : si l'Expert ne l'emporte pas
-    // nettement, c'est que la molette d'horizon ne sert à rien.
+  it("un Expert bat un Facile sur une série de parties", () => {
+    // La raison d'être de l'échelle : si l'Expert ne l'emporte pas
+    // nettement, c'est que ce qu'on lui retire ne coûte rien.
     const profils = {
       1: makeProfile(FORCES.EXPERT, TEMPERAMENTS.OPPORTUNISTE),
-      2: makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE),
-      3: makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE),
-      4: makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE),
+      2: makeProfile(FORCES.FACILE, TEMPERAMENTS.OPPORTUNISTE),
+      3: makeProfile(FORCES.FACILE, TEMPERAMENTS.OPPORTUNISTE),
+      4: makeProfile(FORCES.FACILE, TEMPERAMENTS.OPPORTUNISTE),
     };
     const { stats } = lancerCampagne({ parties: 12, nbJoueurs: 4, seed: 77, profils });
-    expect(stats.parForce.expert.scoreMoyen).toBeGreaterThan(stats.parForce.novice.scoreMoyen);
+    expect(stats.parForce.expert.scoreMoyen).toBeGreaterThan(stats.parForce.facile.scoreMoyen);
+    // Le délai ci-dessous a dû passer de 30 s à 90 s le 2026-08-28 : la
+    // référence développe désormais dix cases avant de choisir sa carte
+    // (cf. `largeurJointe`), ce qui multiplie le coût d'un tour. C'est le
+    // prix assumé de la recherche conjointe, pas une lenteur accidentelle.
     // Délai explicite : 12 parties complètes à 4 Titans, c'est le test le
     // plus lourd de la suite (~4 s seul, davantage quand les fichiers
     // tournent en parallèle). Il vivait sur le défaut de 5 s, donc à ~66 %
@@ -96,7 +115,7 @@ describe("simulateur — l'échelle de force est bien ordonnée", () => {
     // planificateur — ce que la règle des éléments contigus a suffi à
     // provoquer. Ce n'est pas une régression de perf à masquer, c'est un
     // budget qui n'a jamais correspondu au coût réel du test.
-  }, 30000);
+  }, 90000);
 });
 
 describe("agrégation — les indicateurs utiles à un auteur", () => {

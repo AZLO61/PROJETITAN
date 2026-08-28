@@ -1,7 +1,8 @@
 import React from "react";
 import { btnStyle, cancelBtn } from "../styles.js";
-import { T, marquee, prose, label, plate, key } from "../theme.js";
+import { T, marquee, prose, label, plate, key, readout } from "../theme.js";
 import Icon from "../icons.jsx";
+import BlockStockBar from "../cards/BlockStockBar.jsx";
 
 /* Une commande du meuble : icône dessinée + libellé, jamais un émoji. Toutes
    au même gabarit, pour que la rangée se lise comme une rangée de touches et
@@ -29,7 +30,7 @@ function Commande({ onClick, disabled, title, icon, children, tone = null, badge
         ...(enfonce ? { borderColor: T.you, color: T.you } : null),
       }}
     >
-      <Icon name={icon} size={15} />
+      {icon ? <Icon name={icon} size={15} /> : null}
       {children}
       {badge != null && (
         <span style={{ opacity: 0.75, fontWeight: 800 }}>×{badge}</span>
@@ -56,9 +57,11 @@ export default function HeaderPhase({ vm }) {
     regenerate,
     animating,
     animLabel,
-    undoStack,
-    handleUndo,
-    telechargerRapport,
+    showJournal,
+    setShowJournal,
+    actionLog,
+    state,
+    looseBlocks,
   } = vm;
 
   return (
@@ -73,6 +76,9 @@ export default function HeaderPhase({ vm }) {
           display: "flex",
           gap: 6,
           flexWrap: "wrap",
+          // Le stock, plus haut que les touches depuis qu'il a grandi de 30 %,
+          // ne doit pas les étirer avec lui : chacun garde sa hauteur propre.
+          alignItems: "center",
           marginBottom: T.s3,
         }}
       >
@@ -84,19 +90,11 @@ export default function HeaderPhase({ vm }) {
         >
           Nouvelle partie
         </Commande>
-        <Commande
-          onClick={handleUndo}
-          disabled={undoStack.length === 0}
-          icon="undo"
-          badge={undoStack.length > 0 ? undoStack.length : null}
-          title={
-            undoStack.length === 0
-              ? "Aucune action à annuler"
-              : `Annuler (${undoStack.length} coup${undoStack.length > 1 ? "s" : ""} disponible${undoStack.length > 1 ? "s" : ""})`
-          }
-        >
-          Annuler
-        </Commande>
+        {/* ANNULER A QUITTÉ CETTE RANGÉE — Nikola, 2026-08-28. C'est un geste
+            de TOUR, pas un réglage du meuble : il vit maintenant à côté de
+            Périmètre / Énergie, dans le panneau du Titan qui joue (cf.
+            BoardPanel), là où on regarde quand on vient de faire un coup
+            qu'on regrette. */}
         {/* SCORING : UN INTERRUPTEUR D'AFFICHAGE, PAS UNE ACTION.
 
             Il a été vert, puis jaune, et aucun des deux n'allait. Le vert dit
@@ -111,9 +109,15 @@ export default function HeaderPhase({ vm }) {
             de remplissage. Son état actif se dit donc comme celui d'un
             interrupteur — cerne et texte allumés, aplat éteint — au lieu
             d'emprunter une couleur qui veut dire autre chose. */}
+        {/* SANS ICÔNE (Nikola, 2026-08-28 : « supprime l'icône poubelle du
+            bouton Scoring »). C'était la Lanterne Rouge — le fanal de queue
+            de convoi, qui sert au trophée du même nom. À 15 px, dans une
+            rangée de commandes, elle se lit comme une corbeille : le
+            pictogramme disait donc « jeter » sur le bouton qui ouvre le
+            décompte. Aucune autre icône du jeu ne dit « compter les
+            points », et le mot le dit très bien tout seul. */}
         <Commande
           onClick={() => setShowScoring((s) => !s)}
-          icon="lantern"
           enfonce={showScoring}
           title="Afficher ou masquer le décompte des points"
         >
@@ -137,17 +141,37 @@ export default function HeaderPhase({ vm }) {
         >
           Règles
         </Commande>
-        {/* SIGNALER — Nikola, 2026-08-24. Enregistre l'état complet de la
-            partie dans un fichier, graine comprise, pour que le cas se
-            rejoue au lieu d'être reconstitué de mémoire. Rien ne sort de
-            l'appareil : le fichier est fabriqué et enregistré localement. */}
+        {/* JOURNAL À LA PLACE DE SIGNALER — Nikola, 2026-08-28 : « place
+            l'historique "journal" à la place de Signaler, car Signaler je ne
+            m'en sers pas ».
+
+            Le journal vivait sous le plateau, dans le flux : il poussait tout
+            vers le bas sur une partie d'1 h 30. Il devient une superposition,
+            ouverte d'ici et refermée d'un Échap.
+
+            SIGNALER N'EST PAS SUPPRIMÉ pour autant — il enregistre l'état
+            complet de la partie, graine comprise, et c'est ce qui permet de
+            rejouer un bug au lieu de le reconstituer de mémoire. Il descend
+            dans l'en-tête de cette superposition, juste à côté du journal
+            qu'on est en train de lire quand on décide de signaler quelque
+            chose : c'est là qu'il sert, pas dans une rangée de commandes où
+            il ne faisait que prendre une place. */}
         <Commande
-          onClick={telechargerRapport}
-          icon="alert"
-          title="Enregistre l'état exact de la partie dans un fichier, pour pouvoir rejouer ce qui vient de se passer"
+          onClick={() => setShowJournal((v) => !v)}
+          enfonce={showJournal}
+          icon="next"
+          badge={actionLog.length > 0 ? actionLog.length : null}
+          title="Ouvrir le journal de la partie par-dessus le plateau"
         >
-          Signaler
+          Journal
         </Commande>
+
+        {/* LE STOCK GLOBAL, À DROITE DE LA MÊME RANGÉE — Nikola, 2026-08-28.
+            C'est la seule position qui ne coûte aucune hauteur : la rangée
+            existe déjà et sa moitié droite était vide. Tout ce qu'on lui reprend
+            ici, l'écran le rend au plateau et aux panneaux du tour — qui doivent
+            tenir sans défilement. */}
+        <BlockStockBar board={state.board} looseBlocks={looseBlocks} orientation="rangee" />
       </div>
 
       {/* ── CONFIRMATION NOUVELLE PARTIE ── */}

@@ -159,6 +159,8 @@ export default function BoardPanel({ vm }) {
     bbDest,
     bbPath,
     setBbPath,
+    setBbSurvol,
+    setGraouMode,
     bbBudgetUsed,
     bbUndoLastCell,
     bbDestIsBuilding,
@@ -184,6 +186,8 @@ export default function BoardPanel({ vm }) {
     canUseMovePassif,
     canUseRecupPassif,
     toggleProgCard,
+    undoStack,
+    handleUndo,
     canPlayCard,
     advanceActionRound,
     discardCurrentCard,
@@ -300,8 +304,11 @@ export default function BoardPanel({ vm }) {
           background: T.plate,
           border: `2px solid ${tcSel ? tcSel.accent : T.edge}`,
           borderRadius: T.rPlate,
-          padding: "12px 14px",
-          marginBottom: 12,
+          padding: "10px 12px",
+          // Dernier panneau de la colonne : sa marge basse ne sépare plus de
+          // rien depuis que le stock et la graine sont remontés dans l'en-tête,
+          // et elle coûtait 12 px à un écran qui compte ses pixels.
+          marginBottom: 0,
         }}>
           {/* En-tête Titan — nom, case, couleur et Adrénaline vivent déjà sur
               la carte du Titan dans le bandeau juste au-dessus, en
@@ -348,6 +355,61 @@ export default function BoardPanel({ vm }) {
                 )}
               </div>
             </div>
+
+            {/* ANNULER VIT ICI DEPUIS LE 2026-08-28 (Nikola : « le bouton
+                Annuler devrait plutôt être à côté de Périmètre / Énergie, sur
+                la droite »). Il était dans la rangée de commandes du meuble,
+                avec « Nouvelle partie » et « Règles » — des réglages qu'on
+                touche une fois par partie. Or annuler est un geste de TOUR :
+                on s'en sert juste après un coup, en regardant le panneau du
+                Titan, pas en haut de l'écran. */}
+            <button
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              title={undoStack.length === 0
+                ? "Aucune action à annuler"
+                : `Annuler (${undoStack.length} coup${undoStack.length > 1 ? "s" : ""} disponible${undoStack.length > 1 ? "s" : ""})`}
+              /* Il a eu deux vies ratées dans la journée : d'abord le
+                 traitement d'un bouton secondaire de boîte de dialogue —
+                 contour discret, texte gris, invisible — puis un aplat orange
+                 plein qui criait plus fort que les actions de jeu elles-mêmes.
+
+                 La troisième version emprunte le vocabulaire que le meuble
+                 utilise déjà pour ses touches : aplat sombre, cerne net, et le
+                 relèvement de 3 px qui dit « ça s'enfonce ». L'orange ne peint
+                 plus le fond, il tient le cerne, l'icône et le compteur — assez
+                 pour qu'on le trouve du premier coup d'œil, pas assez pour
+                 concurrencer la carte qu'on est en train de jouer. Éteint, tout
+                 retombe en gris et le relief disparaît : rien à annuler ne doit
+                 pas attirer l'œil. */
+              style={{
+                marginLeft: "auto",
+                display: "inline-flex", alignItems: "center", gap: 7,
+                background: undoStack.length === 0 ? "rgba(255,255,255,.04)" : "rgba(251,146,60,.12)",
+                border: `${T.edgeW} solid ${undoStack.length === 0 ? T.rule : "#fb923c"}`,
+                borderRadius: T.rChip,
+                color: undoStack.length === 0 ? T.faint : "#ffb877",
+                padding: "8px 14px",
+                fontFamily: T.ui,
+                fontWeight: 700,
+                fontSize: T.small,
+                letterSpacing: ".02em",
+                boxShadow: undoStack.length === 0 ? "none" : `0 3px 0 ${T.edge}`,
+                transform: undoStack.length === 0 ? "none" : "translateY(-1px)",
+                transition: `transform 90ms ${T.easeOut}, box-shadow 90ms ${T.easeOut}`,
+                cursor: undoStack.length === 0 ? "not-allowed" : "pointer",
+              }}
+            >
+              <Icon name="undo" size={13} />
+              Annuler
+              {undoStack.length > 0 && (
+                <span style={{
+                  ...readout("0.62rem", "#120d02"),
+                  background: "#fb923c", borderRadius: 99, padding: "1px 7px",
+                  lineHeight: "14px",
+                }}>{undoStack.length}</span>
+              )}
+            </button>
           </div>
 
           {/* ── FIN DE TOUR ──
@@ -456,12 +518,6 @@ export default function BoardPanel({ vm }) {
                         Passer aux cartes
                         <Icon name="next" size={13} />
                       </button>
-                      <AdrenalinePicker
-                        value={moveAdrenaline}
-                        max={selectedTitan.adrenaline || 0}
-                        onChange={setMoveAdrenaline}
-                        label="Chaque Adrénaline dépensée ajoute 1 case de déplacement"
-                      />
                     </div>
                   </>
                 )}
@@ -472,6 +528,20 @@ export default function BoardPanel({ vm }) {
                         <Icon name="pointer" size={14} />
                         Clique une case ({moveReachable.size} dispo)
                       </span>
+                      {/* LE DOSEUR D'ADRÉNALINE NE VIT QUE DANS LE MODE
+                          DÉPLACER — Nikola, 2026-08-28 : « enlève l'information
+                          d'adrénaline en + ou − si je ne suis pas dans
+                          déplacer ». Il traînait dans la rangée d'ouverture, à
+                          côté de « Passer aux cartes » : on y réglait donc une
+                          portée pour un déplacement qu'on n'avait pas décidé de
+                          faire. Les doseurs des cartes gardent leur place et
+                          leur format, ils sont déjà sur la carte concernée. */}
+                      <AdrenalinePicker
+                        value={moveAdrenaline}
+                        max={selectedTitan.adrenaline || 0}
+                        onChange={setMoveAdrenaline}
+                        label="Chaque Adrénaline dépensée ajoute 1 case de déplacement"
+                      />
                       <button onClick={toggleMoveMode} style={{ ...cancelBtn(), marginLeft: "auto" }}>
                         <Icon name="close" size={12} /> Annuler
                       </button>
@@ -531,9 +601,14 @@ export default function BoardPanel({ vm }) {
                 )}
                 {recupMode && (
                   <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                    {/* « La phrase pour ramasser "clique sur une des cases en
+                        surbrillance" n'est pas nécessaire, c'est intuitif »
+                        (Nikola, 2026-08-28). Il reste le COMPTE, qui lui n'est
+                        pas devinable : savoir qu'il y a trois cases évite d'en
+                        chercher une quatrième. */}
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6, ...label(T.go, T.small) }}>
                       <Icon name="pointer" size={14} />
-                      Clique une case en surbrillance ({recupPool.size} dispo)
+                      {recupPool.size} case{recupPool.size > 1 ? "s" : ""}
                     </span>
                     <button onClick={toggleRecupMode} style={{ ...cancelBtn(), marginLeft: "auto" }}>
                       <Icon name="close" size={12} /> Annuler
@@ -573,6 +648,32 @@ export default function BoardPanel({ vm }) {
                   2
                 </span>
                 <h3 style={marquee("0.95rem", T.you)}>Joue une carte</h3>
+                {/* « QUE FONT LES CARTES ? » TIENT EN UN POINT D'INTERROGATION —
+                    Nikola, 2026-08-29 : « supprime "que font les cartes", mets
+                    juste un ? à côté de "joue les cartes" pour afficher ».
+                    C'était une touche pleine largeur avec un libellé qui changeait
+                    selon l'état, pour une aide qu'on ouvre une fois le temps
+                    d'apprendre les six cartes. Elle vit désormais où on la
+                    cherche : contre le titre de l'étape. */}
+                {(phase === "programmation" || phase === "action") && (
+                  <button
+                    onClick={() => setShowCardEffects((v) => !v)}
+                    aria-pressed={showCardEffects}
+                    title={showCardEffects ? "Masquer ce que font les cartes" : "Que font les cartes ?"}
+                    style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: 19, height: 19, flexShrink: 0, marginLeft: 2,
+                      background: "transparent",
+                      border: `1.5px solid ${showCardEffects ? T.you : T.rule}`,
+                      borderRadius: 99, cursor: "pointer",
+                      color: showCardEffects ? T.you : T.dim,
+                      fontFamily: T.ui, fontWeight: 700, fontSize: ".7rem", lineHeight: 1,
+                      padding: 0,
+                    }}
+                  >
+                    ?
+                  </button>
+                )}
                 {/* Retour possible tant que le deplacement n'est pas consomme :
                     passer l'etape ne doit pas etre irreversible. */}
                 {moveSkipped && canUseMovePassif(selectedTitan.id) && (
@@ -586,28 +687,6 @@ export default function BoardPanel({ vm }) {
               </div>
             )}
 
-            {/* Bascule des descriptions d'effet, valable pour les cartes de la
-                main comme pour les cartes programmees. */}
-            {(phase === "programmation" || phase === "action") && (
-              <button
-                onClick={() => setShowCardEffects((v) => !v)}
-                title={showCardEffects ? "Masquer ce que font les cartes" : "Afficher ce que font les cartes"}
-                style={{
-                  display: "flex", alignItems: "center", gap: 7, marginBottom: 8,
-                  background: "transparent",
-                  border: `2px solid ${showCardEffects ? T.you : T.rule}`,
-                  borderRadius: T.rChip, padding: "6px 11px", cursor: "pointer",
-                  ...label(showCardEffects ? T.you : T.dim, T.micro),
-                }}
-              >
-                <span style={{
-                  display: "inline-flex", alignItems: "center", justifyContent: "center",
-                  width: 15, height: 15, flexShrink: 0,
-                  border: `1.5px solid currentColor`, fontSize: ".62rem",
-                }}>?</span>
-                {showCardEffects ? "Masquer ce que font les cartes" : "Que font les cartes ?"}
-              </button>
-            )}
 
             {/* PHASE PROGRAMMATION */}
             {phase === "programmation" && (
@@ -629,10 +708,10 @@ export default function BoardPanel({ vm }) {
                       Programmation dans {progCountdown}s…
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
-                      {progSelection.map((cardId) => (
-                        <CardVisual key={cardId} cardId={cardId} selected size="small"
+                      {progSelection.map(({ idx, cardId }) => (
+                        <CardVisual key={`${cardId}-${idx}`} cardId={cardId} selected size="small"
                           accentColor={TITAN_COLORS[selectedTitan.id]?.accent}
-                          onClick={() => toggleProgCard(cardId)}
+                          onClick={() => toggleProgCard(idx, cardId)}
                         />
                       ))}
                     </div>
@@ -674,14 +753,36 @@ export default function BoardPanel({ vm }) {
                     <div style={{ fontSize: ".68rem", color: "rgba(255,255,255,.5)", marginBottom: 6 }}>
                       Sélectionne 3 cartes à programmer ({progSelection.length}/3) :
                     </div>
-                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
-                      {selectedTitan.hand.map((cardId) => (
-                        <div key={cardId} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, width: 128 }}>
+                    {/* TROIS PAR RANGÉE, QUOI QU'IL ARRIVE — Nikola, 2026-08-28 :
+                        « là j'ai 2 colonnes de 3 cartes, avant j'avais 2 lignes de
+                        3 cartes, je préfère ».
+
+                        C'était un `flex-wrap` sur des cartes à largeur fixe : depuis
+                        que la colonne de droite a rétréci au profit du plateau, la
+                        troisième carte ne tenait plus et la main basculait en 3×2
+                        au lieu de 2×3. Une grille à trois colonnes `1fr` ne peut
+                        pas se replier : les cartes se resserrent, elles ne
+                        changent pas de disposition. */}
+                    <div style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                      gap: 5, marginBottom: 8, justifyItems: "center",
+                    }}>
+                      {/* CLE ET SELECTION PAR EXEMPLAIRE, PAS PAR TITRE.
+                          Une main peut contenir deux fois le meme titre depuis
+                          que le vol de Phase Repos transfere la carte au
+                          voleur. Indexer sur `cardId` seul donnait deux <div>
+                          de meme cle a React, et surtout marquait les DEUX
+                          exemplaires des qu'on en cliquait un. La position en
+                          main les distingue (Nikola, 2026-08-28 : « je dois
+                          bien cliquer sur les 2 cartes »). */}
+                      {selectedTitan.hand.map((cardId, idx) => (
+                        <div key={`${cardId}-${idx}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, width: "100%", minWidth: 0 }}>
                           <CardVisual
                             cardId={cardId}
-                            selected={progSelection.includes(cardId)}
-                            selectable={progSelection.length < 3 || progSelection.includes(cardId)}
-                            onClick={() => toggleProgCard(cardId)}
+                            selected={progSelection.some((sel) => sel.idx === idx)}
+                            selectable={progSelection.length < 3 || progSelection.some((sel) => sel.idx === idx)}
+                            onClick={() => toggleProgCard(idx, cardId)}
                             size="small"
                             accentColor={TITAN_COLORS[selectedTitan.id]?.accent}
                           />
@@ -782,13 +883,18 @@ export default function BoardPanel({ vm }) {
                 )}
                 {selectedTitan.programmed.length > 0 && (
                   <div style={{ marginBottom: 8 }}>
+                    {/* Le sous-titre « Joue une carte (N restantes) » est retiré
+                        (Nikola, 2026-08-29 : « on comprend visuellement qu'il
+                        reste X cartes à jouer »). Il répétait le titre de
+                        l'étape juste au-dessus, et son compteur ne disait rien
+                        que les cartes posées là ne montrent déjà. */}
+                    {/* Meme grille de trois que la programmation : « je préfère
+                        même quand je dois jouer mes cartes ». */}
                     <div style={{
-                      fontSize: ".68rem", color: "#FFD93D", fontWeight: 700,
-                      textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 5,
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                      gap: 5, justifyItems: "center",
                     }}>
-                      🃏 Joue une carte ({selectedTitan.programmed.length} restante{selectedTitan.programmed.length > 1 ? "s" : ""})
-                    </div>
-                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                       {selectedTitan.programmed.map((cardId) => {
                         const canPlay = canPlayCard(cardId);
                         const activeMode = (cardId === "boing_boing" && bbMode)
@@ -801,7 +907,7 @@ export default function BoardPanel({ vm }) {
                             display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
                             background: canPlay ? "rgba(255,217,61,.06)" : "transparent",
                             border: canPlay ? "1px solid rgba(255,217,61,.2)" : "1px solid transparent",
-                            borderRadius: 10, padding: "4px", width: showCardEffects ? 140 : "auto",
+                            borderRadius: 10, padding: "4px", width: "100%", minWidth: 0,
                           }}>
                             <CardVisual
                               cardId={cardId}
@@ -810,12 +916,53 @@ export default function BoardPanel({ vm }) {
                               accentColor={TITAN_COLORS[selectedTitan.id]?.accent}
                               onClick={() => {
                                 if (!canPlay || animating) return;
-                                // Retour visuel immediat : sans lui, un clic
-                                // sur une carte a resolution differee ne
-                                // produisait rien pendant 3 secondes.
-                                setPendingCardConfirm({ titanId: selectedTitan.id, cardId });
-                                // Les cartes à résolution immédiate ont un délai visuel 3s
+
+                                /* ⚠️ UNE SEULE CARTE OUVERTE À LA FOIS.
+                                   Bug remonté par Nikola le 2026-08-28 : « j'ai
+                                   pu sélectionner Boing Boing ET Tout Casser,
+                                   j'aurais pu jouer 2 cartes là ».
+
+                                   Chaque carte ouvre son propre mode, et rien
+                                   ne fermait les autres : avec Boing Boing en
+                                   cours de tracé, cliquer Tout Casser lançait
+                                   sa résolution différée SANS annuler le
+                                   chemin — le joueur pouvait donc valider les
+                                   deux dans le même round, alors qu'il n'a
+                                   droit qu'à une carte par round.
+
+                                   Cliquer une carte referme donc tout ce qui
+                                   était ouvert. Recliquer la même la referme
+                                   aussi, via son propre `toggle` juste en
+                                   dessous : le geste reste réversible. */
+                                if (cardId !== "tete_en_avant") setTeaMode(false);
+                                if (cardId !== "boing_boing") { setBbMode(false); setBbPath([]); setBbSurvol([]); }
+                                if (cardId !== "je_ne_partage_pas") { setJnpMode(false); setJnpSelected([]); }
+                                if (cardId !== "graouhhh") setGraouMode(false);
+
+                                /* ⚠️ DEUX CARTES POUVAIENT PARAÎTRE SÉLECTIONNÉES.
+                                   Bug remonté par Nikola le 2026-08-29.
+
+                                   La sélection avait DEUX sources : `activeMode`
+                                   pour les cartes qui ouvrent un mode, et
+                                   `pendingCardConfirm` pour celles à résolution
+                                   différée. Le second était posé pour TOUTES les
+                                   cartes et n'était effacé qu'au changement de
+                                   tour : refermer une carte à mode la laissait
+                                   donc allumée par `pendingCardConfirm`, et la
+                                   suivante s'allumait à son tour par
+                                   `activeMode`. Deux cartes en surbrillance pour
+                                   un round qui n'en autorise qu'une.
+
+                                   `pendingCardConfirm` ne sert qu'à combler les
+                                   3 secondes d'attente des cartes à résolution
+                                   différée, où rien d'autre ne bouge à l'écran.
+                                   Il est donc réservé à celles-là, et remis à
+                                   zéro pour les autres : une seule source de
+                                   vérité par carte. */
                                 const immediate = ["tout_casser","faut_pas_me_chauffer"];
+                                setPendingCardConfirm(
+                                  immediate.includes(cardId) ? { titanId: selectedTitan.id, cardId } : null
+                                );
                                 if (immediate.includes(cardId)) {
                                   setAnimating(true);
                                   setAnimLabel(`Résolution : ${CARD_LABEL[cardId] || cardId}…`);
@@ -931,8 +1078,8 @@ export default function BoardPanel({ vm }) {
                           <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.3)" }}>repos</span>
                         </div>
                       ))}
-                      {selectedTitan.hand.map((cardId) => (
-                        <div key={`hand-${cardId}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                      {selectedTitan.hand.map((cardId, idx) => (
+                        <div key={`hand-${cardId}-${idx}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                           <CardVisual cardId={cardId} selectable={false} size="small" />
                           <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.3)" }}>main</span>
                         </div>
@@ -965,7 +1112,25 @@ export default function BoardPanel({ vm }) {
                 atterrissage — désactivé sur un bâtiment encore debout,
                 simple point de passage. */}
             {bbMode && (
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+              /* « SAUTER » ET « ANNULER » NE DOIVENT JAMAIS SORTIR DE L'ÉCRAN —
+                 Nikola, 2026-08-28 : « quand j'ai la carte Sauter à jouer, le
+                 panneau dépasse un peu vers le bas, "Sauter" et "Annuler" sont
+                 rognés ».
+
+                 Cette rangée s'ajoute SOUS la main de cartes, qui occupe déjà
+                 toute la hauteur disponible : le chemin se trace en cliquant le
+                 plateau, donc on ne pense pas à faire défiler le panneau, et les
+                 deux seuls boutons qui terminent l'action passent sous la ligne
+                 de flottaison. Ils se collent donc en bas : c'est le traitement
+                 habituel d'une paire valider/annuler, et il ne coûte rien
+                 puisque la rangée existait déjà. Le fond est opaque pour que les
+                 cartes ne transparaissent pas dessous. */
+              <div style={{
+                display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap",
+                position: "sticky", bottom: 0, zIndex: 3,
+                background: T.plate, borderTop: `1px solid ${T.rule}`,
+                paddingTop: 7, paddingBottom: 3, marginBottom: -3,
+              }}>
                 <span style={{ fontSize: ".75rem", color: "#FFD93D" }}>
                   {bbPath.length === 0
                     ? `Clique une case adjacente pour commencer ton chemin (budget ${bbMaxRange})`

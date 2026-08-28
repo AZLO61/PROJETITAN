@@ -37,7 +37,7 @@ const titan = (id, extra = {}) => ({
 
 const etat = (titans, looseBlocks = {}, board = {}) => ({ board, looseBlocks, titans });
 const expert = makeProfile(FORCES.EXPERT, TEMPERAMENTS.OPPORTUNISTE);
-const novice = makeProfile(FORCES.NOVICE, TEMPERAMENTS.OPPORTUNISTE);
+const novice = makeProfile(FORCES.FACILE, TEMPERAMENTS.OPPORTUNISTE);
 
 describe("récupération — l'IA choisit le bloc, pas seulement la case", () => {
   it("prend la couleur qui rapporte, pas celle du dessus de la pile", () => {
@@ -256,7 +256,7 @@ describe("programmation — troisième molette du profil", () => {
     setSeed(17);
     const titans = [titan(1, { cell: "E5", hand: main }), titan(2, { cell: "A1" })];
     const jeu = etat(titans, { E4: ["rouge"], E6: ["rose"], D5: ["orange"] });
-    const confirme = makeProfile(FORCES.CONFIRME, TEMPERAMENTS.OPPORTUNISTE);
+    const confirme = makeProfile(FORCES.MOYEN, TEMPERAMENTS.OPPORTUNISTE);
     // Déterministe : deux appels sur le même état donnent la même main.
     expect(planProgrammation(1, jeu, confirme, 1)).toEqual(planProgrammation(1, jeu, confirme, 1));
     expect(planProgrammation(1, jeu, confirme, 1)).toHaveLength(3);

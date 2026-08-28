@@ -44,10 +44,22 @@ function compterPistes(valeur) {
 
 function pistesDuComposant(propriete) {
   const src = lire("src/ui/panels/RoundPanels.jsx");
-  const re = new RegExp(`${propriete}:\\s*"([^"]+)"`);
-  const m = src.match(re);
+  /* Guillemets OU accent grave. Depuis que les gouttières d'attente ne
+     s'ouvrent que lorsqu'un Titan y patiente, leur largeur est calculée et la
+     valeur est écrite en gabarit.
+
+     On prend donc la LIGNE entière, on remplace chaque interpolation par une
+     piste neutre, puis on retire les délimiteurs. Découper sur le guillemet
+     fermant ne marcherait pas : `${piste("gauche")}` en contient un.
+     Ce que ce test vérifie est le NOMBRE de pistes du plateau, jamais la
+     valeur de chacune. */
+  const m = src.match(new RegExp(`${propriete}:\\s*([^\\n]+)`));
   expect(m, `${propriete} introuvable dans RoundPanels.jsx`).toBeTruthy();
-  return compterPistes(m[1]);
+  const valeur = m[1]
+    .replace(/\$\{[^}]*\}/g, "X")
+    .replace(/^["`]/, "")
+    .replace(/["`],?\s*$/, "");
+  return compterPistes(valeur);
 }
 
 /** Toutes les redéfinitions de .titan-grid dans les media queries. */

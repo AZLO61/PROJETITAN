@@ -156,3 +156,11 @@ simulations/
 
 # Artefacts de session Impeccable (captures de revue)
 .impeccable/review/
+
+# Sorties de mesure jetables (campagnes d'invariants, duels de reglages).
+# Elles se rejouent a la commande, elles n'ont pas a etre versionnees :
+#   npm run duel -- 20 expert opportuniste poidsAdversaires=0.5
+scripts/tmp/
+
+# Configuration de lancement locale de l'apercu navigateur.
+.claude/

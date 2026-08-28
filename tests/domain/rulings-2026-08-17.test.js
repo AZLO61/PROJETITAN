@@ -216,14 +216,25 @@ describe("cellAtImpact — le bloc perdu tombe sur la case d'impact", () => {
   });
 
   it("Tout Casser fige la case de chaque cible du Périmètre", () => {
+    /* SCÈNE RENFORCÉE LE 2026-08-28, pas assertion affaiblie. Depuis que Tout
+       Casser ne vole plus rien sous le Seuil 4 (« déplacement et Bagarre, aucun
+       vol »), un Périmètre ne portant qu'un seul Titan ne produit plus AUCUNE
+       décision — l'énergie y vaut 1. Le test tombait donc sur `decision`
+       indéfini, sans que `cellAtImpact` soit en cause.
+
+       On remplit le Périmètre pour atteindre le seuil : c'est là, et là
+       seulement, qu'un Dilemme s'ouvre et qu'il y a une case d'impact à figer. */
     const titans = [
       t(1, "E5", { repaire: [] }),
       t(2, "E6", { repaire: ["bleu", "rose"] }),
     ];
-    const res = resolveToutCasser(1, { board: {}, looseBlocks: {}, titans });
+    const looseBlocks = { D4: ["bleu"], D5: ["rose"], D6: ["orange"], E4: ["rouge"] };
+    const res = resolveToutCasser(1, { board: {}, looseBlocks, titans });
     const decision = (res.decisions || [])[0];
 
+    expect(res.seuil4).toBe(true);
     expect(decision).toBeDefined();
+    expect(decision.type).toBe("DIL"); // plus jamais RAGE sur cette carte
     expect(decision.cellAtImpact).toBe("E6");
   });
 
@@ -526,19 +537,33 @@ describe("Repli d'un élément sans la puissance de passer", () => {
      revient au Titan initiateur.
 
      Les quatre exemples donnés à la table sont repris tels quels ci-dessous.
-     Deux d'entre eux (1 et 4) listaient une case de moins que la règle n'en
-     autorise : la règle énoncée fait foi, et toutes les cases nommées par
-     Nikola y figurent bien. */
+
+     ⚠️ CETTE LECTURE A ÉTÉ CORRIGÉE LE 2026-08-28. Deux des exemples (1 et 4)
+     listaient une case de MOINS que la règle lue littéralement n'en autorise,
+     et le choix avait été fait de suivre la règle plutôt que les exemples —
+     donc de proposer en plus une case située DERRIÈRE l'obstacle.
+
+     Nikola l'a repris, exemple à l'appui : « je viens de D7, je tape C7,
+     rebond = D6 D7 D8, pas C6 ou C8 comme là ». Un élément arrêté faute de
+     puissance ne peut pas se retrouver de l'autre côté de ce qui l'a arrêté :
+     c'est toute la raison d'être du repli. `getCasesRepliDebris` écarte donc
+     les cases qui ont progressé sur TOUS les axes du mouvement.
+
+     Ses exemples 1, 2 et 3 tombent alors exactement juste. RESTE L'EXEMPLE 4,
+     ci-dessous, qui ne colle toujours pas : de B9 vers l'angle A9, Nikola
+     nomme A8, qui est sur la rangée d'en face. Le test le documente et
+     attend son arbitrage plutôt que de le trancher à sa place. */
 
   const vide = { board: {} };
 
   it("exemple 1 — de B9 vers C9 bloquée : il revient ou glisse en arrière", () => {
-    // Nikola : « B9 ou B8 ». La règle ajoute C8, qui touche elle aussi les
-    // deux cases. Toutes les cases citées sont proposées.
+    /* Nikola : « B9 ou B8 » — et c'est exactement ce qui est rendu depuis
+       le 2026-08-28. C8 était ajoutée par la lecture littérale de la règle :
+       elle est dans la rangée C, c'est-à-dire derrière le mur. */
     const cases = getCasesRepliDebris("B9", "C9", 1, 0, vide).sort();
     expect(cases).toContain("B9"); // il revient sur sa case
     expect(cases).toContain("B8"); // cité par Nikola
-    expect(cases).toEqual(["B8", "B9", "C8"]);
+    expect(cases).toEqual(["B8", "B9"]);
   });
 
   it("exemple 2 — sortie de faille vers l'ouest sur C9 bloquée : B9 ou D9", () => {
@@ -553,12 +578,23 @@ describe("Repli d'un élément sans la puissance de passer", () => {
     expect(getCasesRepliDebris(null, "C9", 1, -1, vide)).toEqual(["B9"]);
   });
 
-  it("exemple 4 — de B9 vers l'angle A9 bloqué : A8 et B9 sont proposées", () => {
-    // Nikola : « A8 ou B9 ». La règle ajoute B8. Les deux cases citées y sont.
+  it("exemple 4 — de B9 vers l'angle A9 bloqué : LE SEUL CAS QUI DIVERGE", () => {
+    /* ⚠️ POINT OUVERT, à trancher par Nikola.
+
+       Il a nommé « A8 ou B9 » le 2026-08-17. Or A8 est dans la rangée A,
+       c'est-à-dire DERRIÈRE l'angle A9 qui vient d'arrêter l'élément — donc
+       exactement le genre de case qu'il a fait retirer le 2026-08-28 avec
+       l'exemple D7 → C7. Ses deux exemples s'excluent.
+
+       Le code suit la règle du 28 août, la plus récente et la plus précise
+       (elle nomme les cases à EXCLURE, pas seulement celles à inclure). Ce
+       test verrouille donc le rendu actuel, et porte la divergence par écrit
+       pour qu'elle ne se règle pas en silence. */
     const cases = getCasesRepliDebris("B9", "A9", -1, 0, vide).sort();
-    expect(cases).toContain("A8");
-    expect(cases).toContain("B9");
-    expect(cases).toEqual(["A8", "B8", "B9"]);
+    expect(cases).toContain("B9"); // il revient sur sa case, jamais discuté
+    expect(cases).toEqual(["B8", "B9"]);
+    // A8, nommée le 17 août, n'est plus proposée : elle est derrière l'angle.
+    expect(cases).not.toContain("A8");
   });
 
   it("jamais une case portant un bâtiment encore debout", () => {
@@ -574,8 +610,11 @@ describe("Repli d'un élément sans la puissance de passer", () => {
     // Précision de Nikola du 2026-08-17 : « on peut poser le débris qui
     // rebondit sur un débris, ça forme un tas ». C'est la façon normale de
     // constituer un Amas, donc un coup à part entière, pas un accident.
-    const cases = getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, looseBlocks: { C8: ["rose"] } });
-    expect(cases).toContain("C8");
+    // B8 et non C8 : depuis le 2026-08-28, une case derrière l'obstacle
+    // n'est plus proposée. Ce que ce test vérifie est qu'un débris déjà au
+    // sol n'INTERDIT pas la case, pas la géométrie du repli.
+    const cases = getCasesRepliDebris("B9", "C9", 1, 0, { board: {}, looseBlocks: { B8: ["rose"] } });
+    expect(cases).toContain("B8");
   });
 
   it("un débris PEUT se poser sur la case d'un Titan", () => {

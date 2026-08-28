@@ -371,17 +371,40 @@ button {
 
 @media (min-width: 1100px) {
   .titan-layout {
-    grid-template-columns: minmax(0, 1.4fr) minmax(370px, 0.8fr);
+    /* Réagencement du 2026-08-28 : la colonne de gauche ne porte plus que le
+       plateau, la bande des Titans ayant rejoint celle des commandes. Elle
+       reprend donc la part que la bande lui prenait. La colonne de droite
+       garde son plancher de 360 px : c'est la largeur en dessous de laquelle
+       une carte jouable devient trop étroite pour être lue. */
+    grid-template-columns: minmax(0, 1.7fr) minmax(360px, 0.75fr);
     align-items: start;
     gap: var(--sp-5);
   }
 
+  /* ── AUCUN PANNEAU N'EST JAMAIS ROGNÉ ──
+     Nikola, 2026-08-28 : « rends la responsivité parfaite, pour qu'un panneau
+     ne soit pas rogné quelle que soit l'action ».
+
+     Cette colonne était `sticky` avec une hauteur maximale et un débordement
+     en `auto`. C'est ce couple qui coupait : dès que le contenu dépassait la
+     fenêtre — une main de six cartes, un panneau de décision qui s'ouvre — le
+     dernier panneau passait sous le bord d'une boîte qui, elle, ne bougeait
+     plus. Et comme la barre de défilement interne ne se voit qu'au survol, rien
+     ne disait qu'il y avait quelque chose en dessous : le panneau avait
+     simplement l'air amputé.
+
+     On retire les trois : plus de hauteur maximale, plus de débordement
+     interne, plus d'ancrage. La colonne fait la hauteur de son contenu, et
+     quand l'ensemble dépasse la fenêtre, c'est LA PAGE qui défile — un geste
+     que tout le monde connaît, et qui ne cache rien. Sur un écran où tout tient
+     (cf. le budget vertical du CHANGELOG), il n'y a de toute façon rien à faire
+     défiler.
+
+     Ce qu'on perd : la colonne ne suit plus le regard quand on fait défiler un
+     plateau plus haut qu'elle. C'est un confort ; ne pas amputer un panneau de
+     décision est une condition. */
   .titan-layout__aside {
-    position: sticky;
-    top: var(--sp-3);
-    max-height: calc(100vh - var(--sp-5));
-    overflow-y: auto;
-    overscroll-behavior: contain;
+    align-self: start;
     padding-right: var(--sp-1);
   }
 }

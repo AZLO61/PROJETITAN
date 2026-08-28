@@ -10,7 +10,13 @@ import RepoVolBanner from "./panels/RepoVolBanner.jsx";
 import RepliBanner from "./panels/RepliBanner.jsx";
 import FpmcBanner from "./panels/FpmcBanner.jsx";
 import CornerChoiceBanner from "./panels/CornerChoiceBanner.jsx";
+import PlacementBanner from "./panels/PlacementBanner.jsx";
+import FatigueBanner from "./panels/FatigueBanner.jsx";
+import ToutCasserBanner from "./panels/ToutCasserBanner.jsx";
 import DecisionPanels from "./panels/DecisionPanels.jsx";
+import TitanBandPanel from "./panels/TitanBandPanel.jsx";
+import Superposition from "./panels/Superposition.jsx";
+import PodiumFinal from "./panels/PodiumFinal.jsx";
 import { T, marquee, readout, label } from "./theme.js";
 import Icon from "./icons.jsx";
 
@@ -19,7 +25,44 @@ import Icon from "./icons.jsx";
    l'arrière, et juste dessous l'afficheur : où on en est. C'est la première
    chose lue depuis l'autre bout de la table, donc c'est la seule chose de
    cette taille sur tout l'écran. */
-function Marquee({ mancheNumber, totalManches, phase, detonateurNom }) {
+function Marquee({
+  mancheNumber, totalManches, phase, detonateurNom,
+  occupiedCount, apocalypseThreshold, endGameReasons,
+}) {
+  /* DERNIÈRE MANCHE, DIT COMME TEL (Nikola, 2026-08-27 : « indique mieux que
+     c'est la dernière manche »).
+
+     Elle se disait par « · DERNIERE MANCHE » en 0,68 rem, au bout d'une
+     rangée qui portait déjà cinq autres informations — supprimée depuis. Ici
+     elle prend le compteur lui-même : le 4/4 passe au rouge d'arrêt et
+     l'étiquette se pose SOUS lui, cernée, à la taille du reste du fronton.
+     C'est le même signal que la couleur de phase, lisible de l'autre bout de
+     la table sans qu'on ait à lire un mot.
+
+     LE COMPTE DE BÂTIMENTS MONTE ICI (« garde juste le seuil des bâtiments,
+     mais place-le ailleurs »). Sa place est à côté de la Manche : ce sont les
+     DEUX comptes à rebours de la partie, et le premier des deux qui tombe
+     l'arrête. Les voir côte à côte est ce qui permet de savoir laquelle des
+     deux fins arrive — une Manche 3/4 avec 7 bâtiments debout pour un seuil
+     de 6 ne se joue pas comme une Manche 3/4 avec 18 debout. */
+  const derniereManche = mancheNumber != null && mancheNumber === totalManches;
+  const apocalypseProche = occupiedCount != null && occupiedCount <= apocalypseThreshold;
+
+  /* UN SEUIL DE PLATEAU ATTEINT ARRÊTE LA PARTIE, ET IL FAUT LE DIRE — Nikola,
+     2026-08-28 : « faut indiquer quand un seuil autre que la 4e Manche va mettre
+     fin à la partie, si le seuil est atteint ».
+
+     Le moteur calculait déjà ces déclencheurs à chaque rendu (`endGameReasons`),
+     et personne ne les affichait : la valeur était exposée par le contrôleur et
+     lue nulle part. Or ils tombent SOUVENT — sur vingt parties Expert mesurées,
+     onze se terminent sur un déclencheur de plateau contre neuf à la limite de
+     Manches. La fin de partie la plus fréquente était donc la seule dont rien
+     ne prévenait.
+
+     On écarte la ligne « dernière Manche », qui a déjà son propre badge juste à
+     côté : ce qu'on annonce ici, c'est la fin qu'on n'attendait pas. */
+  const finsPlateau = (endGameReasons || []).filter((r) => !/Dernière Manche/i.test(r));
+
   return (
     /* Ce bandeau était plus haut de moitié : le titre montait à 2,6 rem et
        chaque bloc portait sa propre ligne de libellé. Retour de Nikola : « je
@@ -52,13 +95,58 @@ function Marquee({ mancheNumber, totalManches, phase, detonateurNom }) {
           libellé devant la valeur : deux lignes empilées coûtaient 30 px de
           plateau pour deux mots qu'on lit une fois par Manche. */}
       <div style={{ display: "flex", alignItems: "baseline", gap: T.s4, flexWrap: "wrap" }}>
-        <span style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2 }}>
-          <span style={label(T.faint)}>Manche</span>
-          <span style={readout("0.95rem", T.text)}>
-            {mancheNumber}
-            <span style={{ color: T.faint }}>/{totalManches}</span>
+        <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+          <span style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2 }}>
+            <span style={label(derniereManche ? T.stop : T.faint)}>Manche</span>
+            <span style={readout("0.95rem", derniereManche ? T.stop : T.text)}>
+              {mancheNumber}
+              <span style={{ color: derniereManche ? T.stop : T.faint, opacity: derniereManche ? 0.7 : 1 }}>
+                /{totalManches}
+              </span>
+            </span>
           </span>
+          {derniereManche && (
+            <span
+              title="Dernière Manche de la partie : après elle, on compte les points."
+              style={{
+                ...label(T.stop, T.micro),
+                border: `1px solid ${T.stop}`,
+                padding: "1px 6px",
+                whiteSpace: "nowrap",
+                cursor: "help",
+              }}
+            >
+              Dernière Manche
+            </span>
+          )}
+          {!derniereManche && finsPlateau.length > 0 && (
+            <span
+              title={["La partie s'arrêtera à la fin de cette Manche :", ...finsPlateau].join(" · ")}
+              style={{
+                ...label(T.stop, T.micro),
+                border: `1px solid ${T.stop}`,
+                padding: "1px 6px",
+                whiteSpace: "nowrap",
+                cursor: "help",
+              }}
+            >
+              Dernière Manche — seuil atteint
+            </span>
+          )}
         </span>
+        {occupiedCount != null && (
+          <span
+            title={`Fin de partie déclenchée dès qu'il ne reste plus que ${apocalypseThreshold} bâtiment(s) debout — il y en a ${occupiedCount} sur 25.`}
+            style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2, cursor: "help" }}
+          >
+            <span style={label(apocalypseProche ? T.stop : T.faint)}>Bâtiments</span>
+            <span style={readout("0.95rem", apocalypseProche ? T.stop : T.text)}>
+              {occupiedCount}
+              <span style={{ color: T.faint }}>/25</span>
+            </span>
+            <span style={label(T.faint)}>seuil {apocalypseThreshold}</span>
+          </span>
+        )}
         <span style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2 }}>
           <span style={label(T.faint)}>Phase</span>
           <span style={{ ...marquee("0.95rem", phase.couleur), whiteSpace: "nowrap" }}>{phase.mot}</span>
@@ -115,9 +203,13 @@ export default function GameView(vm) {
           totalManches={vm.manchesMaxPartie}
           phase={phaseCourante}
           detonateurNom={detonateurNom}
+          occupiedCount={vm.occupiedCount}
+          apocalypseThreshold={vm.apocalypseThreshold}
+          endGameReasons={vm.endGameReasons}
         />
 
         <HeaderPhase vm={vm} />
+
 
         {/* ── UNE SEULE DÉCISION À L'ÉCRAN ──
             Demande de Nikola du 2026-08-18 : « n'affiche pas plusieurs
@@ -131,8 +223,11 @@ export default function GameView(vm) {
             l'ordre de la résolution réelle : ce qu'une carte a déclenché passe
             avant la carte, et la carte avant la Manche. La règle vit à un
             seul endroit, l'affichage ne fait plus que la suivre. */}
+        {vm.decisionBloquante === "placement" && <PlacementBanner vm={vm} />}
+        {vm.decisionBloquante === "toutcasser" && <ToutCasserBanner vm={vm} />}
         {vm.decisionBloquante === "coin" && <CornerChoiceBanner vm={vm} />}
         {vm.decisionBloquante === "dil" && <DilRageBanner vm={vm} />}
+        {vm.decisionBloquante === "fatigue" && <FatigueBanner vm={vm} />}
         {vm.decisionBloquante === "repli" && <RepliBanner vm={vm} />}
         {vm.decisionBloquante === "fpmc" && <FpmcBanner vm={vm} />}
         {vm.decisionBloquante === "vol" && <RepoVolBanner vm={vm} />}
@@ -150,6 +245,20 @@ export default function GameView(vm) {
             finie, il n'y a plus rien à jouer. */}
         {vm.gameOver ? (
           <>
+            {/* Une porte pour rouvrir le podium une fois qu'on l'a refermé :
+                sans elle, « enlevable » voudrait dire « perdu ». */}
+            {!vm.showPodium && vm.versDeposesEtEngages && vm.classementFinalPartie?.length > 0 && (
+              <button
+                onClick={() => vm.setShowPodium(true)}
+                style={{
+                  ...label(T.you, T.micro),
+                  background: "none", border: `1.5px solid ${T.you}`, borderRadius: T.rChip,
+                  padding: "6px 12px", cursor: "pointer", marginBottom: T.s3,
+                }}
+              >
+                🏆 Revoir le classement
+              </button>
+            )}
             <DecisionPanels vm={vm} />
             <RoundPanels vm={vm} />
           </>
@@ -162,46 +271,103 @@ export default function GameView(vm) {
              de 1100px, le plateau tient la colonne large et les commandes
              restent visibles en permanence à droite. Sous ce seuil, rien ne
              change : c'est la même pile qu'avant. */
-          <div className="titan-layout">
+          /* RÉAGENCEMENT DU 2026-08-28 (Nikola) : « agrandis le plateau en
+             réagençant les panneaux d'informations ».
+
+             La colonne large ne porte plus QUE le plateau. Tout ce qui
+             l'encombrait est parti ailleurs :
+             · la bande des Titans monte dans la colonne des commandes, en
+               tête — elle se lit au même moment que le tour qu'on joue ;
+             · les cartes qu'on joue restent juste dessous, là où vivait le
+               décompte ;
+             · le décompte et le journal se posent PAR-DESSUS le plateau, à la
+               demande (cf. Superposition, plus bas).
+
+             C'est l'agencement que Nikola a décrit mot pour mot. */
+          <>
+
+            <div className="titan-layout">
             <div style={{ minWidth: 0 }}>
               <RoundPanels vm={vm} />
             </div>
             <div className="titan-layout__aside" style={{ minWidth: 0 }}>
+              <TitanBandPanel vm={vm} />
               <BoardPanel vm={vm} />
-              <DecisionPanels vm={vm} />
             </div>
-          </div>
+            </div>
+          </>
         )}
 
         {/* La graine, en pied de meuble : c'est une plaque signalétique, pas
             une information de jeu. Elle ne mérite pas une ligne en haut de
             l'écran, mais elle doit rester lisible pour rejouer une partie. */}
-        <footer
-          style={{
-            marginTop: T.s5,
-            paddingTop: T.s3,
-            borderTop: `1px solid ${T.rule}`,
-            display: "flex",
-            alignItems: "center",
-            gap: T.s2,
-            ...label(T.faint),
-          }}
-          title={
-            vm.gameSeed != null
-              ? `Partie n°${vm.seedCount} · graine ${vm.gameSeed} — relance une partie avec cette graine pour la rejouer à l'identique`
-              : `Partie n°${vm.seedCount}`
+
+      </div>
+
+      {/* ── DÉCOMPTE ET JOURNAL, PAR-DESSUS LE PLATEAU ──
+          Deux panneaux de CONSULTATION : on les ouvre, on lit, on referme.
+          Montés dans le flux, ils prenaient en permanence la hauteur qu'ils
+          occupent une fois ouverts. Ni l'un ni l'autre ne démonte la partie
+          — on la retrouve exactement où on l'a laissée, comme pour les
+          Règles. Rien de tout ça ne s'applique aux décisions bloquantes
+          ci-dessus : celles-là se répondent EN REGARDANT le plateau, elles
+          gardent donc leur bandeau dans le flux. */}
+      {!vm.gameOver && vm.showScoring && (
+        <Superposition
+          titre={vm.gameOver ? "Décompte final" : "Décompte — aperçu"}
+          onClose={() => vm.setShowScoring(false)}
+        >
+          <DecisionPanels vm={vm} vue="scoring" />
+        </Superposition>
+      )}
+      {!vm.gameOver && vm.showJournal && (
+        <Superposition
+          /* LA GRAINE VIT DANS LE TITRE DU JOURNAL — Nikola, 2026-08-29 :
+             « mets la seed directement dans le panneau journal à côté du texte
+             "journal de partie", adapte la taille des numéros ».
+
+             Elle a fait trois escales : pied de page (35 px par tour), ligne
+             propre sous les commandes (une ligne de plus), puis dans la rangée
+             elle-même. C'est sa quatrième et la bonne : le journal est
+             exactement ce qu'on ouvre pour comprendre ou signaler une partie,
+             et la graine est ce qui permet de la rejouer. Elle ne coûte plus
+             rien à l'écran de jeu, et elle est là quand elle sert. */
+          titre={`Journal de la partie${vm.gameSeed != null ? ` · graine ${vm.gameSeed}` : ""}`}
+          onClose={() => vm.setShowJournal(false)}
+          largeur={860}
+          pied={
+            /* SIGNALER vit ici depuis le 2026-08-28 : c'est en relisant le
+               journal qu'on décide de signaler quelque chose, et le fichier
+               qu'il enregistre contient précisément ce qu'on est en train de
+               lire, graine comprise. */
+            <button
+              onClick={vm.telechargerRapport}
+              title="Enregistre l'état exact de la partie dans un fichier, pour pouvoir rejouer ce qui vient de se passer"
+              style={{
+                background: "none", border: `1px solid ${T.rule}`, borderRadius: T.rChip,
+                color: T.dim, padding: "5px 11px", cursor: "pointer",
+                ...label(T.dim, T.micro),
+              }}
+            >
+              Signaler cette partie
+            </button>
           }
         >
-          <Icon name="socle" size={13} />
-          Partie {vm.seedCount}
-          {vm.gameSeed != null && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span style={readout(T.micro, T.faint)}>graine {vm.gameSeed}</span>
-            </>
-          )}
-        </footer>
-      </div>
+          <DecisionPanels vm={vm} vue="journal" />
+        </Superposition>
+      )}
+
+      {/* Le podium ne s'ouvre PAS à `gameOver` mais quand le classement est
+          réellement connu : tant qu'un Bloc Vert n'est pas placé, les totaux
+          sont provisoires et le vainqueur peut encore changer. */}
+      {vm.showPodium && vm.versDeposesEtEngages && vm.classementFinalPartie?.length > 0 && (
+        <PodiumFinal
+          classement={vm.classementFinalPartie}
+          titanDisplayName={vm.titanDisplayName}
+          titanModes={vm.titanModes}
+          onClose={() => vm.setShowPodium(false)}
+        />
+      )}
 
       {/* Page Règles en superposition. Le reste de l'arbre React n'est pas
           démonté : on retrouve la partie exactement où on l'a laissée. */}

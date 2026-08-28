@@ -82,15 +82,25 @@ describe("03 · Tout Casser tient une seule énergie pour toute la carte", () =>
     titans: [titan(1, "E5"), titan(2, "D5", { repaire: ["bleu", "rose"] })],
   });
 
-  it("le sous-cas Titan garde le verdict RAGE de la percussion", () => {
+  it("le sous-cas Titan garde l'énergie de la percussion pour toute la carte", () => {
+    /* Ce test a changé D'ATTENDU, pas d'objet. Il vérifiait que le sous-cas
+       Titan produisait une RAGE au Seuil 4 ; Tout Casser n'a plus de RAGE
+       depuis le ruling du 2026-08-28 (« sous le Seuil 4 : déplacement et
+       Bagarre, aucun vol ; à 4 ou au-dessus : DIL »).
+
+       CE QU'IL PROTÈGE RESTE LE MÊME, et c'est pour ça qu'on le garde : la
+       carte tient UNE SEULE énergie du début à la fin. 4 bâtiments + le Titan
+       adverse + sa propre case font 6 ; les bâtiments d'1 étage tombent au
+       premier sous-cas, et l'énergie recalculée derrière valait 2 — le
+       sous-cas Titan voyait alors un plateau vidé par les sous-cas
+       précédents. C'est cette recontamination que le test attrape. */
     setSeed(1);
     const etat = scene();
     const res = resolveToutCasser(1, etat);
-    // 4 bâtiments + le Titan adverse + sa propre case = énergie 6.
-    // Les bâtiments d'1 étage tombent au premier sous-cas : l'énergie
-    // recalculée derrière valait 2, et la carte basculait en DIL.
     expect(res.seuil4).toBe(true);
-    expect(res.decisions.map((d) => d.type)).toContain("RAGE");
+    // Au-dessus du seuil, la cible subit un Dilemme — plus jamais une RAGE.
+    expect(res.decisions.map((d) => d.type)).toContain("DIL");
+    expect(res.decisions.map((d) => d.type)).not.toContain("RAGE");
   });
 
   it("un débris tombé pendant la carte n'est pas reprojeté par elle", () => {
@@ -226,6 +236,14 @@ describe("Aucun débris ne se pose sur un bâtiment debout", () => {
     expect(v.map((x) => x.regle)).toContain("debris-sur-batiment");
   });
 
+  /* 30 parties complètes à 4 Titans, invariants vérifiés après chaque
+     action : c'est le test le plus lourd de la suite, et son coût suit
+     celui de l'IA. Il a fallu passer de 120 s à 300 s le 2026-08-28 — la
+     référence développe désormais dix cases avant de choisir sa carte, et
+     chiffre chaque bloc à portée au score complet, placements de Verts
+     compris. C'est un prix assumé, pas une lenteur accidentelle : la même
+     campagne mesure la même chose, elle la mesure sur une IA qui réfléchit
+     nettement plus. */
   it("aucune campagne n'en produit", () => {
     const r = lancerCampagne({ parties: 30, nbJoueurs: 4, seed: 3000, verifier: true });
     const regles = Object.values(r.anomalies.invariant?.details || {}).length
@@ -233,7 +251,7 @@ describe("Aucun débris ne se pose sur un bâtiment debout", () => {
       : "";
     expect(regles).not.toContain("debris-sur-batiment");
     expect(r.anomalies.invariant?.total ?? 0).toBe(0);
-  }, 120000);
+  }, 300000);
 });
 
 describe("Un Titan poussé hors du plateau sort du ring", () => {
@@ -377,7 +395,7 @@ describe("L'IA sait qu'un Titan hors du ring perd son tour", () => {
       board: {}, looseBlocks: {},
       titans: [titan(1, "E5", { repaire: ["bleu"], horsPlateau: true }), titan(2, "A1")],
     };
-    const profil = makeProfile(FORCES.CONFIRME);
+    const profil = makeProfile(FORCES.MOYEN);
     expect(evaluatePosition(1, ejecte, profil)).toBeLessThan(evaluatePosition(1, surPlateau, profil));
   });
 
