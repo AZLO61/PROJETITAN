@@ -6,6 +6,7 @@ import Icon from "./icons.jsx";
 // L'échelle de difficulté vit dans le domaine : l'écran d'accueil, le profil
 // dévoilé et les campagnes de mesure en nomment les barreaux de la même façon.
 import { FORCES, FORCE_LABELS } from "../domain/aiEvaluation.js";
+import PanneauDistant from "./PanneauDistant.jsx";
 
 /* ============================================================
    L'ÉCRAN D'ACCUEIL — LA SÉLECTION DES JOUEURS
@@ -43,6 +44,17 @@ export default function SetupScreen({
   apocalypseThreshold, setApocalypseThreshold,
   seedInput, setSeedInput,
   onLancer,
+  /* ── PARTIE À DISTANCE ──
+     Toutes facultatives. Sans elles, cet écran est exactement celui d'avant :
+     c'est ce qui permet aux vingt tests qui cliquent « Lancer la partie » de
+     continuer à monter le composant sans rien savoir du réseau. */
+  session = null,
+  distantJoueurs = [],
+  distantSieges = {},
+  distantAvis = null,
+  onBrancherSession = null,
+  onQuitterSession = null,
+  onPublierSieges = null,
 }) {
   const champ = {
     background: "rgba(0,0,0,.45)",
@@ -82,6 +94,28 @@ export default function SetupScreen({
             Règle ta partie avant de jouer
           </p>
         </header>
+
+        {/* ── JOUER À DISTANCE ──
+            Placé AVANT les réglages, pas après : rejoindre une table rend tous
+            les réglages inutiles (c'est l'hôte qui les tient), et les faire
+            remplir d'abord pour les jeter ensuite serait une perte de temps
+            déguisée en formulaire. Le bouton reste discret tant qu'on ne clique
+            pas : la partie locale reste le cas courant. */}
+        {onBrancherSession && (
+          <PanneauDistant
+            session={session}
+            distantJoueurs={distantJoueurs}
+            distantSieges={distantSieges}
+            distantAvis={distantAvis}
+            nbJoueurs={nbJoueurs}
+            titanNames={titanNames}
+            titanModes={titanModes}
+            onBrancherSession={onBrancherSession}
+            onQuitterSession={onQuitterSession}
+            onPublierSieges={onPublierSieges}
+            onLancer={onLancer}
+          />
+        )}
 
         {/* ── COMBIEN DE JOUEURS ── */}
         <Reglage titre="Nombre de Titans">

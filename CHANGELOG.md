@@ -1,5 +1,115 @@
 # Changelog
 
+## Non publié — vingt-troisième passe du 2026-08-30 (jouer à quatre sans être dans la même pièce)
+
+« J'aimerais pouvoir jouer avec des joueurs à distance en donnant un ID de
+session et son mot de passe — ça m'évite de mettre le serveur en public, donc je
+m'évite énormément d'attaques, car ce sera mes connaissances qui vont me
+rejoindre. »
+
+### Ce que l'identifiant et le mot de passe protègent vraiment
+
+Il faut le dire, parce que c'est la prémisse : **un identifiant et un mot de
+passe n'évitent pas d'exposer quelque chose**. Les invités doivent bien joindre
+un point de rendez-vous. Ce que ce montage change, c'est CE QUI est exposé.
+
+Le relais (`server/relais.mjs`) ne connaît pas les règles de Titan. Pas une
+carte, pas un Titan, pas un Seuil. Il garde des salles en mémoire et recopie des
+messages — cinq cents lignes qui ne décident de rien. Le moteur, lui, ne quitte
+jamais le navigateur de l'hôte, et sa machine n'a aucun port ouvert : un tunnel
+Cloudflare appelle vers l'extérieur, jamais l'inverse.
+
+**Aucune dépendance.** Ni `ws`, ni Express. Le transport est du long-polling sur
+le module `http` de Node. Pour un jeu au tour par tour, la latence est
+invisible, et ce choix supprime trois problèmes d'un coup : aucun `npm install`
+sur la machine exposée, aucune chaîne d'approvisionnement à surveiller, et un
+trafic qui passe à travers n'importe quel tunnel ou proxy.
+
+Les garde-fous, tous au même endroit : mot de passe haché en `scrypt` et comparé
+en temps constant, même réponse pour « salle inconnue » et « mot de passe faux »
+(les distinguer offrirait un oracle pour énumérer les salles), dix échecs par
+adresse IP puis un quart d'heure d'écart, soixante requêtes par dix secondes,
+deux mégaoctets par message, rien sur disque. Vingt tests tiennent ces
+propriétés.
+
+### Un arbitre, des manettes
+
+L'hôte fait tourner le moteur exactement comme en local : son contrôleur ne
+change pas d'une ligne. Il diffuse un instantané après chaque coup. Les invités
+ne calculent rien — ils affichent, et renvoient des intentions.
+
+Ce n'est pas le modèle le plus élégant, c'est le seul honnête avec ce dépôt :
+faire tourner cinq mille lignes de règles en double chez quatre joueurs, en
+espérant qu'elles restent d'accord manche après manche, c'est signer pour une
+classe de bugs qu'on ne referme jamais.
+
+Douze effets du contrôleur se taisent donc chez un invité — enchaînement des
+phases, distribution des mains, tours d'IA, mise en place, Trophée Arc-en-ciel.
+La garde passe par une ref plutôt que par les tableaux de dépendances : un oubli
+aurait laissé un effet tourner avec la valeur du rendu précédent, c'est-à-dire
+pendant la seule fenêtre où c'est dangereux.
+
+### Deux extractions qui tombaient sous le sens
+
+`captureSnapshot` faisait deux choses : décrire l'état, et l'empiler pour
+« Annuler ». La partie à distance a besoin de la première cent fois plus souvent
+que de la seconde — empiler à chaque diffusion aurait fait d'« Annuler » un
+bouton qui recule d'un battement de réseau. `instantaneCourant` en sort.
+
+De même, `handleUndo` savait reposer la partie sur un état déjà connu :
+`restaurerInstantane` en sort, et un invité s'en sert à chaque coup. Le contenu
+ne bouge pas d'une ligne — et c'est le point : tout ce que l'annulation a dû
+apprendre à restaurer au fil des bugs est exactement ce qu'un invité doit
+recevoir. Écrire une seconde fonction « pour le réseau » aurait garanti qu'elle
+prenne du retard.
+
+Deux champs manquaient tout de même, et pour une raison valable : la file de
+mise en place et les réglages de table, dont l'annulation n'a jamais eu besoin.
+Un invité n'est pas passé par l'écran d'accueil — sans eux, son bandeau de mise
+en place restait muet et il affichait quatre Titans humains sans nom sur une
+partie qui en compte trois.
+
+### La programmation reste secrète
+
+C'est la propriété la plus facile à perdre à distance, et la plus difficile à
+voir disparaître : rien à l'écran ne change quand une main fuit. Le tricheur n'a
+même pas à tricher, il ouvre l'onglet Réseau et lit.
+
+L'hôte diffuse donc un plateau PUBLIC, mains remplacées par leur nombre, et
+envoie à chaque invité sa seule main par un canal privé que seul l'hôte peut
+écrire. Le relais route sans lire : il ne sait pas qu'il transporte des cartes.
+Le test qui compte ne vérifie pas des champs un par un — il relit tout ce qui
+part sur le fil et y cherche les six noms de cartes.
+
+Les jetons ne sortent jamais de la salle, pas même vers l'hôte : tout se désigne
+par une référence courte que le relais seul sait retraduire. L'hôte peut ainsi
+adresser un message à un invité sans jamais pouvoir se faire passer pour lui.
+
+### L'hôte prête sa main, le temps d'une action
+
+Presque toutes les actions se jouent pour le Titan sélectionné : `jouerBoingBoing`
+lit `selectedTitanId`, `bbDest` et `bbAdrenaline` dans l'état local, et n'accepte
+aucun paramètre. Bonne forme pour un appareil qui circule autour d'une table,
+mauvaise pour quatre écrans.
+
+Plutôt que de réécrire huit fonctions de soixante lignes, l'hôte adopte la
+position de l'invité le temps d'une action, en trois rendus : il bascule sa
+sélection, adopte les brouillons transmis (chemin tracé, mise d'Adrénaline),
+puis joue — et rend sa sélection. Trois rendus parce que les setters de React ne
+prennent effet qu'au suivant : on ne lutte pas contre le cycle de rendu, on s'en
+sert comme d'une horloge.
+
+Ce qu'un invité peut demander vit dans une liste BLANCHE, jamais noire : une
+action nouvelle est inaccessible à distance jusqu'à ce que quelqu'un l'ajoute
+sciemment.
+
+### Vérifié bout en bout
+
+Deux navigateurs, un relais, une table : l'invité voit le même plateau et le même
+Détonateur que l'hôte, son tour de mise en place s'allume chez lui, son clic
+traverse le relais, l'hôte l'exécute, et le plateau revient identique des deux
+côtés. La programmation s'ouvre ensuite avec sa main à lui, et elle seule.
+
 ## Non publié — vingt-deuxième passe du 2026-08-29 (la mise en place tient la porte, et les couleurs disent qui fait quoi)
 
 Quatre points relevés par Nikola après une série de parties gagnées neuf fois

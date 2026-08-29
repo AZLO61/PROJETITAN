@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Domain from "../domain/index.js";
 import { TITAN_COLORS } from "../ui/titans/constants.js";
 import SetupScreen from "../ui/SetupScreen.jsx";
+/* Partie à distance. Le contrôleur ne parle jamais au réseau directement : il
+   passe par ces trois fonctions, qui décident CE QUI est public (le plateau) et
+   ce qui ne l'est pas (les mains). Cf. `src/net/session.js`. */
+import { plateauPublic, mainPrivee, fusionnerMain } from "../net/session.js";
 
 /* Destructuration du domaine au NIVEAU MODULE, et non plus à l'intérieur du
    hook. Ces fonctions sont des constantes de module : les déclarer dans le
@@ -274,6 +278,68 @@ export function useBoardGeneratorController() {
   // démonté quand elle s'ouvre, donc la partie en cours (plateau, Titans,
   // Manche, cartes, pile d'undo) est intégralement conservée.
   const [showRules, setShowRules] = useState(false);
+  /* ══════════════════════════════════════════════════════════
+     PARTIE À DISTANCE (Nikola, 2026-08-29)
+     ══════════════════════════════════════════════════════════
+     « J'aimerais pouvoir jouer avec des joueurs à distance en donnant un ID de
+     session et son mot de passe. »
+
+     UN SEUL ARBITRE. L'hôte fait tourner le moteur exactement comme en local —
+     rien de ce qui suit ne s'applique à lui, sinon diffuser ce qu'il vient de
+     calculer. Les invités ne calculent RIEN : ils reçoivent le plateau et
+     renvoient des intentions.
+
+     C'est le seul modèle honnête avec ce codebase. Faire tourner les règles en
+     double chez quatre joueurs, en espérant qu'elles restent d'accord manche
+     après manche, c'est signer pour une classe de bugs qu'on ne referme jamais
+     — et ce jeu en a déjà refermé assez.
+
+     TROIS CHOSES SEULEMENT changent dans ce contrôleur :
+       1. chez un invité, tout ce qui MUTE l'état de partie se tait (les gardes
+          `distantInvite` semées dans les effets plus bas) ;
+       2. chez l'hôte, un effet diffuse l'instantané après chaque changement ;
+       3. les actions d'un invité partent en intentions au lieu de s'exécuter.
+
+     Le reste du fichier ne sait pas que le réseau existe. */
+  const [session, setSession] = useState(null);
+  const [distantJoueurs, setDistantJoueurs] = useState([]);
+  const [distantSieges, setDistantSieges] = useState({});   // { titanId: refInvite }
+  const [distantAvis, setDistantAvis] = useState(null);     // message d'état de la liaison
+  const [distantFin, setDistantFin] = useState(null);       // partie terminée côté réseau
+  const [distantChat, setDistantChat] = useState([]);
+  /* La main d'un invité arrive par un canal séparé de l'instantané : le plateau
+     diffusé à toute la table a les mains masquées, sans quoi la programmation
+     secrète tomberait à la première console ouverte. */
+  const [mainPriveeRecue, setMainPriveeRecue] = useState(null);
+  const [etatDistantRecu, setEtatDistantRecu] = useState(null);
+  const sessionRef = useRef(null);
+  useEffect(() => { sessionRef.current = session; }, [session]);
+
+  const distantInvite = session?.siege === "invite";
+  const distantHote = session?.siege === "hote";
+
+  /* ── POURQUOI UNE REF ET PAS LA VALEUR ────────────────────
+     Une douzaine d'effets doivent se taire chez un invité. Passer par leur
+     tableau de dépendances obligerait à ajouter `distantInvite` à douze
+     endroits, dont trois qui portent déjà un `eslint-disable` pour de bonnes
+     raisons documentées — et un oubli laisserait un effet tourner avec la
+     valeur du rendu PRÉCÉDENT, c'est-à-dire `false` juste après avoir rejoint
+     une partie : le moteur de l'invité se remettrait à muter le plateau
+     pendant la seule fenêtre où c'est le plus dangereux.
+
+     Une ref est toujours à jour au moment où l'effet s'exécute, quels que
+     soient les déclencheurs. C'est déjà l'idiome de ce fichier pour tout ce que
+     l'IA doit lire sans le faire re-déclencher (cf. `aiTitanModesRef` et ses
+     voisines). */
+  const distantInviteRef = useRef(false);
+  useEffect(() => { distantInviteRef.current = distantInvite; }, [distantInvite]);
+  /* Le Titan que tient CE navigateur quand il est invité. `null` tant que
+     l'hôte ne lui a pas donné de siège : il regarde alors la partie sans
+     pouvoir agir, ce qui est exactement ce qu'on veut d'un spectateur. */
+  const monTitanDistant = distantInvite
+    ? Number(Object.keys(distantSieges).find((id) => distantSieges[id] === session.ref)) || null
+    : null;
+
   const [vertAssignments, setVertAssignments] = useState({});
   /* QUI A VALIDÉ SES VERTS — Nikola, 2026-08-28 : « quand j'ai fait le choix
      des Verts au scoring, je dois valider, et après ça ne peut plus se
@@ -474,12 +540,19 @@ export function useBoardGeneratorController() {
   );
 
   useEffect(() => {
+    if (distantInviteRef.current) return; // à distance, seul l'hôte pioche
     if (!eventsEnabled || phase !== "evenement" || currentEvent !== null) return;
     const name = pick(EVENT_NAMES);
     setCurrentEvent(name);
   }, [phase, currentEvent, mancheNumber, eventsEnabled]);
 
   useEffect(() => {
+    /* ── À DISTANCE, LE MOTEUR N'A QU'UN SEUL EXEMPLAIRE ──
+       C'est la garde la plus importante des douze : sans elle, l'invité
+       enchaînerait les phases de son côté et l'hôte du sien, chacun sur son
+       rythme. Deux arbitres pour une partie, et un plateau qui se met à
+       diverger sans que personne ne voie où. */
+    if (distantInviteRef.current) return;
     if (gameOver) return; // la partie est finie : plus aucune phase ne s'enchaîne
     /* Une décision née de la Phase en cours se règle DANS cette Phase.
        Sans ce garde-fou, la Phase Action pouvait se clore sur un Dilemme
@@ -575,6 +648,7 @@ export function useBoardGeneratorController() {
      chemin qui mène à "programmation" — mi-Manche ou nouvelle Manche —
      il suffit que la phase le devienne) pour rester simple et robuste. */
   useEffect(() => {
+    if (distantInviteRef.current) return; // les mains sont distribuées par l'hôte
     if (phase !== "programmation") return;
     const logs = [];
     titanState.players.forEach((t) => {
@@ -595,6 +669,7 @@ export function useBoardGeneratorController() {
   // livret liste bien 5 couleurs de blocs (Bleu/Rose/Orange/Rouge/Vert) —
   // recollecté sur STANDARD_COLORS pour ne plus jamais diverger.
   useEffect(() => {
+    if (distantInviteRef.current) return; // le Trophée est décerné par l'hôte
     if (rainbowWinnerId !== null) return;
     for (const t of titanState.players) {
       const colors = new Set(t.repaire);
@@ -625,11 +700,21 @@ export function useBoardGeneratorController() {
   // Action uniquement, jamais pour un Titan IA qui n'a pas de panneau
   // Passifs humain).
   useEffect(() => {
+    /* ── UN INVITÉ RESTE SUR SON PROPRE TITAN ─────────────
+       En local, l'appareil circule autour de la table : suivre le Titan actif
+       est exactement ce qu'on veut, c'est la manette qui change de mains. À
+       distance, chacun garde la sienne — recentrer sur le Titan actif ferait
+       basculer l'écran d'un invité vers un Titan qu'il ne joue pas, au moment
+       précis où il regarde le sien. */
+    if (distantInvite) {
+      if (monTitanDistant != null) setSelectedTitanId(monTitanDistant);
+      return;
+    }
     if (phase === "action" && activePlayerId != null && titanModes[activePlayerId] !== "ia") {
       setSelectedTitanId(activePlayerId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePlayerId, phase]);
+  }, [activePlayerId, phase, distantInvite, monTitanDistant]);
 
   /* ── QUI PROGRAMME MAINTENANT ──
      Bug trouvé en inspectant l'écran d'ouverture d'une partie neuve : en
@@ -648,6 +733,9 @@ export function useBoardGeneratorController() {
      manuelle n'est jamais écrasée tant qu'elle reste valable : on ne bouge
      que si personne n'est sélectionné, ou si le sélectionné a fini. */
   useEffect(() => {
+    // Un invité programme le sien, jamais « le prochain qui n'a pas validé » :
+    // cette rotation-là décrit un appareil qui circule, pas quatre écrans.
+    if (distantInvite) return;
     if (phase !== "programmation") return;
     const enCours = selectedTitanId != null
       && titanModes[selectedTitanId] !== "ia"
@@ -657,7 +745,7 @@ export function useBoardGeneratorController() {
       (id) => titanModes[id] !== "ia" && !phaseValidated[id]
     );
     if (suivant != null && suivant !== selectedTitanId) setSelectedTitanId(suivant);
-  }, [phase, phaseValidated, titanModes, titanState.ordreJeu, selectedTitanId]);
+  }, [phase, phaseValidated, titanModes, titanState.ordreJeu, selectedTitanId, distantInvite]);
   const selectedTitan = titanState.players.find((t) => t.id === selectedTitanId) || null;
   /* `movingTitanOverride` a été retiré le 2026-08-29. Il servait à dessiner le
      jeton sur une case intermédiaire pendant que le Titan « marchait » d'une
@@ -908,7 +996,16 @@ export function useBoardGeneratorController() {
      Le clone est désormais évalué de façon SYNCHRONE, à l'appel, avant que
      le moindre résolveur n'ait pu toucher à l'état. Ne jamais redéplacer
      ce calcul dans l'updater. */
-  const captureSnapshot = useCallback(() => {
+  /* ── L'INSTANTANÉ, SÉPARÉ DE SON EMPILEMENT ───────────────
+     Extrait de `captureSnapshot` le 2026-08-29. La partie à distance a besoin
+     de DÉCRIRE l'état courant à chaque coup, sans pour autant ajouter un cran
+     à la pile d'annulation : l'hôte diffuse cent fois plus souvent qu'il ne
+     capture, et empiler à chaque diffusion aurait fait d'« Annuler » un bouton
+     qui ne recule plus d'une action mais d'un battement de réseau.
+
+     Le CONTENU ne change pas d'une ligne : ce que l'annulation doit restaurer
+     et ce qu'un invité doit recevoir sont exactement la même chose. */
+  const instantaneCourant = useCallback(() => {
     const snapshot = {
       state: structuredClone(state),
       titanState: structuredClone(titanState),
@@ -967,14 +1064,59 @@ export function useBoardGeneratorController() {
       // désynchronisant l'avancement de round au coup suivant.
       waitingNextTitan,
       cardsPlayedCount: { ...cardsPlayedCountRef.current },
+      /* Ajouté pour la partie à distance, et sans effet sur l'annulation (qui
+         ne restaure jamais ce champ : on n'annule pas le lancement d'une
+         partie). C'est l'instantané de l'hôte qui dit aux invités que la table
+         est ouverte — eux n'ont aucun autre moyen de le savoir, et sans ça ils
+         entraient sur un plateau généré chez eux, aussitôt remplacé. */
+      partieLancee: setupDone,
+      /* ── LA FILE DE MISE EN PLACE ET LES RÉGLAGES DE TABLE ──
+         Ajoutés le 2026-08-29 pour la partie à distance, et absents jusque-là
+         pour une raison parfaitement valable : « Annuler » n'en a jamais eu
+         besoin. On n'annule pas pendant la mise en place, et les réglages de
+         table ne changent pas en cours de partie — les restaurer revenait donc
+         à réécrire ce qui était déjà là.
+
+         Un invité, lui, n'a RIEN de tout ça : il n'est pas passé par l'écran
+         d'accueil, il n'a jamais tiré de plateau. Sans la file, son bandeau de
+         mise en place restait muet et aucune case ne s'allumait ; sans les
+         réglages, il affichait quatre Titans humains sans nom sur une partie
+         qui en compte trois, dont deux IA.
+
+         Pour l'annulation, ces champs sont inertes : on y remet exactement ce
+         qui s'y trouvait déjà. */
+      placementRestant: [...placementRestant],
+      table: {
+        nbJoueurs,
+        titanModes: { ...titanModes },
+        titanNames: { ...titanNames },
+        titanProfiles: { ...titanProfiles },
+        eventsEnabled,
+        modeVolRepos,
+        apocalypseThreshold,
+        gameSeed,
+      },
     };
-    setUndoStack((prev) => [...prev, snapshot]);
+    return snapshot;
   }, [
+    setupDone, placementRestant, nbJoueurs, titanModes, titanNames, titanProfiles,
+    eventsEnabled, modeVolRepos, gameSeed, apocalypseThreshold,
     state, titanState, looseBlocks, activePlayerId, phase, passifUsed, actionLog, waitingNextTitan, volResume,
     decisionQueue, repliQueue, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcNTargets,
     fpmcAttackerBase, fpmcCurrent, mancheNumber, phaseValidated, volDirection, currentEvent,
     rainbowWinnerId, vertAssignments, vertsValides, gameOver, showScoring, coutRentree, toutCasserFile,
   ]);
+
+  const captureSnapshot = useCallback(() => {
+    /* ⚠️ L'instantané se calcule ICI, hors de l'updater — c'est la règle que
+       le long commentaire ci-dessus a établie après un bug tenace. Écrire
+       `setUndoStack((prev) => [...prev, instantaneCourant()])` remettrait le
+       clone dans l'updater, donc à un instant indéterminé, potentiellement
+       APRÈS qu'un résolveur ait muté le plateau en place : on capturerait
+       alors l'état d'après en croyant garder celui d'avant. */
+    const snapshot = instantaneCourant();
+    setUndoStack((prev) => [...prev, snapshot]);
+  }, [instantaneCourant]);
 
   // Vide l'historique quand le joueur actif change (tour terminé = irréversible)
   const prevActivePlayerRef = useRef(activePlayerId);
@@ -985,17 +1127,20 @@ export function useBoardGeneratorController() {
     }
   }, [activePlayerId]);
 
-  const handleUndo = useCallback(() => {
-    // Bug remonté (persistant) : le pattern précédent déclenchait un
-    // setTimeout DEPUIS L'INTÉRIEUR du setter fonctionnel de setUndoStack —
-    // un effet de bord dans un updater React, jamais garanti fiable (peut
-    // s'exécuter plusieurs fois, ou sur un état pas encore commité, selon
-    // le timing exact du rendu). Réécrit en séquence synchrone classique :
-    // on lit le dernier snapshot directement (pas besoin de fonctionnel
-    // puisqu'on ne dépend que de la valeur actuelle d'undoStack), on
-    // restaure tout d'un coup, puis on dépile.
-    if (undoStack.length === 0) return;
-    const snap = undoStack[undoStack.length - 1];
+  /* ── REPOSER LA PARTIE SUR UN INSTANTANÉ ──────────────────
+     Extrait de `handleUndo` le 2026-08-29, sans changer une ligne de son
+     contenu : « Annuler » n'est plus le seul à devoir remettre la partie dans
+     un état déjà connu. Une partie à distance fait exactement le même geste à
+     chaque coup — l'invité reçoit le plateau de l'hôte et se cale dessus.
+
+     Les deux usages ont besoin de la MÊME exhaustivité, et c'est ce qui rend
+     l'extraction évidente plutôt qu'astucieuse : tout ce que l'annulation
+     avait dû apprendre à restaurer au fil des bugs (la file de Tout Casser, le
+     compteur de rounds, les modes de carte laissés ouverts) est exactement ce
+     qu'un invité doit recevoir. Écrire une seconde fonction « pour le réseau »
+     aurait garanti qu'elle prenne du retard sur celle-ci. */
+  const restaurerInstantane = useCallback((snap) => {
+    if (!snap) return;
     setState(structuredClone(snap.state));
     setTitanState(structuredClone(snap.titanState));
     setLooseBlocks(structuredClone(snap.looseBlocks));
@@ -1049,11 +1194,335 @@ export function useBoardGeneratorController() {
     setPendingCardConfirm(null);
     setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0);
     setAnimating(false); setAnimLabel("");
+    /* Cf. le commentaire de `instantaneCourant` : inerte pour l'annulation (on
+       y remet ce qui s'y trouvait), indispensable pour un invité, qui n'a
+       jamais vu l'écran d'accueil et ne connaît la table que par là. */
+    if (snap.placementRestant) setPlacementRestant([...snap.placementRestant]);
+    if (snap.table) {
+      setNbJoueurs(snap.table.nbJoueurs);
+      setTitanModes({ ...snap.table.titanModes });
+      setTitanNames({ ...snap.table.titanNames });
+      setTitanProfiles({ ...snap.table.titanProfiles });
+      setEventsEnabled(Boolean(snap.table.eventsEnabled));
+      setModeVolRepos(snap.table.modeVolRepos);
+      setApocalypseThreshold(snap.table.apocalypseThreshold);
+      setGameSeed(snap.table.gameSeed);
+    }
     setUndoTick((n) => n + 1);
+  }, [arreterTrace]);
+
+  const handleUndo = useCallback(() => {
+    // Bug remonté (persistant) : le pattern précédent déclenchait un
+    // setTimeout DEPUIS L'INTÉRIEUR du setter fonctionnel de setUndoStack —
+    // un effet de bord dans un updater React, jamais garanti fiable (peut
+    // s'exécuter plusieurs fois, ou sur un état pas encore commité, selon
+    // le timing exact du rendu). Réécrit en séquence synchrone classique :
+    // on lit le dernier snapshot directement (pas besoin de fonctionnel
+    // puisqu'on ne dépend que de la valeur actuelle d'undoStack), on
+    // restaure tout d'un coup, puis on dépile.
+    if (undoStack.length === 0) return;
+    restaurerInstantane(undoStack[undoStack.length - 1]);
     setUndoStack((prev) => prev.slice(0, -1));
-  }, [undoStack, arreterTrace]);
+  }, [undoStack, restaurerInstantane]);
+
+  /* ══════════════════════════════════════════════════════════
+     CE QU'UN INVITÉ A LE DROIT DE DEMANDER
+     ══════════════════════════════════════════════════════════
+     La liste est BLANCHE, jamais noire : une action absente d'ici ne franchit
+     pas le réseau, et le jour où le jeu en gagne une nouvelle, elle est
+     inaccessible à distance jusqu'à ce que quelqu'un l'ajoute sciemment. Une
+     liste noire aurait la propriété inverse — toute action nouvelle serait
+     exposée par défaut, y compris celles qui n'ont aucun sens à distance
+     (`regenerate`, `setTitanState`, `setPhase`…).
+
+     Chaque entrée dit POUR QUI l'action se joue, et c'est cette colonne qui
+     porte la sécurité côté hôte :
+
+       "soi"        le Titan du siège de l'invité, à tout moment (programmer
+                    ses cartes, valider sa phase — chacun le fait chez lui) ;
+       "actif"      le Titan du siège doit être celui à qui c'est le tour ;
+       "placement"  il doit être celui que la file de mise en place attend ;
+       "decision"   il doit être celui que la décision bloquante interroge.
+
+     Un invité peut mentir sur tout ce qu'il envoie SAUF sur son siège : le
+     relais y appose son expéditeur, et c'est l'hôte qui lit la table des
+     sièges. Toute la confiance tient sur ce seul point. */
+  const ACTIONS_DISTANTES = useMemo(() => ({
+    // Mise en place d'ouverture
+    placerTitanJoueur: "placement",
+    chooseCornerEntry: "actif",
+
+    // Programmation — chacun la fait chez lui, en même temps que les autres
+    toggleProgCard: "soi",
+    confirmProgrammation: "soi",
+    validatePhase: "soi",
+
+    // Phase Action : les six cartes et les deux passifs
+    jouerTeteEnAvant: "actif",
+    jouerGraouhhh: "actif",
+    jouerBoingBoing: "actif",
+    jouerJeNePartagePas: "actif",
+    jouerFautPasMeChauffer: "actif",
+    jouerToutCasser: "actif",
+    jouerMouvementGratuit: "actif",
+    jouerRecuperation: "actif",
+    discardCurrentCard: "actif",
+    passerAuTitanSuivant: "actif",
+    toutCasserResoudre: "actif",
+    pickFpmcTarget: "actif",
+    updateFpmcBid: "actif",
+    revealFPMC: "actif",
+
+    // Décisions bloquantes : c'est le Titan interrogé qui répond
+    dilAttackerPick: "decision",
+    dilValidateAttackerPick: "decision",
+    resolveDilDefenderPick: "decision",
+    resolveDilCancelWithAdrenaline: "decision",
+    resolveRagePick: "decision",
+    resolveRagePickAdrenaline: "decision",
+    choisirRepli: "decision",
+    ecroulementPoserDebris: "decision",
+    ecroulementAbandonner: "decision",
+    refuserFatigueEnCours: "decision",
+    accepterFatigueEnCours: "decision",
+    chooseVolDirection: "decision",
+
+    // Décompte final : le placement secret des Verts
+    updateVertAssignment: "soi",
+    validerVerts: "soi",
+  }), []);
+
+  /* Réglages d'interface que l'hôte doit adopter AVANT d'exécuter l'action
+     d'un invité. Ils ne sont pas dans l'instantané — ce sont des brouillons,
+     pas de l'état de partie : le chemin qu'on est en train de tracer, le
+     nombre d'Adrénalines qu'on s'apprête à miser. Ils vivent donc chez celui
+     qui les compose, et ne traversent le réseau qu'au moment de valider. */
+  const CONTEXTE_DISTANT = useMemo(() => ({
+    bbPath: setBbPath,
+    bbAdrenaline: setBbAdrenaline,
+    moveAdrenaline: setMoveAdrenaline,
+    teaAdrenaline: setTeaAdrenaline,
+    tcAdrenaline: setTcAdrenaline,
+    jnpSelected: setJnpSelected,
+    progSelection: setProgSelection,
+    direction: setDirection,
+    useAdrenaline: setUseAdrenaline,
+  }), []);
+
+  /* ══════════════════════════════════════════════════════════
+     L'HÔTE PRÊTE SA MAIN À UN INVITÉ, LE TEMPS D'UNE ACTION
+     ══════════════════════════════════════════════════════════
+     Presque toutes les actions du contrôleur se jouent POUR le Titan
+     sélectionné : `jouerBoingBoing` lit `selectedTitanId`, `bbDest` et
+     `bbAdrenaline` dans l'état local, et n'accepte aucun paramètre. C'est la
+     bonne forme pour un appareil qui circule autour d'une table — et
+     exactement la mauvaise pour quatre écrans.
+
+     Deux issues étaient possibles. Réécrire les huit actions de validation
+     pour qu'elles prennent tout en argument : correct, mais huit refactorings
+     de soixante lignes chacun, sur les fonctions les plus chargées du fichier,
+     pour un gain nul en local. Ou faire adopter à l'hôte, le temps d'une
+     action, la position de l'invité — et laisser les fonctions inchangées.
+
+     C'est la seconde. Une intention traverse TROIS RENDUS, un état par cran :
+
+       recu     l'intention est en file, rien n'a bougé ;
+       siege    l'hôte a basculé `selectedTitanId` sur le Titan de l'invité ;
+       contexte l'hôte a adopté ses brouillons (chemin tracé, mise d'Adrénaline) ;
+       → puis l'action s'exécute, et la sélection de l'hôte est rendue.
+
+     Pourquoi trois rendus et pas un seul : les setters de React ne prennent
+     effet qu'au rendu suivant. Tout faire d'affilée appellerait l'action avec
+     l'ANCIENNE sélection et l'ANCIEN contexte — précisément la classe de bug
+     que ce fichier documente à cinq endroits. On ne lutte donc pas contre le
+     cycle de rendu, on s'en sert comme d'une horloge.
+
+     Les intentions se traitent UNE À LA FOIS, dans l'ordre d'arrivée : deux
+     joueurs qui cliquent en même temps ne peuvent pas s'entrelacer au milieu
+     d'une adoption de siège. */
+  const [fileIntentions, setFileIntentions] = useState([]);
+  const [etapeIntention, setEtapeIntention] = useState("recu");
+  const selectionHoteRef = useRef(null);
+
+  /* Les callbacks changent d'identité à chaque rendu ; une ref lue au moment
+     de l'exécution donne toujours la version courante, sans faire dépendre
+     l'effet de deux cents fonctions. */
+  const actionsRef = useRef({});
+
+  const titanAutorise = useCallback((portee, titanDuSiege) => {
+    if (titanDuSiege == null) return false;
+    if (portee === "soi") return true;
+    if (portee === "actif") return titanDuSiege === activePlayerId;
+    if (portee === "placement") {
+      /* Même règle que `prochainAPlacer`, recopiée en une ligne plutôt
+         qu'appelée : cette fonction est déclarée plus bas dans le fichier, et
+         la nommer en dépendance ici la lirait avant son initialisation. La
+         règle, elle, tient en un mot — c'est le drapeau `aPlacer` qui dit ce
+         qui reste à faire, jamais la file. */
+      const joueurs = aiTitanStateRef.current?.players || [];
+      const attendu = (placementRestantRef.current || [])
+        .find((id) => joueurs.find((t) => t.id === id)?.aPlacer) ?? null;
+      return attendu === titanDuSiege;
+    }
+    if (portee === "decision") {
+      /* Une décision bloquante interroge quelqu'un de précis. Faute de pouvoir
+         nommer ce quelqu'un pour les sept sortes de décisions, on retombe sur
+         la garde que chaque résolveur porte déjà : il refuse une réponse qui
+         ne le concerne pas. Le réseau n'affaiblit donc rien — il ne fait que
+         ne pas resserrer. */
+      return true;
+    }
+    return false;
+  }, [activePlayerId]);
 
   useEffect(() => {
+    if (!distantHote || fileIntentions.length === 0) return;
+    const intention = fileIntentions[0];
+    const rejeter = (raison) => {
+      setFileIntentions((f) => f.slice(1));
+      setEtapeIntention("recu");
+      setActionLog((prev) => [...prev, `🚫 ${intention.pseudo} : ${raison}`]);
+    };
+
+    const portee = ACTIONS_DISTANTES[intention.fn];
+    if (!portee) { rejeter(`action « ${intention.fn} » non autorisée à distance.`); return; }
+    const titanDuSiege = intention.titanId;
+    if (!titanAutorise(portee, titanDuSiege)) {
+      rejeter("ce n'est pas à toi de jouer.");
+      return;
+    }
+
+    if (etapeIntention === "recu") {
+      selectionHoteRef.current = selectedTitanId;
+      setSelectedTitanId(titanDuSiege);
+      setEtapeIntention("siege");
+      return;
+    }
+    if (etapeIntention === "siege") {
+      Object.entries(intention.contexte || {}).forEach(([cle, valeur]) => {
+        const poser = CONTEXTE_DISTANT[cle];
+        if (poser) poser(valeur);
+      });
+      setEtapeIntention("contexte");
+      return;
+    }
+    // etapeIntention === "contexte" : tout est en place, on joue.
+    const action = actionsRef.current[intention.fn];
+    if (typeof action === "function") {
+      try {
+        action(...(intention.args || []));
+      } catch (e) {
+        /* Une action qui échoue ne doit pas figer la file pour tout le monde :
+           on journalise et on passe à la suivante. L'invité verra dans le
+           prochain instantané que rien n'a bougé. */
+        console.error("[distant] action refusée", intention.fn, e);
+        setActionLog((prev) => [...prev, `⚠️ L'action de ${intention.pseudo} n'a pas abouti.`]);
+      }
+    }
+    setFileIntentions((f) => f.slice(1));
+    setEtapeIntention("recu");
+    // La main revient à l'hôte : son propre panneau ne doit pas rester
+    // accroché au Titan de quelqu'un d'autre.
+    if (selectionHoteRef.current != null) setSelectedTitanId(selectionHoteRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distantHote, fileIntentions, etapeIntention, selectedTitanId, titanAutorise]);
+
+  /* ══════════════════════════════════════════════════════════
+     BRANCHER ET DÉBRANCHER LA SESSION
+     ══════════════════════════════════════════════════════════ */
+  const brancherSession = useCallback((nouvelle) => {
+    setSession(nouvelle);
+    setDistantJoueurs(nouvelle.joueurs || []);
+    setDistantSieges(nouvelle.sieges || {});
+    setDistantFin(null);
+    setDistantAvis(null);
+
+    nouvelle.sur("presence", ({ joueurs, sieges }) => {
+      setDistantJoueurs(joueurs || []);
+      setDistantSieges(sieges || {});
+    });
+    nouvelle.sur("etat", (instantane) => setEtatDistantRecu(instantane));
+    nouvelle.sur("prive", (charge) => setMainPriveeRecue(charge));
+    /* Les intentions n'arrivent que chez l'hôte — le relais les y adresse et
+       nulle part ailleurs. On les met en file plutôt que de les jouer ici : le
+       traitement demande trois rendus (cf. la machine ci-dessus), et un
+       abonnement réseau n'est pas un endroit d'où piloter React. */
+    nouvelle.sur("intention", (m) => setFileIntentions((f) => [...f, m]));
+    nouvelle.sur("chat", (m) => setDistantChat((prev) => [...prev.slice(-40), m]));
+    nouvelle.sur("erreur", ({ message }) => setDistantAvis(message));
+    nouvelle.sur("fin", ({ raison }) => { setDistantFin(raison); setDistantAvis(raison); });
+
+    // Un invité qui arrive en cours de partie reçoit l'état courant d'emblée,
+    // sans attendre le prochain coup de l'hôte.
+    if (nouvelle.etatInitial) setEtatDistantRecu(nouvelle.etatInitial);
+    return nouvelle;
+  }, []);
+
+  const quitterSessionDistante = useCallback(async () => {
+    const s = sessionRef.current;
+    setSession(null);
+    setDistantJoueurs([]); setDistantSieges({});
+    setEtatDistantRecu(null); setMainPriveeRecue(null);
+    setFileIntentions([]); setEtapeIntention("recu");
+    if (s) await s.quitter();
+  }, []);
+
+  /* Fermer l'onglet doit libérer la place tout de suite. Sans ça, un joueur qui
+     recharge sa page revient comme un SECOND participant, et son siège reste
+     occupé par le fantôme du premier pendant quatre-vingt-dix secondes. */
+  useEffect(() => {
+    if (!session) return undefined;
+    const partir = () => { sessionRef.current?.quitter(); };
+    window.addEventListener("pagehide", partir);
+    return () => window.removeEventListener("pagehide", partir);
+  }, [session]);
+
+  /* ── CÔTÉ INVITÉ : SE CALER SUR LE PLATEAU DE L'HÔTE ──
+     Le plateau public arrive mains masquées, la main privée arrive à part. On
+     attend d'avoir les deux avant de reposer la partie : appliquer le plateau
+     seul ferait clignoter la main du joueur à chaque coup adverse. */
+  useEffect(() => {
+    if (!distantInvite || !etatDistantRecu) return;
+    restaurerInstantane(fusionnerMain(etatDistantRecu, mainPriveeRecue));
+    /* C'est l'hôte qui ouvre la table, pas le clic de l'invité sur
+       « Rejoindre ». Entrer tout de suite montrait un plateau généré
+       localement — quatre Titans posés, une ville complète — remplacé une
+       seconde plus tard par celui de l'hôte. Un joueur qui voit ça croit
+       légitimement que la partie a commencé sans lui. */
+    if (etatDistantRecu.partieLancee) setSetupDone(true);
+  }, [distantInvite, etatDistantRecu, mainPriveeRecue, restaurerInstantane]);
+
+  /* ── CÔTÉ HÔTE : DIFFUSER APRÈS CHAQUE COUP ──
+     Le déclencheur est l'état de partie lui-même, pas les actions : une
+     diffusion par action aurait obligé à se souvenir d'en ajouter une à chaque
+     fois qu'on écrit une nouvelle action — et on l'aurait oublié.
+
+     L'attente de 120 ms n'est pas du confort : une action fait bouger huit
+     morceaux d'état en autant de rendus, et diffuser huit fois soixante
+     kilo-octets pour un seul coup sature la liaison sans rien apprendre à
+     personne. On attend que ça se stabilise, puis on envoie une fois. */
+  const dernierEnvoiRef = useRef("");
+  useEffect(() => {
+    if (!distantHote || !session) return undefined;
+    const minuteur = setTimeout(() => {
+      const complet = instantaneCourant();
+      const public_ = plateauPublic(complet);
+      const signature = JSON.stringify(public_);
+      if (signature === dernierEnvoiRef.current) return;
+      dernierEnvoiRef.current = signature;
+      session.diffuserEtat(public_).catch(() => setDistantAvis("Diffusion impossible, reprise…"));
+      /* Et à chacun sa main, par le canal privé. C'est ce qui garde la
+         programmation secrète : le plateau part en clair, les cartes non. */
+      Object.entries(distantSieges).forEach(([titanId, ref]) => {
+        const main = mainPrivee(complet, titanId);
+        if (main) session.envoyerPrive(ref, main).catch(() => {});
+      });
+    }, 120);
+    return () => clearTimeout(minuteur);
+  }, [distantHote, session, distantSieges, instantaneCourant]);
+
+  useEffect(() => {
+    if (distantInviteRef.current) return; // `passifUsed` arrive dans l'instantané
     if (activePlayerId == null) return;
     setPassifUsed((prev) => ({
       ...prev,
@@ -1128,6 +1597,7 @@ export function useBoardGeneratorController() {
   }, []);
 
   useEffect(() => {
+    if (distantInviteRef.current) return; // la rentrée est arbitrée par l'hôte
     if (phase !== "action" || activePlayerId == null) { setCoutRentree(null); setCornerChoice(null); return; }
     const joueur = aiTitanStateRef.current.players.find((t) => t.id === activePlayerId);
     if (!joueur?.horsPlateau) { setCoutRentree(null); setCornerChoice(null); return; }
@@ -1199,6 +1669,7 @@ export function useBoardGeneratorController() {
   }, []);
 
   useEffect(() => {
+    if (distantInviteRef.current) return; // la file de mise en place est tenue par l'hôte
     /* ⚠️ `titanState.players`, PAS la ref. La ref est synchronisée par un effet,
        donc au premier rendu qui suit une nouvelle partie elle pointe encore
        sur les Titans de la PRÉCÉDENTE — qui sont tous posés. Lue ici, elle
@@ -1283,6 +1754,7 @@ export function useBoardGeneratorController() {
     if (phase !== "action") return;
     if (activePlayerId == null) return;
     if (titanModes[activePlayerId] !== "ia") return;
+    if (distantInviteRef.current) return; // les IA jouent chez l'hôte, une seule fois
     // Petit délai pour laisser setAiPlayingSync(false) se propager avant de vérifier
     const t = setTimeout(() => {
       if (!aiPlayingRef.current) {
@@ -1348,6 +1820,7 @@ export function useBoardGeneratorController() {
     if (activePlayerId == null) return;
     if (titanModes[activePlayerId] !== "ia") return;
     if (aiPlayingRef.current) return;
+    if (distantInviteRef.current) return; // les IA jouent chez l'hôte, une seule fois
     /* Une décision née d'un tour IA se règle AVANT le tour suivant.
        Bug remonté par Nikola (test à la table, 2026-08-18) : « dès que
        j'ai fait le dil c'est passé au joueur suivant automatiquement, je
@@ -1672,6 +2145,7 @@ export function useBoardGeneratorController() {
     if (!setupDone) return;
     if (phase === "action") return; // géré par l'auto-play + markCardPlayed
     if (aiPlayingRef.current) return;
+    if (distantInviteRef.current) return; // seul l'hôte valide pour les IA
     // Une IA ne programme pas avant d'avoir un pied sur le plateau : c'est
     // cette auto-validation qui poussait la Phase Action à s'ouvrir sur des
     // Titans jamais posés (cf. `placementEnCours`).
@@ -2535,6 +3009,7 @@ export function useBoardGeneratorController() {
      fait voler exactement une fois dans les deux sens), et il passe par le
      `pick` du domaine, donc par le même RNG que le reste de la partie. */
   useEffect(() => {
+    if (distantInviteRef.current) return; // le sens du Vol est choisi chez l'hôte
     if (phase !== "repos" || volDirection || gameOver) return;
     // Même règle que ci-dessus : le Vol ne démarre pas par-dessus une
     // décision non tranchée, fût-ce une IA qui le déclenche.
@@ -3761,6 +4236,7 @@ export function useBoardGeneratorController() {
      n'était plus jamais recalculé — les IA finissaient la partie avec des
      Verts posés d'après un état qui n'existait plus. */
   useEffect(() => {
+    if (distantInviteRef.current) return; // les Verts des IA sont placés chez l'hôte
     if (!gameOver) return;
     const aFaire = titanState.players.filter(
       (t) => titanModes[t.id] === "ia"
@@ -4179,6 +4655,19 @@ export function useBoardGeneratorController() {
           regenerate(seedInput === "" ? undefined : seedInput);
           setSetupDone(true);
         }}
+        /* ── PARTIE À DISTANCE ──
+           L'écran d'accueil est le seul endroit où l'on peut encore choisir de
+           jouer à plusieurs : une fois la partie lancée, la table est faite. */
+        session={session}
+        distantJoueurs={distantJoueurs}
+        distantSieges={distantSieges}
+        distantAvis={distantAvis}
+        onBrancherSession={brancherSession}
+        onQuitterSession={quitterSessionDistante}
+        onPublierSieges={(sieges) => {
+          setDistantSieges(sieges);
+          sessionRef.current?.publierSieges(sieges);
+        }}
       />
     );
   }
@@ -4187,7 +4676,28 @@ export function useBoardGeneratorController() {
   const tcSel = selectedTitan ? TITAN_COLORS[selectedTitan.id] : null;
 
 
-  return {
+  const vm = {
+    /* ── PARTIE À DISTANCE ──
+       Tout ce que l'interface a besoin de savoir du réseau tient ici. Le reste
+       du jeu l'ignore complètement : un panneau qui affiche le plateau ne sait
+       pas s'il regarde une partie locale ou distante, et c'est voulu. */
+    session,
+    distantInvite,
+    distantHote,
+    monTitanDistant,
+    distantJoueurs,
+    distantSieges,
+    distantAvis,
+    distantFin,
+    distantChat,
+    brancherSession,
+    quitterSessionDistante,
+    publierSieges: (sieges) => {
+      setDistantSieges(sieges);
+      return sessionRef.current?.publierSieges(sieges);
+    },
+    envoyerChatDistant: (texte) => sessionRef.current?.envoyerChat(texte),
+
     nbJoueurs,
     setNbJoueurs,
     // Le nombre de Manches de la partie vient du domaine (manchesMax), qui
@@ -4456,4 +4966,44 @@ export function useBoardGeneratorController() {
     terminerPlacement,
     tcSel
   };
+
+  /* ── LES VRAIES FONCTIONS RESTENT SOUS LA MAIN DE L'HÔTE ──
+     Le motif « ref sur la dernière version » : l'exécuteur d'intentions lit ici
+     la fonction du rendu courant, sans que l'effet ait à dépendre des deux
+     cents callbacks du contrôleur — un tableau de dépendances de cette taille
+     ne serait ni lisible ni juste. */
+  actionsRef.current = vm;
+
+  /* ── CHEZ UN INVITÉ, UNE ACTION SE DEMANDE, ELLE NE S'EXÉCUTE PAS ──
+     C'est le dernier maillon, et le seul endroit du jeu où l'interface diverge
+     entre local et distant. Les panneaux appellent `vm.jouerBoingBoing()`
+     exactement comme avant ; ici, cet appel devient un message.
+
+     Le CONTEXTE part avec : les brouillons composés localement (le chemin en
+     cours de tracé, la mise d'Adrénaline) n'existent que dans ce navigateur,
+     et l'hôte doit les adopter avant de jouer. Sans eux, il exécuterait
+     l'action avec SES propres réglages — c'est-à-dire, presque toujours, avec
+     zéro Adrénaline et aucun chemin.
+
+     Ce qui n'est PAS dans la liste blanche garde son comportement local : les
+     bascules de mode, la sélection, l'affichage 3D, la page Règles. Ce sont des
+     gestes qui ne touchent pas la partie, et les faire voyager n'aurait servi
+     qu'à faire clignoter l'écran des autres. */
+  if (distantInvite) {
+    const contexteCourant = () => ({
+      bbPath, bbAdrenaline, moveAdrenaline, teaAdrenaline, tcAdrenaline,
+      jnpSelected, progSelection, direction, useAdrenaline,
+    });
+    Object.keys(ACTIONS_DISTANTES).forEach((nom) => {
+      if (typeof vm[nom] !== "function") return;
+      vm[nom] = (...args) => sessionRef.current?.envoyerIntention(nom, args, contexteCourant());
+    });
+    /* Un invité ne remonte pas le temps chez les autres : « Annuler » est un
+       geste local sur une pile locale, qui n'a aucun sens partagé. On le retire
+       plutôt que de laisser un bouton qui ne fait rien. */
+    vm.handleUndo = () => {};
+    vm.undoStack = [];
+  }
+
+  return vm;
 }
