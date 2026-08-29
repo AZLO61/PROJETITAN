@@ -1,5 +1,78 @@
 # Changelog
 
+## Non publié — vingt-deuxième passe du 2026-08-29 (la mise en place tient la porte, et les couleurs disent qui fait quoi)
+
+Quatre points relevés par Nikola après une série de parties gagnées neuf fois
+sur dix contre des Experts, mais gagnées de peu — « 36, 35, 34, 17 », le lead
+pris sur la piste Destruction faisant la différence. Trois sont des questions de
+lecture du plateau, le quatrième est un bug de démarrage.
+
+### Rien ne commence avant que les quatre Titans soient posés
+
+« Je ne peux pas choisir mes cartes avant mon placement initial, car là ça a
+créé un bug : je ne vois aucun Titan et pourtant ils jouent. »
+
+La mise en place d'ouverture et la Programmation vivaient côte à côte sans se
+voir. La mise en place était bien une décision bloquante à l'écran, mais rien ne
+l'imposait au moteur : les IA programmaient et validaient leur phase toutes
+seules, l'humain pouvait programmer par-dessus le bandeau, et la Phase Action
+s'ouvrait dès les quatre validations réunies. Sur un plateau où des Titans
+portaient encore `aPlacer` — donc dessinés nulle part, et jouant quand même.
+
+Le verrou vit maintenant dans le moteur de phases, pas seulement dans
+l'interface : quatre points s'adossent à la même file `placementRestant` — la
+garde de validation, son message, l'effet qui enchaîne les phases et
+l'auto-validation des IA. Masquer les cartes aurait caché le symptôme en
+laissant l'enchaînement capable de démarrer sans plateau ; les cartes sont donc
+masquées EN PLUS, avec un rappel qui dit pourquoi, pas à la place.
+
+Ce que le correctif a révélé au passage : deux tests de la Phase Action ne
+passaient que parce que le moteur acceptait de démarrer sur un plateau non
+placé. Ils soldent désormais la mise en place par la sortie de secours prévue
+pour ça, comme les cinq autres tests qui le faisaient déjà.
+
+### La case de mise en place prend la couleur de celui qui pose
+
+« Pour le placement initial d'un Titan, illumine la case de sa couleur et non
+pas le jaune. »
+
+Les quatre Titans posent l'un après l'autre sur le même plateau, et le jaune
+générique ne disait pas à qui c'était le tour : l'information vivait uniquement
+dans le bandeau, au moment précis où l'œil est sur la grille. La couleur du
+Titan la ramène sur la case qu'on s'apprête à cliquer — même opacité qu'avant,
+seul le ton change, en 2D comme en 3D.
+
+### La faille empruntée appartient à la traînée de celui qui l'a prise
+
+« Illumine les téléporteurs empruntés par la couleur de traînée du Titan. »
+
+Les deux bouches d'une faille traversée se peignaient du violet générique du
+téléporteur — la même teinte que les cases « accessibles par faille » proposées
+AVANT le déplacement. Deux informations différentes dans une seule couleur : on
+ne lisait plus si le violet disait « tu pourrais passer par là » ou « il vient
+de passer par là ». La faille prend donc la couleur du Titan, et le violet
+redevient la seule couleur de l'offre.
+
+### Le haut du barème d'Adrénaline accélère
+
+« Rends le scoring des Adrénalines un petit peu plus intéressant. »
+
+Le barème progressif posé la veille montait de 3, puis 4, puis 5. Sur des
+parties qui se jouent à un ou deux points, pousser la réserve jusqu'au bout ne
+se distinguait pas assez d'un Repaire mené normalement.
+
+Les quatre premiers paliers NE BOUGENT PAS : c'est là que vit le risque que le
+ruling du 2026-08-19 avait fermé — une petite réserve trop rentable décourage de
+dépenser. Seule la partie haute accélère.
+
+    réserve   1   2   3   4   5   6   7   8
+    avant     1   3   5   8  11  15  19  24
+    après     1   3   5   8  12  17  22  28
+
+La valeur vit toujours à une seule source, et le test qui vérifie que les règles
+de l'application, le livret et le tableau de décompte annoncent le même barème
+l'a bien attrapée aux trois endroits.
+
 ## Non publié — vingt-et-unième passe du 2026-08-28 (mise en place, tas renversés, et le plateau qui reprend sa place)
 
 Douze points relevés par Nikola. Neuf sont faits, un est laissé ouvert faute de

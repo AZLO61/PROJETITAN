@@ -256,16 +256,43 @@ export default function RoundPanels({ vm }) {
        · faille → violet du téléporteur, quand un saut l'a empruntée.
      Le `73` final est l'alpha hexadécimal, soit 0,45 : exactement celui du jaune
      d'origine, pour qu'aucun des trois ne crie plus fort que les autres. */
+  /* LES DEUX BOUCHES DE LA FAILLE PRENNENT LA COULEUR DE CELUI QUI L'EMPRUNTE
+     (Nikola, 2026-08-29 : « illumine les téléporteurs empruntés par la couleur
+     de traînée du Titan »). Elles étaient peintes du violet générique du
+     téléporteur — la même teinte que les cases « accessibles par faille »
+     proposées AVANT le déplacement. Deux informations différentes dans la même
+     couleur : on ne lisait plus si le violet disait « tu pourrais passer par
+     là » ou « il vient de passer par là ». En prenant la couleur du Titan, la
+     faille empruntée appartient visiblement à sa traînée, et le violet
+     redevient la seule couleur de l'offre. Il ne sert plus que de repli, quand
+     aucun Titan n'est associé au saut. */
+  /* ── LA MISE EN PLACE SE FAIT AUX COULEURS DE CELUI QUI POSE ──
+     Nikola, 2026-08-29 : « pour le placement initial d'un Titan, illumine la
+     case de sa couleur et non pas le jaune ». Les quatre Titans posent l'un
+     après l'autre sur le même plateau, et le jaune générique ne disait pas à
+     qui c'était le tour — l'information vivait uniquement dans le bandeau, au
+     moment précis où l'œil est sur la grille. Sa couleur la ramène sur la
+     case qu'on s'apprête à cliquer.
+
+     `placementRestant[0]` suffit ici : le bandeau lit la même tête de file, et
+     ce n'est qu'un affichage — la pose, elle, repart des Titans (cf.
+     `prochainAPlacer` dans le contrôleur). */
+  const titanQuiPose = (vm.placementRestant || [])[0] ?? null;
+  const accentPlacement = (titanQuiPose && TITAN_COLORS[titanQuiPose]?.accent) || "#FFD93D";
+  const accentPlacement3D = Number(`0x${accentPlacement.slice(1)}`);
+
   const traceParCase = new Map((traceVol || []).map((e) => [e.key, e]));
   const teinteTrace = (entree) => {
-    if (entree?.teleporteur) return "rgba(184,140,255,.45)";
     const accent = entree?.titanId ? TITAN_COLORS[entree.titanId]?.accent : null;
-    return accent ? `${accent}73` : "rgba(255,217,61,.45)";
+    if (accent) return `${accent}73`;
+    if (entree?.teleporteur) return "rgba(184,140,255,.45)";
+    return "rgba(255,217,61,.45)";
   };
   const teinteTrace3D = (entree) => {
-    if (entree?.teleporteur) return 0xb88cff;
     const accent = entree?.titanId ? TITAN_COLORS[entree.titanId]?.accent : null;
-    return accent ? Number(`0x${accent.slice(1)}`) : 0xffd93d;
+    if (accent) return Number(`0x${accent.slice(1)}`);
+    if (entree?.teleporteur) return 0xb88cff;
+    return 0xffd93d;
   };
 
   const cellulesActives = (() => {
@@ -281,8 +308,9 @@ export default function RoundPanels({ vm }) {
       traceVol.forEach((e) => add(e.key, teinteTrace3D(e), 0.7));
     }
     if (vm.decisionBloquante === "placement") {
-      // Jaune du tour : c'est une action primaire, la seule ouverte.
-      vm.placementCells.forEach((k) => add(k, 0xffd93d, 0.55));
+      // La couleur de CELUI QUI POSE, pas le jaune générique (Nikola,
+      // 2026-08-29). Cf. `accentPlacement` en tête de composant.
+      vm.placementCells.forEach((k) => add(k, accentPlacement3D, 0.55));
     } else if (vm.decisionBloquante === "toutcasser") {
       // Orange de la percussion : ce sont les cibles qui attendent leur tour.
       (vm.toutCasserFile?.cibles || []).forEach((c) => add(c.key, 0xfb923c, 0.5));
@@ -671,8 +699,10 @@ export default function RoundPanels({ vm }) {
 
               let cellBg;
               if (placementSelectable) {
-                // Jaune du tour : c'est l'action primaire, et la seule ouverte.
-                cellBg = "rgba(255,217,61,.30)";
+                // Couleur du Titan qui pose (cf. `accentPlacement`). Le `4D`
+                // final est l'alpha hexadécimal, soit 0,30 : exactement
+                // l'opacité de l'ancien jaune, seul le ton change.
+                cellBg = `${accentPlacement}4D`;
               } else if (tcSelectable) {
                 cellBg = "rgba(251,146,60,.28)"; // orange de la percussion
               } else if (entreeTrace) {
@@ -824,7 +854,7 @@ export default function RoundPanels({ vm }) {
                     cursor: placementSelectable || tcSelectable || repliSelectable || jnpSelectable || bbSelectable || bbInPath || teaSelectable || moveSelectable || recupSelectable || titansByCell[key] ? "pointer" : "default",
                     background: cellBg,
                     border: placementSelectable
-                      ? "2px solid #FFD93D"
+                      ? `2px solid ${accentPlacement}`
                       : tcSelectable
                       ? "2px solid #FB923C"
                       : repliSelectable

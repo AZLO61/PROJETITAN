@@ -4923,8 +4923,18 @@ function countRepaireColors(titan) {
    la valeur du n-ième jeton.
 
      réserve   1   2   3   4   5   6   7   8
-     total     1   3   5   8  11  15  19  24
-     marginal  1   2   2   3   3   4   4   5
+     total     1   3   5   8  12  17  22  28
+     marginal  1   2   2   3   4   5   5   6
+
+   HAUT DE COURBE RELEVÉ le 2026-08-29. Nikola : « rends le scoring des
+   Adrénalines un petit peu plus intéressant ». La première version montait de
+   3 puis 4 puis 5 ; sur des parties qui se jouent à un ou deux points (36-35-34
+   relevés à la table), pousser la réserve jusqu'au bout ne se distinguait pas
+   assez d'un Repaire mené normalement. Les QUATRE PREMIERS PALIERS NE BOUGENT
+   PAS — c'est là que vit le risque décrit juste en dessous, et le déplacer
+   rouvrirait le défaut que le ruling du 19 avait fermé. Seule la partie haute
+   accélère : une réserve de 8 vaut 28 au lieu de 24, et la marginale passe de
+   3-4-5 à 4-5-6.
 
    CE QUE CE PROFIL PRÉSERVE, et c'est ce qui a fait écarter une courbe plus
    raide (triangulaire 1/3/6/10/15…) : le ruling du 2026-08-19 avait baissé la
@@ -4936,13 +4946,13 @@ function countRepaireColors(titan) {
    qu'il faut assumer sur toute la partie, pas une rente de consolation.
 
    Le barème plafonne à 8 : au-delà, chaque jeton supplémentaire vaut encore
-   5, ce qui évite qu'une partie exotique fasse diverger le score.
+   6, ce qui évite qu'une partie exotique fasse diverger le score.
 
    EXPORTÉ, jamais recopié en dur : la valeur vit aussi chez le planificateur
    d'IA (`valeurMarginaleAdrenaline`), qui arbitre entre payer une Adrénaline
    et encaisser la perte, dans le texte des règles et dans le livret. Une
    source unique côté code, et un test qui vérifie les trois autres. */
-const BAREME_ADRENALINE = [1, 3, 5, 8, 11, 15, 19, 24];
+const BAREME_ADRENALINE = [1, 3, 5, 8, 12, 17, 22, 28];
 
 /** Points de victoire d'une réserve de `n` Adrénalines au décompte final. */
 function scoreAdrenaline(n) {

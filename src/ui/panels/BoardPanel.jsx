@@ -688,8 +688,30 @@ export default function BoardPanel({ vm }) {
             )}
 
 
+            {/* ── LES CARTES ATTENDENT QUE TOUT LE MONDE SOIT POSÉ ──
+                Nikola, 2026-08-29 : « je ne peux pas choisir mes cartes avant
+                mon placement initial, car là ça a créé un bug : je ne vois
+                aucun Titan et pourtant ils jouent ».
+
+                Le vrai verrou est dans le contrôleur (cf. `placementEnCours`),
+                qui empêche désormais toute phase de s'enchaîner tant qu'un
+                Titan attend sa case. Ce rappel-ci évite de laisser le choix des
+                cartes ouvert par-dessus le bandeau de mise en place : on ne
+                programme pas à l'aveugle un plateau dont on ne connaît pas
+                encore les positions de départ — c'est précisément ce que
+                l'ordre de pose est censé faire savoir. */}
+            {phase === "programmation" && vm.decisionBloquante === "placement" && (
+              <div style={{
+                background: "rgba(255,217,61,.10)", border: "1px solid rgba(255,217,61,.35)",
+                borderRadius: 8, padding: "8px 10px", fontSize: ".74rem", color: T.dim,
+              }}>
+                📍 Mise en place en cours — les cartes s'ouvrent quand les quatre
+                Titans ont pris position.
+              </div>
+            )}
+
             {/* PHASE PROGRAMMATION */}
-            {phase === "programmation" && (
+            {phase === "programmation" && vm.decisionBloquante !== "placement" && (
               <div>
                 {selectedTitan.programmed.length === 3 ? (
                   <div style={{

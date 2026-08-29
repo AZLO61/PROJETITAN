@@ -37,6 +37,10 @@ describe("Fin de Phase Action et cartes encore programmées", () => {
     const user = userEvent.setup();
     render(<Harnais />);
     await user.click(screen.getByRole("button", { name: /Lancer la partie/ }));
+    // Depuis le 2026-08-29, aucune phase ne s'enchaîne tant que les quatre
+    // Titans n'ont pas pris position. Ce test parle de la Phase Action, pas de
+    // la mise en place : on la solde par la sortie de secours.
+    act(() => vmCourant.terminerPlacement());
 
     const ids = vmCourant.titanState.ordreJeu;
     const enRetard = ids[1];
@@ -72,6 +76,10 @@ describe("Fin de Phase Action et cartes encore programmées", () => {
     const user = userEvent.setup();
     render(<Harnais />);
     await user.click(screen.getByRole("button", { name: /Lancer la partie/ }));
+    // Depuis le 2026-08-29, aucune phase ne s'enchaîne tant que les quatre
+    // Titans n'ont pas pris position. Ce test parle de la Phase Action, pas de
+    // la mise en place : on la solde par la sortie de secours.
+    act(() => vmCourant.terminerPlacement());
 
     const ids = vmCourant.titanState.ordreJeu;
     act(() => {

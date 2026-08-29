@@ -420,26 +420,49 @@ export function useBoardGeneratorController() {
     // useMemo de `endGameReasons` plus bas).
   }, [mancheNumber, nbJoueurs, titanState.ordreJeu, titanState.detonateur, state, looseBlocks, apocalypseThreshold]);
 
+  /* ── RIEN NE COMMENCE TANT QUE LES QUATRE NE SONT PAS POSÉS ──
+     Bug remonté par Nikola le 2026-08-29 : « je ne peux pas choisir mes cartes
+     avant mon placement initial, car là ça a créé un bug : je ne vois aucun
+     Titan et pourtant ils jouent ».
+
+     La mise en place et la Programmation vivaient côte à côte sans se voir. La
+     mise en place est une décision BLOQUANTE, mais rien ne l'imposait au
+     moteur : les trois IA programmaient et validaient leur phase toutes
+     seules, l'humain pouvait programmer par-dessus le bandeau de placement, et
+     la Phase Action s'ouvrait dès que les quatre validations étaient là — sur
+     un plateau où des Titans portaient encore `aPlacer`. Ils n'étaient donc
+     dessinés nulle part (pas de `cell`) et jouaient quand même : exactement ce
+     que décrit le retour.
+
+     Le verrou vit ICI, dans le moteur de phases, et pas seulement dans
+     l'interface : masquer les cartes aurait caché le symptôme en laissant
+     l'enchaînement de phases capable de démarrer sans plateau. Quatre points
+     s'y adossent — cette garde, son message, l'effet d'enchaînement et
+     l'auto-validation IA — et tous lisent la même file `placementRestant`. */
+  const placementEnCours = placementRestant.length > 0;
+
   const canValidatePhase = useCallback(
     (titanId) => {
       const t = titanState.players.find((p) => p.id === titanId);
       if (!t) return false;
+      if (placementEnCours) return false;
       if (phase === "programmation") return t.programmed.length === 3;
       if (phase === "action") return t.programmed.length === 0;
       return true;
     },
-    [phase, titanState.players]
+    [phase, titanState.players, placementEnCours]
   );
 
   const getPhaseBlockReason = useCallback(
     (titanId) => {
       const t = titanState.players.find((p) => p.id === titanId);
       if (!t) return "";
+      if (placementEnCours) return "Tous les Titans doivent d'abord prendre position sur le plateau.";
       if (phase === "programmation" && t.programmed.length !== 3) return "Programme d'abord tes 3 cartes.";
       if (phase === "action" && t.programmed.length !== 0) return "Il te reste des cartes programmées à jouer.";
       return "";
     },
-    [phase, titanState.players]
+    [phase, titanState.players, placementEnCours]
   );
 
   const validatePhase = useCallback(
@@ -464,6 +487,10 @@ export function useBoardGeneratorController() {
        retrouvaient à l'écran en même temps, et le bloc perdu tombait sur un
        plateau que la Manche suivante avait déjà commencé à changer. */
     if (currentDecision || currentRepli || ecroulement) return;
+    // La mise en place d'ouverture est la première des décisions bloquantes :
+    // aucune phase ne s'enchaîne tant qu'un Titan attend sa case (cf. le
+    // commentaire de `placementEnCours`).
+    if (placementEnCours) return;
     const ids = titanState.ordreJeu;
     const allValidated = ids.every((id) => phaseValidated[id]);
     if (!allValidated) return;
@@ -537,7 +564,7 @@ export function useBoardGeneratorController() {
     }
     setPhaseValidated({});
   }, [phaseValidated, titanState.ordreJeu, titanState.detonateur, titanState.players, phase, advanceManche,
-      eventsEnabled, gameOver, currentDecision, currentRepli, ecroulement]);
+      eventsEnabled, gameOver, currentDecision, currentRepli, ecroulement, placementEnCours]);
 
   /* ── MAIN TROP CIBLÉE : SECOURS À L'ENTRÉE EN PROGRAMMATION ──
      Retour de Nikola (test à la table, 2026-08-18) : « j'ai été extrêmement
@@ -758,7 +785,8 @@ export function useBoardGeneratorController() {
 
        { key, titanId }   titanId = null → débris (jaune)
                           titanId = n    → ce Titan-là (sa couleur)
-       { key, teleporteur: true }        → la faille empruntée (violet)
+       { key, teleporteur: true, titanId } → la faille empruntée, peinte de la
+                          couleur du Titan qui l'a prise (violet en repli)
 
      `projectInDirection` remplissait déjà `titanId` dans chaque trajectoire :
      l'information existait, elle était jetée à l'affichage. */
@@ -1644,6 +1672,10 @@ export function useBoardGeneratorController() {
     if (!setupDone) return;
     if (phase === "action") return; // géré par l'auto-play + markCardPlayed
     if (aiPlayingRef.current) return;
+    // Une IA ne programme pas avant d'avoir un pied sur le plateau : c'est
+    // cette auto-validation qui poussait la Phase Action à s'ouvrir sur des
+    // Titans jamais posés (cf. `placementEnCours`).
+    if (placementEnCours) return;
     const curTitanState = aiTitanStateRef.current;
     curTitanState.ordreJeu.forEach((id) => {
       if (titanModes[id] === "ia" && !phaseValidated[id]) {
@@ -1681,7 +1713,7 @@ export function useBoardGeneratorController() {
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setupDone, phase, titanModes, phaseValidated]);
+  }, [setupDone, phase, titanModes, phaseValidated, placementEnCours]);
 
   const canUseMovePassif = useCallback(
     (titanId) => phase === "action" && titanId === activePlayerId && !(passifUsed[titanId]?.move),
@@ -3335,7 +3367,14 @@ export function useBoardGeneratorController() {
         }
       }
       if (bouches.length > 0) {
-        setTraceVol((prev) => [...prev, ...bouches.map((key) => ({ key, teleporteur: true }))]);
+        /* `titanId` accompagne la bouche : la faille se peint de la couleur du
+           Titan qui vient de l'emprunter, pas du violet générique (Nikola,
+           2026-08-29). Le drapeau `teleporteur` reste, il sert de repli quand
+           aucun Titan n'est associé au saut. */
+        setTraceVol((prev) => [
+          ...prev,
+          ...bouches.map((key) => ({ key, teleporteur: true, titanId: selectedTitanId })),
+        ]);
       }
     },
     [selectedTitanId, moveReachable, moveAdrenaline, moveMaxRange, titanState.players, titansByCell, canUseMovePassif, captureSnapshot, state.board, looseBlocks, assurerRentree, animerTrajectoires]

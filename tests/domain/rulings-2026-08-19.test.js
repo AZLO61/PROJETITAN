@@ -58,7 +58,7 @@ describe("Adrénaline conservée : barème PROGRESSIF, pas un forfait", () => {
      est trop rentable, donc on ne dépense jamais), et une grosse réserve
      doit valoir plus (sinon le barème n'est pas progressif du tout). */
   it("le barème est cumulatif et strictement croissant", () => {
-    expect(BAREME_ADRENALINE).toEqual([1, 3, 5, 8, 11, 15, 19, 24]);
+    expect(BAREME_ADRENALINE).toEqual([1, 3, 5, 8, 12, 17, 22, 28]);
     for (let i = 1; i < BAREME_ADRENALINE.length; i++) {
       expect(BAREME_ADRENALINE[i]).toBeGreaterThan(BAREME_ADRENALINE[i - 1]);
     }

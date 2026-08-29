@@ -46,6 +46,12 @@ describe("Une partie à 4 IA avance sans intervention", () => {
       vmCourant.titanState.players.forEach((t) => { modes[t.id] = "ia"; });
       vmCourant.setTitanModes(modes);
     });
+    /* La mise en place d'ouverture est un préalable à TOUTE phase depuis le
+       correctif du 2026-08-29 : sans elle, la Phase Action s'ouvrait sur des
+       Titans encore sans case. La file a été montée avec les modes d'origine
+       (T1 humain), elle attend donc un clic qui ne viendra jamais dans ce
+       harnais — d'où la sortie de secours, comme dans les autres tests. */
+    act(() => vmCourant.terminerPlacement());
 
     // L'IA enchaîne ses étapes sur des minuteries de 2 s. On laisse tourner
     // de quoi couvrir largement plusieurs tours complets.
@@ -76,6 +82,12 @@ describe("Une partie à 4 IA avance sans intervention", () => {
       vmCourant.titanState.players.forEach((t) => { modes[t.id] = "ia"; });
       vmCourant.setTitanModes(modes);
     });
+    /* La mise en place d'ouverture est un préalable à TOUTE phase depuis le
+       correctif du 2026-08-29 : sans elle, la Phase Action s'ouvrait sur des
+       Titans encore sans case. La file a été montée avec les modes d'origine
+       (T1 humain), elle attend donc un clic qui ne viendra jamais dans ce
+       harnais — d'où la sortie de secours, comme dans les autres tests. */
+    act(() => vmCourant.terminerPlacement());
 
     let bloqueSur = null;
     let compteur = 0;
