@@ -1384,8 +1384,14 @@ export function useBoardGeneratorController() {
       setActionLog((prev) => [...prev, `🚫 ${intention.pseudo} : ${raison}`]);
     };
 
-    const portee = ACTIONS_DISTANTES[intention.fn];
-    if (!portee) { rejeter(`action « ${intention.fn} » non autorisée à distance.`); return; }
+    /* `hasOwnProperty` et non une simple indexation : `intention.fn` vient du
+       réseau, et `ACTIONS_DISTANTES["__proto__"]` ou `["constructor"]` rendrait
+       une valeur héritée, donc « vraie », pour une action qui n'est pas dans la
+       liste blanche. Même raison qu'à l'étape « contexte » plus bas. */
+    const portee = Object.prototype.hasOwnProperty.call(ACTIONS_DISTANTES, intention.fn)
+      ? ACTIONS_DISTANTES[intention.fn]
+      : null;
+    if (typeof portee !== "string") { rejeter(`action « ${intention.fn} » non autorisée à distance.`); return; }
     const titanDuSiege = intention.titanId;
     if (!titanAutorise(portee, titanDuSiege)) {
       rejeter("ce n'est pas à toi de jouer.");
@@ -1399,15 +1405,40 @@ export function useBoardGeneratorController() {
       return;
     }
     if (etapeIntention === "siege") {
-      Object.entries(intention.contexte || {}).forEach(([cle, valeur]) => {
-        const poser = CONTEXTE_DISTANT[cle];
-        if (poser) poser(valeur);
-      });
+      /* ⚠️ `CONTEXTE_DISTANT[cle]` SANS GARDE FAISAIT PLANTER TOUTE LA PARTIE.
+         Trouvé à la revue de sécurité du 2026-08-30, et vérifié : `JSON.parse`
+         d'un `{"__proto__": 1}` crée une propriété PROPRE et énumérable
+         littéralement nommée `__proto__`. `Object.entries` la restitue, et
+         l'indexation rendait alors `Object.prototype` — un objet, donc « vrai »
+         — qu'on appelait ensuite comme une fonction.
+
+         L'exception partait d'un `useEffect`, hors de tout filet : React démonte
+         l'arbre entier, et la partie s'arrête pour toute la table. Il suffisait
+         d'un invité assis et d'une seule requête.
+
+         Deux verrous plutôt qu'un : la clé doit être une propriété PROPRE de la
+         table (jamais héritée du prototype), et sa valeur doit être une vraie
+         fonction. Et tout le bloc passe dans un filet, comme l'exécution de
+         l'action juste en dessous — une intention malformée fait perdre son tour
+         à son auteur, jamais la partie aux autres. */
+      try {
+        Object.entries(intention.contexte || {}).forEach(([cle, valeur]) => {
+          if (!Object.prototype.hasOwnProperty.call(CONTEXTE_DISTANT, cle)) return;
+          const poser = CONTEXTE_DISTANT[cle];
+          if (typeof poser === "function") poser(valeur);
+        });
+      } catch (e) {
+        console.error("[distant] contexte refusé", e);
+        rejeter("réglages non reconnus.");
+        return;
+      }
       setEtapeIntention("contexte");
       return;
     }
     // etapeIntention === "contexte" : tout est en place, on joue.
-    const action = actionsRef.current[intention.fn];
+    const action = Object.prototype.hasOwnProperty.call(actionsRef.current, intention.fn)
+      ? actionsRef.current[intention.fn]
+      : null;
     if (typeof action === "function") {
       try {
         action(...(intention.args || []));

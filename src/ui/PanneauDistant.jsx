@@ -47,6 +47,11 @@ export default function PanneauDistant({
   const [ecran, setEcran] = useState("ferme");   // ferme | choix | creer | rejoindre
   const [urlRelais, setUrlRelais] = useState(() => lireMemoire(CLE_RELAIS));
   const [pseudo, setPseudo] = useState(() => lireMemoire(CLE_PSEUDO, "Nikola"));
+  /* Deux secrets, deux vies. La CLÉ DU RELAIS n'ouvre que la création et
+     n'appartient qu'à l'hôte ; le MOT DE PASSE DE TABLE est tiré par le relais
+     et se dicte aux invités. Aucun des deux n'est écrit sur le disque : seules
+     l'adresse et le pseudo sont retenus. */
+  const [cleRelais, setCleRelais] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
   const [idSalle, setIdSalle] = useState("");
   const [occupe, setOccupe] = useState(false);
@@ -66,10 +71,13 @@ export default function PanneauDistant({
       ecrireMemoire(CLE_RELAIS, urlRelais);
       ecrireMemoire(CLE_PSEUDO, pseudo);
       const s = quoi === "creer"
-        ? await creerSession({ urlRelais, motDePasse, pseudo })
+        ? await creerSession({ urlRelais, cleRelais, pseudo })
         : await rejoindreSession({ urlRelais, id: idSalle, motDePasse, pseudo });
       onBrancherSession(s);
-      setMotDePasse("");     // il ne traîne pas dans un champ après usage
+      // Les deux secrets quittent les champs dès qu'ils ont servi. Celui de la
+      // table réapparaît dans le salon, lu depuis la session, pas depuis ici.
+      setMotDePasse("");
+      setCleRelais("");
       /* On N'ENTRE PAS dans la partie ici. L'invité reste sur cet écran, en
          attente, et c'est le premier instantané de l'hôte marqué « partie
          lancée » qui le fait basculer. Entrer tout de suite lui montrait un
@@ -126,6 +134,14 @@ export default function PanneauDistant({
             <div style={label(T.faint, T.micro)}>Identifiant</div>
             <div style={readout("1.5rem", T.you)}>{session.id}</div>
           </div>
+          {/* LE MOT DE PASSE EST TIRÉ AU SORT, PAS CHOISI (Nikola, 2026-08-30).
+              Il ne s'affiche qu'ici, et une seule fois : le relais ne le garde
+              que sous forme d'empreinte, personne ne peut le redemander. Fermer
+              la table et en rouvrir une en tire un autre. */}
+          <div>
+            <div style={label(T.faint, T.micro)}>Mot de passe</div>
+            <div style={readout("1.5rem", T.go)}>{session.motDePasse || "—"}</div>
+          </div>
           <div>
             <div style={label(T.faint, T.micro)}>Adresse du relais</div>
             <div style={{ ...prose(T.dim, T.small), wordBreak: "break-all", maxWidth: 340 }}>
@@ -134,9 +150,9 @@ export default function PanneauDistant({
           </div>
         </div>
         <p style={{ ...prose(T.faint, T.micro), margin: "0 0 10px" }}>
-          Donne ces deux lignes et le mot de passe à tes joueurs. Le mot de passe
-          n&apos;est affiché nulle part : c&apos;est toi qui l&apos;as choisi, à
-          toi de le dire.
+          Donne ces trois lignes à tes joueurs. Le mot de passe a été tiré au
+          sort et ne s&apos;affiche qu&apos;ici : note-le maintenant, il ne
+          pourra pas être retrouvé.
         </p>
 
         {invites.length === 0 ? (
@@ -262,27 +278,59 @@ export default function PanneauDistant({
               />
             </div>
           )}
-          <div>
-            <label htmlFor="relais-mdp" style={label(T.faint, T.micro)}>
-              Mot de passe {ecran === "creer" && "(4 caractères minimum)"}
-            </label>
-            {/* `type="password"` et non `text` : l'appareil de l'hôte est
-                souvent tourné vers la table pendant qu'il installe la partie. */}
-            <input
-              id="relais-mdp" type="password" value={motDePasse}
-              onChange={(e) => setMotDePasse(e.target.value)}
-              autoComplete="off"
-              style={champ}
-            />
-          </div>
+          {/* ── OUVRIR : LA CLÉ DU RELAIS ──
+              Elle garde le relais lui-même, pas la table. Sans elle, quiconque
+              trouvait l'adresse du tunnel pouvait ouvrir des salles jusqu'à le
+              saturer. Elle n'est demandée QU'ICI : un invité n'en a jamais
+              besoin, et elle ne circule donc qu'entre l'hôte et sa machine.
+              Elle n'est pas retenue sur le disque — un secret écrit survit à la
+              partie, et rien n'a besoin qu'il survive. */}
+          {ecran === "creer" && (
+            <div>
+              <label htmlFor="relais-cle" style={label(T.faint, T.micro)}>
+                Clé du relais
+              </label>
+              <input
+                id="relais-cle" type="password" value={cleRelais}
+                onChange={(e) => setCleRelais(e.target.value)}
+                autoComplete="off"
+                style={champ}
+              />
+              <p style={{ ...prose(T.faint, T.micro), margin: "4px 0 0" }}>
+                La phrase posée par <strong>JOUER-A-DISTANCE.bat</strong>. Tes
+                joueurs n&apos;en ont pas besoin.
+              </p>
+            </div>
+          )}
+
+          {/* ── REJOINDRE : LE MOT DE PASSE DE LA TABLE ──
+              À la création, il n'est plus saisi : le relais le tire au sort et
+              l'affiche une fois dans le salon. */}
+          {ecran === "rejoindre" && (
+            <div>
+              <label htmlFor="relais-mdp" style={label(T.faint, T.micro)}>
+                Mot de passe de la table
+              </label>
+              {/* `type="password"` et non `text` : un écran de joueur est
+                  souvent visible par d'autres personnes dans la pièce. */}
+              <input
+                id="relais-mdp" type="password" value={motDePasse}
+                onChange={(e) => setMotDePasse(e.target.value)}
+                autoComplete="off"
+                placeholder="XXXX-XXXX"
+                style={champ}
+              />
+            </div>
+          )}
           {erreur && (
             <p style={{ ...prose("#ef4444", T.small), margin: 0 }}>{erreur}</p>
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               onClick={() => agir(ecran)}
-              disabled={occupe || !urlRelais || motDePasse.length < 4
-                || (ecran === "rejoindre" && idSalle.length !== 6)}
+              disabled={occupe || !urlRelais
+                || (ecran === "creer" && cleRelais.length === 0)
+                || (ecran === "rejoindre" && (motDePasse.length === 0 || idSalle.length !== 6))}
               style={btnStyle(T.you)}
             >
               {occupe ? "Connexion…" : ecran === "creer" ? "Ouvrir" : "Rejoindre"}

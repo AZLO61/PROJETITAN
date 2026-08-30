@@ -14,7 +14,7 @@
    Le serveur écoute sur un port éphémère (`listen(0)`) : les tests ne peuvent
    pas se marcher dessus, et rien ne reste ouvert après coup.
 ============================================================ */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { serveur, salles, compteursIp } from "../../server/relais.mjs";
 
 let base = "";
@@ -40,8 +40,11 @@ const poster = (route, corps) => fetch(`${base}${route}`, {
   body: JSON.stringify(corps),
 });
 
-async function creerPartie(motDePasse = "titan2026", pseudo = "Nikola") {
-  const r = await poster("/api/creer", { motDePasse, pseudo });
+/* La creation ne prend plus de mot de passe : le relais le TIRE et le rend une
+   seule fois. Les tests recuperent donc `res.motDePasse` pour rejoindre, au lieu
+   d'une constante ecrite en dur. */
+async function creerPartie(cleRelais = undefined, pseudo = "Nikola") {
+  const r = await poster("/api/creer", { cleRelais, pseudo });
   return { statut: r.status, ...(await r.json()) };
 }
 
@@ -68,25 +71,120 @@ describe("Créer une salle", () => {
     expect(res.jeton).toHaveLength(48);
   });
 
-  it("refuse un mot de passe trop court", async () => {
-    const res = await creerPartie("abc");
-    expect(res.statut).toBe(400);
+  it("TIRE le mot de passe au lieu de le laisser choisir", async () => {
+    /* Un mot de passe choisi à la main était le maillon faible : le plancher à
+       quatre caractères invitait à taper « 1234 », et c'est la seule serrure de
+       la table. Huit caractères sur trente-deux, soit ~2^40 : avec dix essais
+       par quart d'heure et par adresse, c'est hors de portée. */
+    const res = await creerPartie();
+    const jeu = "[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}";
+    expect(res.motDePasse).toMatch(new RegExp(`^${jeu}-${jeu}$`));
+  });
+
+  it("en tire un DIFFÉRENT à chaque table", async () => {
+    // Un générateur cassé rendrait la même valeur : le test le verrait.
+    const tirages = new Set();
+    for (let i = 0; i < 12; i++) {
+      tirages.add((await creerPartie()).motDePasse);
+    }
+    expect(tirages.size).toBe(12);
+  });
+
+  it("ne garde jamais le mot de passe en clair, même celui qu'il vient de tirer", async () => {
+    const res = await creerPartie();
+    const salle = [...salles.values()][0];
+    const trace = JSON.stringify({ ...salle, participants: [...salle.participants.values()] });
+    expect(trace).not.toContain(res.motDePasse);
+    expect(Buffer.isBuffer(salle.empreinte)).toBe(true);
+  });
+
+  it("ne rend le mot de passe QU'À la création, jamais ensuite", async () => {
+    /* Il n'existe en clair qu'un instant, dans la réponse à l'hôte. Ni la
+       présence, ni le flux, ni l'arrivée d'un invité ne doivent le rejouer. */
+    const hote = await creerPartie();
+    const rejoint = await (await poster("/api/rejoindre", {
+      id: hote.id, motDePasse: hote.motDePasse, pseudo: "Eddy",
+    })).json();
+    expect(JSON.stringify(rejoint)).not.toContain(hote.motDePasse);
+
+    const flux = await (await fetch(
+      `${base}/api/flux?id=${hote.id}&jeton=${hote.jeton}&versionEtat=0`
+    )).json();
+    expect(JSON.stringify(flux)).not.toContain(hote.motDePasse);
+  });
+});
+
+describe("La clé du relais garde la création", () => {
+  /* Le seul vrai trou du montage précédent : `/api/creer` n'était pas
+     authentifiée. Qui trouvait l'adresse du tunnel pouvait ouvrir des salles
+     jusqu'à saturer le plafond, et empêcher les amis de l'hôte d'en créer une.
+
+     REJOINDRE n'en demande pas : les invités n'ont rien de plus à connaître. */
+  afterEach(() => { delete process.env.CLE_RELAIS; });
+
+  it("sans clé configurée, la création reste ouverte — c'est le cas local", async () => {
+    delete process.env.CLE_RELAIS;
+    expect((await creerPartie()).statut).toBe(200);
+  });
+
+  it("avec une clé configurée, une création SANS clé est refusée", async () => {
+    process.env.CLE_RELAIS = "HAVEFUN-EXEMPLE";
+    const res = await creerPartie(undefined);
+    expect(res.statut).toBe(403);
     expect(salles.size).toBe(0);
   });
 
-  it("ne garde jamais le mot de passe en clair", async () => {
-    await creerPartie("motDePasseTresSecret");
-    const salle = [...salles.values()][0];
-    const trace = JSON.stringify({ ...salle, participants: [...salle.participants.values()] });
-    expect(trace).not.toContain("motDePasseTresSecret");
-    expect(Buffer.isBuffer(salle.empreinte)).toBe(true);
+  it("refuse une clé fausse, et l'échec compte pour la force brute", async () => {
+    process.env.CLE_RELAIS = "HAVEFUN-EXEMPLE";
+    for (let i = 0; i < 10; i++) {
+      await creerPartie(`tentative${i}`);
+    }
+    // Même avec la BONNE clé, la porte est close : le compteur a parlé.
+    expect((await creerPartie("HAVEFUN-EXEMPLE")).statut).toBe(429);
+    expect(salles.size).toBe(0);
+  });
+
+  it("accepte la bonne clé", async () => {
+    process.env.CLE_RELAIS = "HAVEFUN-EXEMPLE";
+    const res = await creerPartie("HAVEFUN-EXEMPLE");
+    expect(res.statut).toBe(200);
+    expect(res.motDePasse).toBeTruthy();
+  });
+
+  it("ne renvoie jamais la clé, ni ne l'expose sur la route de santé", async () => {
+    process.env.CLE_RELAIS = "HAVEFUN-EXEMPLE";
+    const res = await creerPartie("HAVEFUN-EXEMPLE");
+    expect(JSON.stringify(res)).not.toContain("HAVEFUN-EXEMPLE");
+    const sante = await (await fetch(`${base}/api/sante`)).json();
+    expect(JSON.stringify(sante)).not.toContain("HAVEFUN-EXEMPLE");
+  });
+
+  it("REJOINDRE ne demande pas la clé — un invité ne la connaît pas", async () => {
+    process.env.CLE_RELAIS = "HAVEFUN-EXEMPLE";
+    const hote = await creerPartie("HAVEFUN-EXEMPLE");
+    const r = await poster("/api/rejoindre", {
+      id: hote.id, motDePasse: hote.motDePasse, pseudo: "Eddy",
+    });
+    expect(r.status).toBe(200);
+  });
+
+  it("une clé non-textuelle ne passe pas pour vide", async () => {
+    /* Confusion de type : `{ cleRelais: [] }` ou `{ cleRelais: {} }` ne doit pas
+       court-circuiter la comparaison. C'est la faute classique d'une garde
+       écrite en `if (cle !== attendue)` sur une valeur non normalisée. */
+    process.env.CLE_RELAIS = "HAVEFUN-EXEMPLE";
+    for (const bidon of [[], {}, 0, true, null]) {
+      const r = await poster("/api/creer", { cleRelais: bidon });
+      expect(r.status).toBe(403);
+    }
+    expect(salles.size).toBe(0);
   });
 });
 
 describe("Rejoindre une salle", () => {
   it("laisse entrer avec le bon identifiant et le bon mot de passe", async () => {
-    const hote = await creerPartie("titan2026");
-    const r = await poster("/api/rejoindre", { id: hote.id, motDePasse: "titan2026", pseudo: "Eddy" });
+    const hote = await creerPartie();
+    const r = await poster("/api/rejoindre", { id: hote.id, motDePasse: hote.motDePasse, pseudo: "Eddy" });
     const res = await r.json();
     expect(r.status).toBe(200);
     expect(res.siege).toBe("invite");
@@ -94,21 +192,21 @@ describe("Rejoindre une salle", () => {
   });
 
   it("accepte l'identifiant en minuscules — il se dicte, il ne se copie pas", async () => {
-    const hote = await creerPartie("titan2026");
-    const r = await poster("/api/rejoindre", { id: hote.id.toLowerCase(), motDePasse: "titan2026" });
+    const hote = await creerPartie();
+    const r = await poster("/api/rejoindre", { id: hote.id.toLowerCase(), motDePasse: hote.motDePasse });
     expect(r.status).toBe(200);
   });
 
   it("refuse un mot de passe faux", async () => {
-    const hote = await creerPartie("titan2026");
-    const r = await poster("/api/rejoindre", { id: hote.id, motDePasse: "titan2027" });
+    const hote = await creerPartie();
+    const r = await poster("/api/rejoindre", { id: hote.id, motDePasse: "AAAA-AAAA" });
     expect(r.status).toBe(403);
   });
 
   it("dit EXACTEMENT la même chose pour une salle inconnue et un mot de passe faux", async () => {
     /* Les distinguer offrirait un oracle : on énumérerait les identifiants
        valides sans jamais connaître un seul mot de passe. */
-    const hote = await creerPartie("titan2026");
+    const hote = await creerPartie();
     const mauvaisMdp = await poster("/api/rejoindre", { id: hote.id, motDePasse: "faux" });
     const salleInconnue = await poster("/api/rejoindre", { id: "ZZZZZZ", motDePasse: "faux" });
     expect(mauvaisMdp.status).toBe(salleInconnue.status);
@@ -116,8 +214,8 @@ describe("Rejoindre une salle", () => {
   });
 
   it("ne révèle jamais le jeton complet d'un autre participant", async () => {
-    const hote = await creerPartie("titan2026");
-    const r = await poster("/api/rejoindre", { id: hote.id, motDePasse: "titan2026", pseudo: "Eddy" });
+    const hote = await creerPartie();
+    const r = await poster("/api/rejoindre", { id: hote.id, motDePasse: hote.motDePasse, pseudo: "Eddy" });
     const res = await r.json();
     // Le jeton vaut mot de passe : le sien seulement, jamais celui d'autrui.
     res.joueurs.forEach((j) => expect(j.ref.length).toBeLessThanOrEqual(12));
@@ -126,10 +224,10 @@ describe("Rejoindre une salle", () => {
   });
 
   it("neutralise un pseudo hostile", async () => {
-    const hote = await creerPartie("titan2026");
+    const hote = await creerPartie();
     const r = await poster("/api/rejoindre", {
       id: hote.id,
-      motDePasse: "titan2026",
+      motDePasse: hote.motDePasse,
       pseudo: '<img src=x onerror="alert(1)">',
     });
     const res = await r.json();
@@ -141,20 +239,20 @@ describe("Rejoindre une salle", () => {
 
 describe("La force brute s'épuise", () => {
   it("met l'adresse à l'écart après dix échecs", async () => {
-    const hote = await creerPartie("titan2026");
+    const hote = await creerPartie();
     for (let i = 0; i < 10; i++) {
       await poster("/api/rejoindre", { id: hote.id, motDePasse: `essai${i}` });
     }
     // Le onzième essai ne teste même plus le mot de passe : la porte est close.
-    const apres = await poster("/api/rejoindre", { id: hote.id, motDePasse: "titan2026" });
+    const apres = await poster("/api/rejoindre", { id: hote.id, motDePasse: hote.motDePasse });
     expect(apres.status).toBe(429);
   });
 });
 
 describe("Qui a le droit d'envoyer quoi", () => {
   async function tablePrete() {
-    const hote = await creerPartie("titan2026", "Nikola");
-    const r = await poster("/api/rejoindre", { id: hote.id, motDePasse: "titan2026", pseudo: "Eddy" });
+    const hote = await creerPartie(undefined, "Nikola");
+    const r = await poster("/api/rejoindre", { id: hote.id, motDePasse: hote.motDePasse, pseudo: "Eddy" });
     const invite = await r.json();
     return { hote, invite };
   }
@@ -257,7 +355,7 @@ describe("Qui a le droit d'envoyer quoi", () => {
 
 describe("Le flux ne renvoie l'état que s'il a bougé", () => {
   it("descend l'état neuf, puis se tait tant que rien ne change", async () => {
-    const hote = await creerPartie("titan2026");
+    const hote = await creerPartie();
     await poster("/api/envoyer", {
       id: hote.id, jeton: hote.jeton, message: { t: "etat", instantane: { manche: 1 } },
     });
@@ -282,18 +380,109 @@ describe("Le flux ne renvoie l'état que s'il a bougé", () => {
   });
 });
 
+describe("Ce que la revue de sécurité du 2026-08-30 a fermé", () => {
+  it("le hachage NE BLOQUE PLUS le serveur — une partie avance pendant les essais", async () => {
+    /* La faille : `scryptSync` est lent EXPRÈS (~50 ms) et synchrone. Il bloquait
+       l'unique fil de Node, donc TOUTES les autres requêtes. N'importe quel
+       invité — il connaît l'identifiant de sa propre salle — gelait la table
+       pour tout le monde en envoyant des mots de passe faux en boucle.
+
+       Le test mesure ce qui compte pour un joueur : pendant qu'une rafale de
+       mauvais mots de passe est en vol, un coup ordinaire passe-t-il vite ? */
+    const hote = await creerPartie();
+    const rafale = [];
+    for (let i = 0; i < 24; i++) {
+      rafale.push(poster("/api/rejoindre", { id: hote.id, motDePasse: `AAAA-${i}` }));
+    }
+
+    const depart = Date.now();
+    const coup = await poster("/api/envoyer", {
+      id: hote.id, jeton: hote.jeton, message: { t: "etat", instantane: { m: 1 } },
+    });
+    const duree = Date.now() - depart;
+    await Promise.all(rafale);
+
+    expect(coup.status).toBe(200);
+    /* Avec `scryptSync`, ce coup attendait derrière 24 hachages, soit largement
+       plus d'une seconde. Le seuil est volontairement lâche : on vérifie que le
+       serveur RÉPOND PENDANT, pas une performance au millième. */
+    expect(duree).toBeLessThan(1000);
+  });
+
+  it("un en-tête d'adresse falsifié ne remet PAS le compteur à zéro", async () => {
+    /* La faille : le relais lisait `x-forwarded-for` tel quel comme identité.
+       En le changeant à chaque requête, chaque tentative retombait sur un
+       compteur neuf — jamais banni, jamais limité — et la Map des compteurs
+       enflait d'une entrée par requête. Il ne lit plus que `cf-connecting-ip`,
+       que l'infrastructure Cloudflare écrase, et la socket. */
+    const hote = await creerPartie();
+    for (let i = 0; i < 11; i++) {
+      await fetch(`${base}/api/rejoindre`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Forwarded-For": `10.0.0.${i}` },
+        body: JSON.stringify({ id: hote.id, motDePasse: `AAAA-${i}` }),
+      });
+    }
+    const apres = await poster("/api/rejoindre", { id: hote.id, motDePasse: hote.motDePasse });
+    expect(apres.status).toBe(429);
+  });
+
+  it("une seule attente de flux vit par jeton", async () => {
+    /* La faille : rien ne bornait le nombre de `/api/flux` concurrents pour un
+       même jeton — autant de fermetures retenues et de minuteurs de 25 s. La
+       nouvelle attente solde la précédente, donc l'ancienne se referme d'elle
+       même au lieu de s'accumuler. */
+    const hote = await creerPartie();
+    const url = `${base}/api/flux?id=${hote.id}&jeton=${hote.jeton}&versionEtat=99`;
+    const premiere = fetch(url).then((r) => r.json());
+    await new Promise((ok) => { setTimeout(ok, 150); });
+    const seconde = fetch(url).then((r) => r.json());
+    await new Promise((ok) => { setTimeout(ok, 150); });
+
+    // La première se referme sans attendre ses 25 s : c'est la seconde qui tient
+    // désormais la place.
+    await expect(premiere).resolves.toBeTruthy();
+    const salle = salles.get(hote.id);
+    expect(salle.attentesParJeton.size).toBeLessThanOrEqual(1);
+
+    // On libère la seconde pour ne pas laisser traîner de requête ouverte.
+    await poster("/api/envoyer", {
+      id: hote.id, jeton: hote.jeton, message: { t: "etat", instantane: { m: 1 } },
+    });
+    await seconde;
+  });
+
+  it("un corps démesuré est refusé sur les routes d'entrée", async () => {
+    // « Créer » et « rejoindre » ne portent qu'un pseudo et un mot de passe :
+    // leur laisser 2 Mo, c'était offrir la lecture et l'analyse de 2 Mo à qui
+    // n'a même pas la clé.
+    const enorme = "x".repeat(64 * 1024);
+    /* La coupure se fait AU FIL DE L'EAU : le relais détruit la socket dès le
+       dépassement, sans attendre la fin de l'envoi. Le client voit donc soit un
+       400, soit une connexion coupée — les deux sont le bon comportement, et
+       c'est justement de ne PAS avoir lu le reste qui compte. */
+    let statut = "coupe";
+    try { statut = (await poster("/api/creer", { pseudo: enorme })).status; } catch { /* socket coupée */ }
+    expect(statut === "coupe" || statut === 400).toBe(true);
+    expect(salles.size).toBe(0);
+
+    // Et le relais est toujours debout juste après.
+    expect((await creerPartie()).statut).toBe(200);
+  });
+});
+
 describe("Quitter la table", () => {
   it("l'hôte qui part ferme la salle — sans lui il n'y a plus de moteur", async () => {
-    const hote = await creerPartie("titan2026");
-    await poster("/api/rejoindre", { id: hote.id, motDePasse: "titan2026", pseudo: "Eddy" });
+    const hote = await creerPartie();
+    await poster("/api/rejoindre", { id: hote.id, motDePasse: hote.motDePasse, pseudo: "Eddy" });
     await poster("/api/quitter", { id: hote.id, jeton: hote.jeton });
     expect(salles.has(hote.id)).toBe(false);
   });
 
   it("un invité qui part libère son siège, la partie continue", async () => {
-    const hote = await creerPartie("titan2026");
+    const hote = await creerPartie();
     const invite = await (await poster("/api/rejoindre", {
-      id: hote.id, motDePasse: "titan2026", pseudo: "Eddy",
+      id: hote.id, motDePasse: hote.motDePasse, pseudo: "Eddy",
     })).json();
     await poster("/api/envoyer", {
       id: hote.id, jeton: hote.jeton, message: { t: "sieges", sieges: { 2: invite.ref } },

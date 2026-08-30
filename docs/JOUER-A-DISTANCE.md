@@ -25,13 +25,30 @@ qu'est la sécurité : la chose joignable ne décide de rien.
 
 Ses garde-fous, tous dans le même fichier, en haut :
 
-- mot de passe haché (`scrypt`), jamais gardé ni journalisé en clair ;
+- **la clé du relais** : sans elle, personne ne peut ouvrir de table chez toi,
+  même en connaissant l'adresse du tunnel ;
+- **le mot de passe de table est tiré au sort**, pas choisi — 8 caractères sur
+  un alphabet de 32, soit environ mille milliards de combinaisons ;
+- mots de passe hachés (`scrypt`), comparés en temps constant, jamais gardés ni
+  journalisés en clair ;
 - même réponse pour « salle inconnue » et « mot de passe faux » — sinon on
   énumère les salles ;
 - 10 échecs par adresse IP → un quart d'heure de mise à l'écart ;
 - 60 requêtes par 10 s et par adresse ;
 - 2 Mo par message, 50 salles, 8 participants ;
 - rien sur disque : couper le relais efface tout.
+
+### Les deux secrets, à ne pas confondre
+
+| | Qui la connaît | À quoi elle sert |
+|---|---|---|
+| **Clé du relais** | toi seul | ouvrir une table. Posée par `JOUER-A-DISTANCE.bat`, saisie dans le jeu. |
+| **Mot de passe de table** | toi et tes joueurs | rejoindre cette table-là. Tiré au sort, affiché une fois. |
+
+La clé **ne doit jamais entrer dans le dépôt** : il est public, le jeu est servi
+depuis GitHub Pages. Elle vit dans `JOUER-A-DISTANCE.bat`, que `.gitignore`
+exclut. Pour la changer, modifie la ligne `set "CLE_RELAIS=…"` du `.bat`, et
+saisis la même valeur dans le jeu.
 
 ---
 
@@ -67,21 +84,26 @@ la contrepartie du gratuit et du sans-compte.
 Dans le jeu → **Jouer à distance** → **Ouvrir une table**.
 
 - **Adresse du relais** : l'adresse `https://…` du tunnel ;
-- **Mot de passe** : ce que tu veux, 4 caractères minimum.
+- **Clé du relais** : la phrase posée dans le `.bat`.
 
-Le jeu affiche un **identifiant de 6 caractères** (`AB3K7P`). Il se dicte au
-téléphone : ni `I`, ni `O`, ni `0`, ni `1` dans l'alphabet employé.
+Le salon affiche alors trois choses : un **identifiant de 6 caractères**
+(`AB3K7P`), un **mot de passe tiré au sort** (`SV4K-QLRT`) et l'adresse. Les
+deux se dictent au téléphone : ni `I`, ni `O`, ni `0`, ni `1` dans l'alphabet
+employé.
 
 ### 3. Donne trois choses à tes joueurs
 
-L'adresse du relais, l'identifiant, le mot de passe. **Le mot de passe n'est
-affiché nulle part dans le jeu** : c'est toi qui l'as choisi, à toi de le dire —
-par un autre canal que celui où tu envoies l'adresse, tant qu'à faire.
+L'adresse du relais, l'identifiant, le mot de passe. **Note le mot de passe tout
+de suite** : il ne s'affiche qu'une fois et le relais ne peut pas le retrouver —
+il n'en garde qu'une empreinte. Fermer la table et en rouvrir une en tire un
+nouveau, ce qui n'est pas grave.
+
+Envoie-le de préférence par un autre canal que l'adresse.
 
 ### 4. Ils rejoignent
 
 Chez eux → **Jouer à distance** → **Rejoindre une table** → les trois lignes.
-Ils apparaissent dans ton salon.
+Ils n'ont **pas** besoin de la clé du relais. Ils apparaissent dans ton salon.
 
 ### 5. Distribue les Titans, et lance
 
@@ -117,6 +139,7 @@ l'identifiant et le mot de passe, tu lui rends son siège.
 |---|---|
 | « Impossible de joindre le relais » | tunnel éteint, ou adresse recopiée de travers |
 | « Identifiant ou mot de passe incorrect » | l'un des deux est faux — le message ne dit pas lequel, c'est voulu |
+| « Clé du relais incorrecte » | la clé saisie ne correspond pas à celle du `.bat` |
 | « Trop de tentatives » | 10 échecs : attends un quart d'heure, ou redémarre le relais |
 | « L'hôte a quitté la partie » | l'onglet de l'hôte est fermé ou son PC en veille |
 | « Connexion interrompue, reprise en cours » | coupure réseau ; ça se rattrape tout seul |
@@ -129,15 +152,19 @@ navigateur : il répond `{"ok":true,"salles":N}`.
 ## Lancer le relais à la main
 
 ```bash
-node server/relais.mjs
+CLE_RELAIS="ta-phrase" node server/relais.mjs
 ```
+
+Sans `CLE_RELAIS`, le relais démarre quand même — pratique en local — mais il le
+dit en gros au démarrage : n'importe qui trouvant l'adresse du tunnel pourra y
+ouvrir des tables.
 
 ```bash
 cloudflared tunnel --url http://localhost:8787
 ```
 
-Réglages par variables d'environnement : `PORT` (8787), `MAX_SALLES` (50),
-`ORIGINES` (`*` par défaut ; une liste séparée par des virgules pour resserrer
-si le jeu est hébergé à une adresse fixe).
+Réglages par variables d'environnement : `CLE_RELAIS` (vide par défaut),
+`PORT` (8787), `MAX_SALLES` (50), `ORIGINES` (`*` par défaut ; une liste séparée
+par des virgules pour resserrer si le jeu est hébergé à une adresse fixe).
 
 Aucune dépendance à installer : le relais n'utilise que Node.

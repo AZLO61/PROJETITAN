@@ -71,7 +71,9 @@ async function appeler(url, options = {}) {
 
 /* ── LA SESSION ──────────────────────────────────────────── */
 
-function construireSession({ base, id, jeton, ref, siege, joueurs, sieges, etat, versionEtat }) {
+function construireSession({
+  base, id, jeton, ref, siege, joueurs, sieges, etat, versionEtat, motDePasse,
+}) {
   const abonnes = {
     etat: new Set(), intention: new Set(), presence: new Set(),
     prive: new Set(), chat: new Set(), fin: new Set(), erreur: new Set(),
@@ -148,6 +150,11 @@ function construireSession({ base, id, jeton, ref, siege, joueurs, sieges, etat,
 
   const session = {
     id, jeton, ref, siege, base,
+    /* Le mot de passe tiré par le relais, à l'ouverture d'une table. Il ne vit
+       QUE dans cet objet, en mémoire, pour que l'hôte puisse le lire à l'écran
+       et le dicter. Il n'est jamais rangé dans `localStorage` : un secret écrit
+       sur le disque survit à la partie, et rien n'a besoin qu'il survive. */
+    motDePasse: motDePasse || null,
     estHote: siege === "hote",
     joueurs: joueurs || [],
     sieges: sieges || {},
@@ -210,11 +217,18 @@ function construireSession({ base, id, jeton, ref, siege, joueurs, sieges, etat,
 
 /* ── OUVRIR OU REJOINDRE ─────────────────────────────────── */
 
-export async function creerSession({ urlRelais, motDePasse, pseudo }) {
+/* Ouvrir une table. `cleRelais` est la phrase qui garde le relais de l'hôte —
+   elle n'est demandée qu'ici, jamais pour rejoindre : les invités n'ont pas à
+   la connaître, et elle ne circule donc qu'entre l'hôte et son propre relais.
+
+   Le mot de passe de la table n'est PAS choisi ici : le relais le tire au sort
+   et le rend une seule fois. La session le porte ensuite pour que l'hôte puisse
+   le lire et le dicter — il n'existe nulle part ailleurs. */
+export async function creerSession({ urlRelais, cleRelais, pseudo }) {
   const base = urlPropre(urlRelais);
   const res = await appeler(`${base}/api/creer`, {
     method: "POST",
-    body: JSON.stringify({ motDePasse, pseudo }),
+    body: JSON.stringify({ cleRelais, pseudo }),
   });
   return construireSession({ base, ...res });
 }

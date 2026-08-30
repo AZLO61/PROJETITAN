@@ -48,7 +48,24 @@
 ============================================================ */
 
 import { createServer } from "node:http";
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scrypt as scryptRappel, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
+
+/* ⚠️ `scrypt` ASYNCHRONE, JAMAIS `scryptSync`.
+   Revue de sécurité du 2026-08-30 : `scryptSync` est délibérément lent (~50 ms)
+   et il est SYNCHRONE — il bloque donc l'unique fil d'exécution de Node pendant
+   tout ce temps. Aucune autre requête n'avance : ni les coups des joueurs en
+   cours de partie, ni ceux des autres salles.
+
+   N'importe quel invité — il connaît forcément l'identifiant de sa propre
+   salle — pouvait geler la table pour tout le monde en envoyant des mots de
+   passe faux en boucle : vingt par seconde suffisaient à occuper le serveur à
+   plein temps. La lenteur voulue du hachage devenait l'arme.
+
+   La variante asynchrone fait le même calcul dans le pool de threads de libuv :
+   la boucle d'événements reste libre, et le pool (quatre threads par défaut)
+   borne de lui-même le nombre de hachages simultanés. */
+const scrypt = promisify(scryptRappel);
 
 /* ── RÉGLAGES ────────────────────────────────────────────── */
 
@@ -61,9 +78,38 @@ const PORT = Number(process.env.PORT || 8787);
    réglage existe pour qui héberge le jeu à une adresse fixe et veut resserrer. */
 const ORIGINES = (process.env.ORIGINES || "*").split(",").map((o) => o.trim());
 
+/* ── LA CLÉ DU RELAIS ─────────────────────────────────────
+   Nikola, 2026-08-30 : « fais ça pour la clé de relais ».
+
+   Elle répond au seul vrai trou du montage précédent : `POST /api/creer`
+   n'était pas authentifiée. Quiconque trouvait l'URL du tunnel pouvait ouvrir
+   des salles chez lui — jusqu'à saturer le plafond et empêcher ses amis d'en
+   créer une. Pas une intrusion, mais une nuisance à portée de main.
+
+   Elle ne garde QUE la création. Rejoindre une table n'en demande pas : les
+   invités n'ont donc rien de plus à connaître, et la clé ne circule qu'entre
+   l'hôte et son propre relais.
+
+   ⚠️ ELLE NE VIT PAS DANS LE DÉPÔT. Le dépôt est public — le jeu est servi
+   depuis GitHub Pages — donc une clé écrite ici serait lisible par tout le
+   monde au premier push, et ne protégerait plus rien. Elle arrive par
+   l'environnement, posée par `JOUER-A-DISTANCE.bat`, que `.gitignore` exclut.
+
+   Non définie, le relais démarre quand même mais le dit franchement : c'est le
+   comportement d'avant, utile aux tests et au jeu en local, dangereux exposé.
+
+   Lue À CHAQUE APPEL plutôt que figée au démarrage : une constante de module
+   obligerait à relancer le relais pour changer de clé, et surtout empêcherait
+   les tests d'exercer les deux cas — avec clé et sans — dans un même
+   processus. Le coût d'une lecture d'environnement est nul à cette cadence. */
+function cleAttendue() {
+  return process.env.CLE_RELAIS || "";
+}
+
 const MAX_SALLES = Number(process.env.MAX_SALLES || 50);
 const MAX_PARTICIPANTS = 8;            // 4 joueurs + spectateurs éventuels
 const MAX_CORPS = 2 * 1024 * 1024;     // 2 Mo : un instantané complet pèse ~60 ko
+const MAX_CORPS_AUTH = 4 * 1024;       // « créer » et « rejoindre » : un pseudo et un mot de passe
 const ATTENTE_FLUX_MS = 25_000;        // durée d'un long-poll avant réponse vide
 const TTL_SALLE_MS = 4 * 60 * 60 * 1000;   // salle oubliée après 4 h sans vie
 const TTL_PARTICIPANT_MS = 90_000;     // participant considéré parti après 90 s
@@ -106,18 +152,65 @@ function jeton() {
   return randomBytes(24).toString("hex");
 }
 
+/* ── LE MOT DE PASSE DE TABLE, TIRÉ AU SORT ───────────────
+   Nikola, 2026-08-30 : « faut que ce soit une clé aléatoire que j'ai après la
+   création de la table ».
+
+   Un mot de passe choisi à la main est le maillon faible de tout ce montage :
+   le plancher à quatre caractères invitait à taper `1234`, et c'est bien la
+   seule chose qui garde une table. Le relais le tire donc lui-même, sur le même
+   alphabet sans ambiguïté que les identifiants — il se dicte au téléphone.
+
+   Huit caractères sur trente-deux, soit environ 2^40 possibilités : avec dix
+   essais par quart d'heure et par adresse, il faudrait des millions d'années à
+   une seule adresse, et un botnet entier n'y ferait pas grand-chose. Le tiret
+   du milieu ne compte pas comme un caractère, il n'est là que pour la lecture.
+
+   Il n'est rendu QU'UNE FOIS, à la création. Ensuite il est haché comme
+   n'importe quel mot de passe, et le relais lui-même ne sait plus le dire. */
+function motDePasseTable() {
+  const octets = randomBytes(8);
+  let sortie = "";
+  for (let i = 0; i < 8; i++) {
+    if (i === 4) sortie += "-";
+    sortie += ALPHABET[octets[i] % ALPHABET.length];
+  }
+  return sortie;
+}
+
 /* Le mot de passe n'est jamais gardé en clair, même en mémoire vive, et jamais
    journalisé. `scrypt` est volontairement lent : il rend inutile le vol d'une
    empreinte, et son coût (~50 ms) est invisible sur une poignée de connexions.
    `timingSafeEqual` évite qu'un attaquant devine le mot de passe caractère par
    caractère en mesurant le temps de réponse. */
 function empreinte(motDePasse, sel) {
-  return scryptSync(String(motDePasse), sel, 32);
+  return scrypt(String(motDePasse), sel, 32);
 }
 
-function motDePasseValide(salle, propose) {
+/* Sel et empreinte de PAILLE, pour les salles qui n'existent pas.
+   Le relais promet de répondre exactement la même chose à « salle inconnue » et
+   à « mot de passe faux » — sinon on énumère les identifiants valides sans
+   jamais deviner un mot de passe. Le corps de la réponse était bien identique,
+   mais pas sa DURÉE : une salle inconnue répondait tout de suite, une salle
+   existante après les 50 ms du hachage. Le chronomètre disait donc ce que le
+   texte taisait.
+
+   On hache donc dans les deux cas, contre cette empreinte-là quand il n'y a
+   rien à comparer. Le calcul est jeté ; seul son temps compte. */
+const SEL_PAILLE = randomBytes(16);
+let empreintePaille = null;
+
+async function motDePasseValide(salle, propose) {
+  const candidat = await empreinte(
+    typeof propose === "string" ? propose : "",
+    salle ? salle.sel : SEL_PAILLE
+  );
+  if (!salle) {
+    if (!empreintePaille) empreintePaille = await empreinte(randomBytes(24).toString("hex"), SEL_PAILLE);
+    timingSafeEqual(candidat, empreintePaille); // comparaison jetée : on égalise le temps
+    return false;
+  }
   if (typeof propose !== "string" || propose.length === 0) return false;
-  const candidat = empreinte(propose, salle.sel);
   return candidat.length === salle.empreinte.length
     && timingSafeEqual(candidat, salle.empreinte);
 }
@@ -126,7 +219,11 @@ function motDePasseValide(salle, propose) {
 
 function compteur(ip) {
   let c = compteursIp.get(ip);
-  if (!c) { c = { echecs: [], banniJusqua: 0, requetes: [] }; compteursIp.set(ip, c); }
+  if (!c) { c = { echecs: [], banniJusqua: 0, requetes: [], vuLe: 0 }; compteursIp.set(ip, c); }
+  // `vuLe` : c'est LUI qui décide de la purge, pas la vacuité des tableaux (cf.
+  // `menage`). Sans lui, une entrée créée par une adresse qui ne revient jamais
+  // restait en mémoire jusqu'à l'arrêt du relais.
+  c.vuLe = Date.now();
   return c;
 }
 
@@ -163,11 +260,32 @@ function nettoyerPseudo(brut) {
   return String(brut ?? "").replace(/[<>&"'\r\n\t]/g, "").trim().slice(0, 18) || "Invité";
 }
 
-function creerSalle({ motDePasse, pseudo, ip }) {
-  if (salles.size >= MAX_SALLES) return { erreur: "Le relais est plein, réessaie plus tard." };
-  if (typeof motDePasse !== "string" || motDePasse.length < 4) {
-    return { erreur: "Le mot de passe doit faire au moins 4 caractères." };
+async function creerSalle({ cleRelais, pseudo, ip }) {
+  /* ── LA CLÉ D'ABORD, LE RESTE ENSUITE ──
+     Vérifiée AVANT le plafond de salles et avant toute allocation : une requête
+     sans clé ne doit rien coûter au relais, sinon la garde elle-même devient le
+     levier du déni de service qu'elle est censée fermer.
+
+     L'échec compte au compteur anti-force-brute, au même titre qu'un mot de
+     passe de table raté — c'est le même verrou, sur la même porte. */
+  const attendue = cleAttendue();
+  if (attendue) {
+    const proposee = typeof cleRelais === "string" ? cleRelais : "";
+    const a = Buffer.from(proposee, "utf8");
+    const b = Buffer.from(attendue, "utf8");
+    // `timingSafeEqual` exige deux tampons de même longueur : la comparaison de
+    // taille se fait donc à part, et ne révèle que la longueur — pas le contenu.
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      noterEchec(ip);
+      return { erreur: "Clé du relais incorrecte." };
+    }
   }
+  if (salles.size >= MAX_SALLES) return { erreur: "Le relais est plein, réessaie plus tard." };
+
+  /* Le mot de passe n'est plus reçu, il est TIRÉ : cf. `motDePasseTable`. Le
+     laisser au choix de l'hôte, c'était laisser la seule serrure de la table à
+     la main la plus pressée. */
+  const motDePasse = motDePasseTable();
   let id = idSalle();
   // Collision quasi impossible (32^6), mais une boucle coûte trois lignes.
   let essais = 0;
@@ -179,7 +297,7 @@ function creerSalle({ motDePasse, pseudo, ip }) {
   const salle = {
     id,
     sel,
-    empreinte: empreinte(motDePasse, sel),
+    empreinte: await empreinte(motDePasse, sel),
     creeeLe: Date.now(),
     vueLe: Date.now(),
     hote: jetonHote,
@@ -195,18 +313,27 @@ function creerSalle({ motDePasse, pseudo, ip }) {
     files: new Map([[jetonHote, []]]),
     sieges: {},          // { titanId: jetonInvite } — attribué par l'hôte
     attentes: new Set(),  // long-polls en cours, réveillés à chaque nouveauté
+    // Une attente par jeton, pour pouvoir solder la précédente (cf. /api/flux).
+    attentesParJeton: new Map(),
   };
   salles.set(id, salle);
-  return { salle, jeton: jetonHote };
+  /* `motDePasse` remonte ICI et nulle part ailleurs : c'est la seule fois de sa
+     vie où il existe en clair hors de la tête de l'hôte. La salle, elle, n'en
+     garde que l'empreinte — même le relais ne saura plus le dire une seconde
+     plus tard. */
+  return { salle, jeton: jetonHote, motDePasse };
 }
 
-function rejoindreSalle({ id, motDePasse, pseudo, ip }) {
+async function rejoindreSalle({ id, motDePasse, pseudo, ip }) {
   const salle = salles.get(String(id || "").toUpperCase().trim());
   /* MÊME RÉPONSE POUR « SALLE INCONNUE » ET « MOT DE PASSE FAUX ».
      Les distinguer offrirait un oracle : on énumérerait les identifiants
      valides sans jamais connaître un mot de passe. Les deux cas comptent aussi
      pour un échec au compteur anti-force-brute, pour la même raison. */
-  if (!salle || !motDePasseValide(salle, motDePasse)) {
+  /* Le hachage a lieu MÊME quand la salle n'existe pas (cf. `motDePasseValide`)
+     — c'est ce qui rend les deux refus indiscernables au chronomètre, pas
+     seulement à la lecture. */
+  if (!(await motDePasseValide(salle, motDePasse))) {
     noterEchec(ip);
     return { erreur: "Identifiant ou mot de passe incorrect." };
   }
@@ -315,10 +442,18 @@ function menage() {
       salles.delete(id);
     }
   });
+  /* ── PURGE SUR LE TEMPS, PAS SUR LA VACUITÉ ──
+     L'ancienne condition exigeait des tableaux vides — mais ils ne se vident
+     que lorsque cette même adresse REFAIT une requête, jamais en tâche de fond.
+     Une adresse vue une fois puis disparue gardait donc son entrée pour
+     toujours, et il suffisait de faire varier l'identité pour faire enfler la
+     Map sans limite (relevé à la revue du 2026-08-30).
+
+     On purge maintenant sur l'inactivité, et un bannissement en cours protège
+     l'entrée : l'oublier reviendrait à lever la sanction. */
   compteursIp.forEach((c, ip) => {
-    if (c.banniJusqua < maintenant && c.echecs.length === 0 && c.requetes.length === 0) {
-      compteursIp.delete(ip);
-    }
+    if (c.banniJusqua > maintenant) return;
+    if (maintenant - (c.vuLe || 0) > BANNISSEMENT_MS) compteursIp.delete(ip);
   });
 }
 
@@ -346,7 +481,13 @@ function repondre(reponse, code, corps, origine) {
   reponse.end(JSON.stringify(corps));
 }
 
-function lireCorps(requete) {
+/* Le plafond est PAR ROUTE. Seul `/api/envoyer` transporte un instantané de
+   plateau (~60 ko) et mérite les deux mégaoctets ; « créer » et « rejoindre » ne
+   portent qu'un identifiant, un pseudo et un mot de passe. Leur laisser le même
+   plafond, c'était accepter de lire et parser deux mégaoctets AVANT même de
+   vérifier la clé de relais — un coût offert à qui n'a rien à faire là (relevé
+   à la revue du 2026-08-30). */
+function lireCorps(requete, plafond = MAX_CORPS) {
   return new Promise((resoudre, rejeter) => {
     let taille = 0;
     const morceaux = [];
@@ -354,7 +495,7 @@ function lireCorps(requete) {
       taille += m.length;
       /* La coupure se fait AU FIL DE L'EAU, pas après réception : accepter deux
          gigaoctets pour les refuser ensuite, c'est avoir déjà perdu. */
-      if (taille > MAX_CORPS) { rejeter(new Error("corps trop grand")); requete.destroy(); return; }
+      if (taille > plafond) { rejeter(new Error("corps trop grand")); requete.destroy(); return; }
       morceaux.push(m);
     });
     requete.on("end", () => {
@@ -367,13 +508,27 @@ function lireCorps(requete) {
   });
 }
 
+/* ── L'IDENTITÉ D'UN APPELANT ─────────────────────────────
+   ⚠️ ON NE FAIT PAS CONFIANCE À `x-forwarded-for`. C'était le cas jusqu'à la
+   revue de sécurité du 2026-08-30, avec un commentaire qui se rassurait à tort :
+   « un client qui ment ne gagne qu'un compteur à lui ». Faux dès qu'il en change
+   à CHAQUE requête — chaque tentative retombe alors sur un compteur neuf, jamais
+   banni, jamais limité. Les deux garde-fous les plus importants du relais —
+   anti-force-brute et anti-inondation — devenaient décoratifs, et la Map des
+   compteurs enflait d'une entrée par requête.
+
+   `cf-connecting-ip` est posé par l'infrastructure Cloudflare elle-même, qui
+   ÉCRASE toute valeur venue du client : il n'est donc pas falsifiable derrière
+   le tunnel, qui est exactement le montage documenté ici. Hors tunnel, on
+   retombe sur l'adresse de la socket, que personne ne choisit non plus.
+
+   `x-forwarded-for` n'est plus lu du tout : derrière Cloudflare il n'apporte
+   rien de plus, et ailleurs il n'apporte que du mensonge. */
 function adresse(requete) {
-  /* Derrière un tunnel Cloudflare, l'IP réelle arrive dans un en-tête. On lit
-     le PREMIER maillon de `x-forwarded-for`, en repli sur la socket. Un client
-     peut mentir sur cet en-tête, mais il ne gagne alors qu'un compteur
-     anti-force-brute à lui : le mot de passe reste à trouver. */
-  const transmise = requete.headers["x-forwarded-for"];
-  if (typeof transmise === "string" && transmise.length > 0) return transmise.split(",")[0].trim();
+  const cloudflare = requete.headers["cf-connecting-ip"];
+  if (typeof cloudflare === "string" && cloudflare.length > 0 && cloudflare.length < 64) {
+    return cloudflare.trim();
+  }
   return requete.socket.remoteAddress || "inconnue";
 }
 
@@ -413,19 +568,22 @@ const serveur = createServer(async (requete, reponse) => {
 
   try {
     if (requete.method === "POST" && url.pathname === "/api/creer") {
-      const corps = await lireCorps(requete);
-      const res = creerSalle({ motDePasse: corps.motDePasse, pseudo: corps.pseudo, ip });
-      if (res.erreur) { repondre(reponse, 400, { erreur: res.erreur }, origine); return; }
+      const corps = await lireCorps(requete, MAX_CORPS_AUTH);
+      const res = await creerSalle({ cleRelais: corps.cleRelais, pseudo: corps.pseudo, ip });
+      // 403 et non 400 : une clé refusée est un refus d'accès, pas une requête
+      // mal formée, et le client doit pouvoir distinguer les deux.
+      if (res.erreur) { repondre(reponse, res.erreur.startsWith("Clé") ? 403 : 400, { erreur: res.erreur }, origine); return; }
       repondre(reponse, 200, {
         id: res.salle.id, jeton: res.jeton, ref: refDe(res.salle, res.jeton), siege: "hote",
+        motDePasse: res.motDePasse,   // rendu une seule fois, à l'hôte seul
         joueurs: presence(res.salle), sieges: res.salle.sieges,
       }, origine);
       return;
     }
 
     if (requete.method === "POST" && url.pathname === "/api/rejoindre") {
-      const corps = await lireCorps(requete);
-      const res = rejoindreSalle({ id: corps.id, motDePasse: corps.motDePasse, pseudo: corps.pseudo, ip });
+      const corps = await lireCorps(requete, MAX_CORPS_AUTH);
+      const res = await rejoindreSalle({ id: corps.id, motDePasse: corps.motDePasse, pseudo: corps.pseudo, ip });
       if (res.erreur) { repondre(reponse, 403, { erreur: res.erreur }, origine); return; }
       deposer(res.salle, [...res.salle.participants.keys()],
         { t: "presence", joueurs: presence(res.salle), sieges: res.salle.sieges });
@@ -585,27 +743,41 @@ const serveur = createServer(async (requete, reponse) => {
          client rappelle aussitôt, la boucle se referme, et une table qui
          réfléchit ne génère aucun trafic. Le minuteur borne l'attente pour ne
          pas se faire couper par un proxy intermédiaire. */
+      /* ── UNE SEULE ATTENTE PAR JETON ──
+         Rien n'empêchait un même participant d'ouvrir cinquante `/api/flux` en
+         parallèle : autant de fermetures retenues et de minuteurs de 25 s, pour
+         un client qui n'en relève qu'un (relevé à la revue du 2026-08-30). On
+         solde donc l'attente précédente du même jeton avant d'en poser une
+         nouvelle — le nombre d'attentes vivantes est ainsi borné par
+         construction au nombre de participants, et non par la politesse du
+         client. Le client honnête n'y perd rien : il n'en ouvre qu'une. */
+      const precedente = salle.attentesParJeton?.get(j);
+      if (precedente) precedente();
+
       let fini = false;
       const terminer = () => {
         if (fini) return;
         fini = true;
         salle.attentes.delete(terminer);
+        if (salle.attentesParJeton?.get(j) === terminer) salle.attentesParJeton.delete(j);
         clearTimeout(minuteur);
         repondre(reponse, 200, relever(), origine);
       };
       const minuteur = setTimeout(terminer, ATTENTE_FLUX_MS);
       salle.attentes.add(terminer);
+      salle.attentesParJeton?.set(j, terminer);
       requete.on("close", () => {
         if (fini) return;
         fini = true;
         salle.attentes.delete(terminer);
+        if (salle.attentesParJeton?.get(j) === terminer) salle.attentesParJeton.delete(j);
         clearTimeout(minuteur);
       });
       return;
     }
 
     if (requete.method === "POST" && url.pathname === "/api/quitter") {
-      const corps = await lireCorps(requete);
+      const corps = await lireCorps(requete, MAX_CORPS_AUTH);
       const salle = salles.get(String(corps.id || "").toUpperCase());
       if (salle && participant(salle, corps.jeton)) {
         if (corps.jeton === salle.hote) {
@@ -643,6 +815,18 @@ const lanceDirectement = process.argv[1] && import.meta.url.endsWith(
 if (lanceDirectement) {
   serveur.listen(PORT, () => {
     console.log(`Relais Projet Titan à l'écoute sur http://localhost:${PORT}`);
+    if (cleAttendue()) {
+      // Jamais la clé elle-même dans le journal : une fenêtre de console reste
+      // ouverte, se photographie et se partage en capture d'écran.
+      console.log("Clé du relais : définie — seul qui la connaît peut ouvrir une table.");
+    } else {
+      console.log("");
+      console.log("  ⚠️  AUCUNE CLÉ DE RELAIS N'EST DÉFINIE.");
+      console.log("      N'importe qui trouvant l'adresse du tunnel pourra ouvrir");
+      console.log("      des tables ici. Passe par JOUER-A-DISTANCE.bat, qui la pose,");
+      console.log("      ou definis CLE_RELAIS avant de lancer ce programme.");
+      console.log("");
+    }
     console.log("Pour le rendre joignable sans ouvrir de port sur la box :");
     console.log(`  cloudflared tunnel --url http://localhost:${PORT}`);
   });

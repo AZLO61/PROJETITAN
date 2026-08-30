@@ -1,5 +1,83 @@
 # Changelog
 
+## Non publié — vingt-quatrième passe du 2026-08-30 (une clé, un mot de passe tiré, et une revue qui a trouvé du sérieux)
+
+Suite directe de la passe précédente. Nikola : « fais ça pour la clé de relais »,
+« faut que ce soit une clé aléatoire que j'ai après la création de la table »,
+« utilise un agent de test de faille de sécurité si tu en as un ».
+
+### Deux secrets, deux rôles
+
+La **clé du relais** ferme le seul vrai trou du montage : `POST /api/creer`
+n'était pas authentifiée, donc qui trouvait l'adresse du tunnel pouvait ouvrir
+des salles jusqu'à saturer le plafond. Elle ne garde QUE la création — les
+invités n'en ont jamais besoin, et elle ne circule qu'entre l'hôte et sa propre
+machine.
+
+Elle ne vit pas dans le dépôt, et c'est structurel : le dépôt est public, le jeu
+est servi depuis GitHub Pages. Une clé écrite dans le code serait lisible au
+premier push. Elle arrive par l'environnement, posée par `JOUER-A-DISTANCE.bat`,
+que `.gitignore` exclut déjà.
+
+Le **mot de passe de table**, lui, n'est plus choisi : il est tiré. Le plancher
+à quatre caractères invitait à taper `1234`, sur la seule serrure de la table.
+Huit caractères sur un alphabet de trente-deux, affichés une fois, puis hachés
+et oubliés — le relais lui-même ne sait plus les dire.
+
+### Ce que la revue de sécurité a trouvé, et qui n'était pas théorique
+
+Trois failles critiques, toutes exploitables par un invité légitime — donc par
+quelqu'un déjà invité à la table.
+
+**Le hachage gelait le serveur.** `scryptSync` est lent exprès (~50 ms) et
+synchrone : il bloquait l'unique fil de Node. N'importe quel invité — il connaît
+forcément l'identifiant de sa propre salle — gelait la partie pour tout le monde
+en envoyant des mots de passe faux en boucle. Vingt par seconde suffisaient. La
+lenteur voulue du hachage était devenue l'arme. Passage à la variante
+asynchrone : mesuré en conditions réelles, le relais répond maintenant en 253 ms
+pendant une rafale de vingt-quatre tentatives.
+
+**L'adresse de l'appelant était falsifiable.** Le relais lisait
+`x-forwarded-for` tel quel, avec un commentaire qui se rassurait à tort — « un
+client qui ment ne gagne qu'un compteur à lui ». Faux dès qu'il en change à
+chaque requête : chaque tentative retombait sur un compteur neuf, jamais banni,
+jamais limité. Les deux garde-fous les plus importants étaient décoratifs, et la
+table des compteurs enflait d'une entrée par requête. Le relais ne lit plus que
+`cf-connecting-ip`, que l'infrastructure Cloudflare écrase, et la socket.
+
+**Une clé piégée faisait tomber la table.** `JSON.parse('{"__proto__": 1}')`
+crée une propriété PROPRE nommée `__proto__` ; l'indexation de la table de
+réglages rendait `Object.prototype` — un objet, donc « vrai » — qu'on appelait
+comme une fonction. L'exception partait d'un `useEffect`, hors de tout filet :
+React démonte l'arbre et la partie s'arrête pour tout le monde. Un invité assis,
+une requête. Les lectures indexées par une valeur venue du réseau passent
+maintenant par `hasOwnProperty`, et l'étape est sous filet.
+
+### Trois autres points, moins graves mais réels
+
+Le **chronomètre trahissait** ce que le texte taisait : « salle inconnue »
+répondait tout de suite, « mot de passe faux » après le hachage — on énumérait
+donc les identifiants actifs sans deviner un seul mot de passe. On hache
+désormais dans les deux cas, contre une empreinte de paille quand il n'y a rien
+à comparer.
+
+Le **ménage des compteurs** exigeait des tableaux vides, qui ne se vident qu'à la
+requête suivante de la même adresse : une entrée créée par une adresse qui ne
+revient plus n'était jamais purgée. La purge se fait maintenant sur
+l'inactivité.
+
+Les **attentes de flux** n'étaient pas bornées par participant : chaque
+`/api/flux` ajoutait une fermeture et un minuteur de 25 s. Une nouvelle attente
+solde désormais la précédente du même jeton — le nombre d'attentes vivantes est
+borné par construction, pas par la politesse du client. Et « créer » et
+« rejoindre » ont leur propre plafond de corps (4 ko) : leur en laisser deux
+mégaoctets, c'était offrir la lecture de deux mégaoctets à qui n'a pas la clé.
+
+La revue a par ailleurs confirmé ce qui tenait déjà : comparaisons en temps
+constant, aucun `dangerouslySetInnerHTML`, aucun secret en `localStorage`,
+direction des messages correctement appliquée, jetons de 192 bits jamais
+transmis à un autre participant, tirage aléatoire sans biais de modulo.
+
 ## Non publié — vingt-troisième passe du 2026-08-30 (jouer à quatre sans être dans la même pièce)
 
 « J'aimerais pouvoir jouer avec des joueurs à distance en donnant un ID de
