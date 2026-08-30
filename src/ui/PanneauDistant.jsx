@@ -134,13 +134,27 @@ export default function PanneauDistant({
             <div style={label(T.faint, T.micro)}>Identifiant</div>
             <div style={readout("1.5rem", T.you)}>{session.id}</div>
           </div>
-          {/* LE MOT DE PASSE EST TIRÉ AU SORT, PAS CHOISI (Nikola, 2026-08-30).
-              Il ne s'affiche qu'ici, et une seule fois : le relais ne le garde
-              que sous forme d'empreinte, personne ne peut le redemander. Fermer
-              la table et en rouvrir une en tire un autre. */}
-          <div>
-            <div style={label(T.faint, T.micro)}>Mot de passe</div>
-            <div style={readout("1.5rem", T.go)}>{session.motDePasse || "—"}</div>
+          {/* ── LE MOT DE PASSE SE VOIT DE LOIN ──────────────────
+              Nikola, 2026-08-30 : « donne une couleur spéciale à la clé, je ne
+              la discerne pas du tout ».
+
+              Il était en vert, à côté de l'identifiant en jaune, dans la même
+              graisse et la même taille : deux suites de caractères jumelles que
+              rien ne hiérarchisait. Or les deux ne se valent pas — l'identifiant
+              se redemande à tout moment, le mot de passe ne s'affiche QU'ICI et
+              une seule fois. Rater celui-là oblige à refermer la table.
+
+              Il porte donc un cadre, un fond et son propre bandeau. Ce n'est pas
+              la couleur qui le distingue mais la BOÎTE : deux jaunes côte à côte
+              se confondraient exactement comme les deux verts d'avant. */}
+          <div style={{
+            border: `2px solid ${T.you}`,
+            background: "rgba(255,217,61,.14)",
+            borderRadius: T.rChip,
+            padding: "4px 10px 6px",
+          }}>
+            <div style={label(T.you, T.micro)}>Mot de passe ⚠ à noter</div>
+            <div style={readout("1.5rem", T.you)}>{session.motDePasse || "—"}</div>
           </div>
           <div>
             <div style={label(T.faint, T.micro)}>Adresse du relais</div>
