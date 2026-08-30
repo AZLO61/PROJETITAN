@@ -1,5 +1,184 @@
 # Changelog
 
+## Non publié — vingt-cinquième passe du 2026-08-30 (la table à distance, jouable)
+
+Retour de partie réelle. Nikola a joué en invité, et en est revenu avec dix
+symptômes : « en résumé, en tant qu'invité, il y a beaucoup de bugs d'interface
+non fonctionnelle ou altérée ».
+
+### Trois causes, dix symptômes
+
+**L'interface de l'invité était remise à plat à chaque instantané reçu.**
+`restaurerInstantane` referme les modes de carte, efface le chemin tracé et
+remet les mises d'Adrénaline à zéro — exactement ce qu'il faut après un
+« Annuler ». Mais un invité l'appelle après le moindre geste de n'importe qui à
+la table. Il ouvrait « Me déplacer », quelqu'un jouait à l'autre bout du
+plateau, son mode se refermait sous ses doigts, et le clic suivant tombait dans
+le vide sans que rien ne l'explique. Quatre symptômes sur dix venaient de là :
+le déplacement passif, la charge, le téléporteur, « Titan suivant ».
+
+L'état de PARTIE vient de l'hôte ; les BROUILLONS d'interface appartiennent à
+celui qui les compose. `restaurerInstantane` prend donc un argument qui sépare
+les deux, et la synchronisation réseau ne remet l'interface à plat que lorsque
+le tour, la Phase ou la Manche ont réellement changé.
+
+**La sélection de cartes voyageait carte par carte.** `toggleProgCard` était
+dans la liste blanche des actions distantes : cocher une carte partait chez
+l'hôte. D'où les deux moitiés du bug — chez l'invité `progSelection` ne changeait
+jamais (« je ne vois aucun encart de sélection »), et chez l'hôte chaque message
+réinstallait l'état d'AVANT le clic, écrasant la sélection précédente (« quand je
+clique sur une carte, ça perd la sélection de la carte d'avant »). L'encart
+apparaissait chez l'hôte, qui n'a rien à voir avec cette main : la programmation
+secrète tombait par la même occasion.
+
+Cocher une carte n'est pas un coup — rien n'a bougé tant que les trois ne sont
+pas confirmées. La sélection reste donc chez celui qui la compose, et ne
+traverse le réseau qu'une fois, jointe au `confirmProgrammation` qui l'engage.
+Au passage, cette action-là ne posait pas `phaseValidated` : la Phase attendait
+un invité qui, lui, croyait avoir fini.
+
+**« Annuler » était retiré à l'invité**, au motif qu'il n'a pas de pile à
+dépiler. C'est vrai, et ce n'était pas une raison : la pile de l'hôte contient
+exactement les coups que l'invité vient de faire jouer. Il demande donc à l'hôte
+de dépiler la sienne — portée « actif », donc bornée à son propre tour.
+
+### Ce qui a changé d'autre à distance
+
+- **La clé du relais est tirée au sort** à chaque lancement de
+  `JOUER-A-DISTANCE.bat` — 10 caractères sur l'alphabet sans ambiguïté — et
+  s'affiche aussi gros que l'adresse, dans le même encadré jaune. Une phrase
+  écrite en dur survivait à la partie et se tapait de mémoire, donc elle était
+  courte, donc devinable.
+- **Un invité choisit son Titan lui-même** dans le salon. La demande passe par
+  l'hôte, qui reste l'arbitre : un Titan déjà pris ou confié à l'IA se refuse.
+- **Les réglages de partie sont en lecture seule chez l'invité**, et se mettent à
+  jour dès que l'hôte les change. Ils n'étaient pas seulement inutiles, ils
+  étaient trompeurs : l'invité choisissait « 3 Titans » et voyait son choix
+  redevenir 4 une seconde plus tard.
+- **La main d'un joueur distant ne se regarde plus.** En local, le secret tient à
+  la rotation de l'appareil ; à distance cette rotation n'existe plus, et l'hôte
+  a toutes les mains dans son état. Un Titan tenu par quelqu'un d'autre est
+  désormais masqué, et l'hôte ne se fait plus déposer dessus par la sélection
+  automatique de la Phase Programmation.
+- **Un bouton « Rafraîchir »** dans le bandeau de liaison redemande le plateau à
+  l'hôte sans quitter la table. Recharger l'onglet détruisait la session et
+  renvoyait à l'écran d'accueil — c'était la seule sortie quand l'affichage
+  décrochait.
+- **L'hôte ne quitte plus la table en passant en arrière-plan.** `pagehide` ne
+  veut pas dire « cette page se ferme » : sur téléphone, il se déclenche quand on
+  verrouille l'écran. Trouvé en rejouant une table complète dans un navigateur —
+  l'invité lisait « l'hôte a quitté la partie » alors que l'hôte n'avait rien
+  fait. Le relais tient déjà ce cas avec ses deux minutes de grâce.
+- **Le courrier privé a son propre compteur.** L'envoi des mains était enfermé
+  derrière le raccourci de diffusion du plateau : un siège attribué en cours de
+  partie ne changeant pas le plateau public, le nouvel arrivant ne recevait sa
+  main qu'au prochain coup de quelqu'un d'autre.
+
+### Une table ne se referme pas parce que quelqu'un s'absente
+
+Cinq demandes de Nikola, et une seule idée derrière.
+
+**On sait qui part.** Le relais n'envoyait qu'une nouvelle liste de présence, à
+la table de deviner qui manquait — et personne ne compare deux listes de quatre
+noms en pleine partie. Le départ est maintenant un message à part entière, avec
+le pseudo ET le siège libéré.
+
+**L'hôte muet ne ferme plus la partie.** La salle était supprimée dès qu'il
+cessait de relever son courrier pendant deux minutes : connexion coupée, PC en
+veille, onglet rechargé une fois de trop, et tout le monde était renvoyé à
+l'accueil, plateau perdu. Or il n'y a aucune raison — tant que le relais tourne,
+la salle et son dernier instantané tiennent en mémoire. Il annonce donc
+`hoteAbsent`, n'efface rien, et l'hôte peut revenir reprendre le moteur en
+redonnant le mot de passe de table ET la clé du relais. Ce qui ferme vraiment la
+table reste le geste explicite : « Fermer la table ».
+
+*Une limite qui reste, et elle est structurelle : l'hôte qui RECHARGE sa page
+perd le moteur avec elle. Le relais ne garde qu'un plateau public, mains
+retirées — il ne peut pas rendre les cartes de chacun. La reprise sert aux
+coupures, pas aux F5.*
+
+**Le relais fermé se dit.** Le message ne changeait jamais : « reprise en
+cours… », à l'infini, qu'il s'agisse d'un wifi qui hoquette une seconde ou de la
+fenêtre du relais fermée par mégarde. Le premier se rattrape tout seul, le
+second ne se rattrapera jamais. Au bout de trois échecs d'affilée — sept
+secondes de silence — on nomme la cause probable, sans arrêter la boucle.
+
+**Un siège n'est jamais vide.** Le joueur qui part rend son Titan à l'IA, au
+niveau réglé pour la table (profil tiré à ce moment-là : sans lui, une partie en
+Expert se serait poursuivie contre une IA moyenne sans que rien ne le dise). Et
+un Titan tenu par l'IA devient un siège LIBRE — c'est même le seul qui puisse
+encore l'être une fois la partie commencée. C'est ce qui permet d'arriver en
+cours de route, et de revenir à sa place après être parti. Le choix du Titan,
+qui ne vivait que dans le salon, existe aussi en jeu, dans le bandeau de liaison.
+
+**Un lien d'invitation en un clic.** Rejoindre demandait trois recopies à la
+main, dont deux chaînes sans aucun sens : une adresse de tunnel qui change à
+chaque redémarrage, un identifiant de six caractères, un mot de passe de huit.
+Dicté au téléphone, ça rate une fois sur deux — et c'est le premier geste d'un
+joueur, celui où l'on ne pardonne rien. Le lien porte les trois et rejoint tout
+seul.
+
+Ce que ça coûte est dit à l'écran comme dans le livret : le mot de passe voyage
+dans l'URL, donc dans l'historique de celui qui clique et dans le fil qui a
+transporté le lien. Deux garde-fous, qui le rendent raisonnable sans le rendre
+inoffensif — l'adresse est purgée dès la connexion faite, et un mot de passe ne
+vaut que le temps de sa table. La clé du relais, elle, n'est jamais dans un
+lien : elle ouvre la porte de la machine.
+
+### Le bord du plateau n'arrête plus rien
+
+Nikola, en réponse à la question laissée ouverte plus haut : « finalement même
+le débris sort du plateau pour passer de l'autre côté, qu'importe l'énergie ;
+donc normalement il n'y a plus aucune condition différente ».
+
+Il lève son ruling du 18 août. La Faille spatio-temporelle demandait le Seuil 4
+pour être franchie : en dessous, l'élément s'arrêtait net sur le rebord. C'était
+la seule case du plateau où l'énergie changeait la NATURE de ce qui arrive
+plutôt que la portée — et c'est ce qui produisait le cas remonté à la table, un
+élément collé au bord alors que toute la table attendait qu'il traverse.
+
+Le bord se franchit donc toujours, pour tout le monde. La traversée coûte 1 de
+l'énergie restante, comme un pas de plus : arrivé au bord avec 1, l'élément
+passe et se pose de l'autre côté. Ce qui reste différent entre un Titan et un
+débris n'est plus une condition mais une conséquence, et elle est voulue — le
+débris finit son déplacement, le Titan quitte BIG CITY jusqu'à son tour.
+
+Le Seuil 4 garde tout le reste : il départage DIL et RAGE, et il décide si un
+bâtiment percuté casse un bloc ou fait mur.
+
+La règle vit à cinq endroits, tous mis à jour et vérifiés un par un (moteur,
+glossaire, page Règles, livret, tests) : c'est la divergence silencieuse que ce
+projet a déjà payée deux fois.
+
+### Ce que la partie a révélé sur le jeu lui-même
+
+- **Les cases de déplacement prennent la couleur du Titan qui se déplace**, ainsi
+  que le panneau « Te déplacer ? ». Le cyan du mouvement est, au caractère près,
+  l'accent du Titan 1 : tant qu'on jouait celui-là, personne ne pouvait voir que
+  la couleur était figée plutôt que dérivée. Pour les trois autres, le plateau
+  annonçait un déplacement dans la couleur d'un adversaire.
+- **Les cases de mise en place aussi.** La grille lisait `placementRestant[0]`, le
+  bandeau `prochainAPlacer` : les deux divergent le temps d'un rendu. Le bandeau
+  annonçait « Titan 4 prend position » pendant que les cases s'allumaient dans
+  l'orange du Titan 2, qui venait de poser.
+- **Tout Casser résout ses cibles une par une**, dans l'ordre du Périmètre.
+  L'humain le faisait déjà — il clique lequel part maintenant — mais l'IA passait
+  par un enchaînement de quatre balayages, tous les bâtiments puis tous les blocs
+  puis tous les Titans. Deux ordres de résolution pour la même carte, et un ordre
+  faux : un bloc qui rebondit peut revenir sur une case qu'un balayage ultérieur
+  s'apprête à frapper.
+- **Sur téléphone, deux débris dessinés par case au lieu de trois.** Trois icônes
+  de 17 px tiennent en 53 px : c'était juste sur une case de 68, ça déborde sur
+  les 26 px d'un écran étroit. Le compte exact reste sur le badge et dans la
+  fiche au survol.
+- **L'icône d'un Titan en Warp tient dans sa gouttière.** Elle était dimensionnée
+  pour les 34 px d'un grand écran, alors que la feuille de style ramène la
+  gouttière à 14 px sous 560 px : le Titan éjecté mordait sur la première colonne
+  du plateau.
+- **Quand c'est à toi, l'écran vient à toi.** Sous 1100 px la mise en page est une
+  pile : le tour changeait sans que rien ne bouge, et il fallait faire défiler
+  pour trouver ses commandes.
+
 ## Non publié — vingt-quatrième passe du 2026-08-30 (une clé, un mot de passe tiré, et une revue qui a trouvé du sérieux)
 
 Suite directe de la passe précédente. Nikola : « fais ça pour la clé de relais »,

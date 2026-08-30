@@ -260,6 +260,18 @@ function nettoyerPseudo(brut) {
   return String(brut ?? "").replace(/[<>&"'\r\n\t]/g, "").trim().slice(0, 18) || "Invité";
 }
 
+/* La comparaison de la clé du relais, à un seul endroit : elle sert à ouvrir
+   une table ET à en reprendre une dont l'hôte s'est tu. `timingSafeEqual` exige
+   deux tampons de même longueur, la comparaison de taille se fait donc à part
+   — elle ne révèle que la longueur, jamais le contenu. */
+function cleRelaisValide(proposee) {
+  const attendue = cleAttendue();
+  if (!attendue) return true;   // relais sans clé : c'est le mode local, assumé
+  const a = Buffer.from(typeof proposee === "string" ? proposee : "", "utf8");
+  const b = Buffer.from(attendue, "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 async function creerSalle({ cleRelais, pseudo, ip }) {
   /* ── LA CLÉ D'ABORD, LE RESTE ENSUITE ──
      Vérifiée AVANT le plafond de salles et avant toute allocation : une requête
@@ -268,17 +280,9 @@ async function creerSalle({ cleRelais, pseudo, ip }) {
 
      L'échec compte au compteur anti-force-brute, au même titre qu'un mot de
      passe de table raté — c'est le même verrou, sur la même porte. */
-  const attendue = cleAttendue();
-  if (attendue) {
-    const proposee = typeof cleRelais === "string" ? cleRelais : "";
-    const a = Buffer.from(proposee, "utf8");
-    const b = Buffer.from(attendue, "utf8");
-    // `timingSafeEqual` exige deux tampons de même longueur : la comparaison de
-    // taille se fait donc à part, et ne révèle que la longueur — pas le contenu.
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
-      noterEchec(ip);
-      return { erreur: "Clé du relais incorrecte." };
-    }
+  if (!cleRelaisValide(cleRelais)) {
+    noterEchec(ip);
+    return { erreur: "Clé du relais incorrecte." };
   }
   if (salles.size >= MAX_SALLES) return { erreur: "Le relais est plein, réessaie plus tard." };
 
@@ -324,7 +328,7 @@ async function creerSalle({ cleRelais, pseudo, ip }) {
   return { salle, jeton: jetonHote, motDePasse };
 }
 
-async function rejoindreSalle({ id, motDePasse, pseudo, ip }) {
+async function rejoindreSalle({ id, motDePasse, pseudo, ip, cleRelais }) {
   const salle = salles.get(String(id || "").toUpperCase().trim());
   /* MÊME RÉPONSE POUR « SALLE INCONNUE » ET « MOT DE PASSE FAUX ».
      Les distinguer offrirait un oracle : on énumérerait les identifiants
@@ -337,6 +341,43 @@ async function rejoindreSalle({ id, motDePasse, pseudo, ip }) {
     noterEchec(ip);
     return { erreur: "Identifiant ou mot de passe incorrect." };
   }
+  /* ── REPRENDRE UNE TABLE DONT L'HÔTE S'EST TU ──
+     Depuis que l'absence de l'hôte n'efface plus la salle, il faut un chemin
+     pour y revenir — sans quoi « on ne ferme pas la partie » voudrait dire
+     « on la laisse figée pour toujours ».
+
+     La reprise demande LES DEUX secrets : le mot de passe de table, comme tout
+     le monde, ET la clé du relais, que seul l'hôte connaît. C'est exactement le
+     couple qu'il fallait pour ouvrir la table ; personne d'autre ne peut donc
+     s'emparer du moteur d'une partie en cours.
+
+     Elle n'est possible QUE si le siège d'hôte est vacant. Tant que l'hôte
+     relève son courrier, la clé ne donne rien de plus qu'un siège d'invité :
+     une table n'a pas deux arbitres. */
+  const hoteVacant = !salle.participants.has(salle.hote);
+  const veutReprendre = typeof cleRelais === "string" && cleRelais.length > 0;
+  if (hoteVacant && veutReprendre) {
+    if (!cleRelaisValide(cleRelais)) {
+      noterEchec(ip);
+      return { erreur: "Clé du relais incorrecte." };
+    }
+    /* Un jeton NEUF, jamais l'ancien : celui-ci a pu traîner dans un onglet
+       resté ouvert, et deux moteurs sur une même table sont exactement ce que
+       tout ce montage évite. L'ancien jeton ne vaut plus rien dès cette ligne. */
+    const jetonHote = jeton();
+    salle.files.delete(salle.hote);
+    salle.hote = jetonHote;
+    salle.hoteAbsentAnnonce = false;
+    salle.participants.set(jetonHote, {
+      pseudo: nettoyerPseudo(pseudo), siege: "hote", titanId: null, vuLe: Date.now(), ip,
+    });
+    salle.files.set(jetonHote, []);
+    salle.vueLe = Date.now();
+    deposer(salle, [...salle.participants.keys()], { t: "hoteRevenu" });
+    reveiller(salle);
+    return { salle, jeton: jetonHote, repriseHote: true };
+  }
+
   if (salle.participants.size >= MAX_PARTICIPANTS) {
     return { erreur: "Cette partie est complète." };
   }
@@ -408,10 +449,29 @@ function retirerParticipant(salle, j) {
   const p = salle.participants.get(j);
   if (!p) return;
   const ref = refDe(salle, j);
+  /* ── ON DIT QUI PART, PAS SEULEMENT QUE QUELQU'UN EST PARTI ──
+     Nikola, 2026-08-30 : « on doit savoir qui a quitté la partie ».
+
+     La table ne recevait qu'une nouvelle liste de présence, à elle de deviner
+     qui manquait — et personne ne compare deux listes de quatre noms en pleine
+     partie. Le siège libéré part avec le message : c'est ce qui permet à l'hôte
+     de confier le Titan à l'IA sans avoir à chercher lequel (cf. le contrôleur).
+
+     Le message précède la mise à jour de présence, pour que l'interface
+     puisse encore nommer le partant à partir de la liste qu'elle a. */
+  const titanLibere = Object.entries(salle.sieges)
+    .find(([, occupant]) => occupant === ref)?.[0] ?? null;
   salle.participants.delete(j);
   salle.files.delete(j);
   Object.entries(salle.sieges).forEach(([titanId, occupant]) => {
     if (occupant === ref) delete salle.sieges[titanId];
+  });
+  deposer(salle, [...salle.participants.keys()], {
+    t: "depart",
+    ref,
+    pseudo: p.pseudo,
+    siege: p.siege,
+    titanId: titanLibere === null ? null : Number(titanLibere),
   });
   deposer(salle, [...salle.participants.keys()],
     { t: "presence", joueurs: presence(salle), sieges: salle.sieges });
@@ -429,13 +489,35 @@ function menage() {
       if (maintenant - p.vuLe > limite) retirerParticipant(salle, j);
     });
     if (!salle.participants.has(salle.hote)) {
-      /* L'hôte fait tourner le moteur : sans lui il n'y a plus de partie, juste
-         des spectateurs devant un plateau figé. On le leur dit franchement
-         plutôt que de les laisser attendre. */
-      deposer(salle, [...salle.participants.keys()], { t: "hoteParti" });
+      /* ── UN HÔTE MUET N'EST PAS UNE TABLE FERMÉE ──
+         Nikola, 2026-08-30 : « si c'est l'hôte, tant que le relais est ouvert
+         on ne ferme pas la partie ».
+
+         La salle était supprimée dès que l'hôte cessait de relever son
+         courrier pendant deux minutes — connexion coupée, PC en veille,
+         onglet rechargé une fois de trop. Tout le monde était renvoyé à
+         l'écran d'accueil, et le plateau perdu : le relais ne garde qu'un
+         instantané, il n'y a pas de reprise possible une fois la salle
+         effacée.
+
+         Or il n'y a aucune raison de le faire. Tant que le relais tourne, la
+         salle et son dernier instantané tiennent en mémoire, et l'hôte peut
+         revenir les reprendre (cf. la reprise dans `rejoindreSalle`). On
+         prévient une fois, on n'efface rien, et la salle finit par expirer
+         comme les autres au bout de `TTL_SALLE_MS` si personne ne revient.
+
+         Ce qui ferme vraiment la table reste le geste explicite : « Fermer la
+         table » passe par `/api/quitter`, et lui envoie bien `hoteParti`. */
+      if (!salle.hoteAbsentAnnonce) {
+        salle.hoteAbsentAnnonce = true;
+        deposer(salle, [...salle.participants.keys()], { t: "hoteAbsent" });
+        reveiller(salle);
+      }
+    } else if (salle.hoteAbsentAnnonce) {
+      // Il est revenu : on le dit, et on réarme l'annonce pour la prochaine fois.
+      salle.hoteAbsentAnnonce = false;
+      deposer(salle, [...salle.participants.keys()], { t: "hoteRevenu" });
       reveiller(salle);
-      salles.delete(id);
-      return;
     }
     if (maintenant - salle.vueLe > TTL_SALLE_MS) {
       reveiller(salle);
@@ -583,12 +665,20 @@ const serveur = createServer(async (requete, reponse) => {
 
     if (requete.method === "POST" && url.pathname === "/api/rejoindre") {
       const corps = await lireCorps(requete, MAX_CORPS_AUTH);
-      const res = await rejoindreSalle({ id: corps.id, motDePasse: corps.motDePasse, pseudo: corps.pseudo, ip });
+      /* `cleRelais` est FACULTATIVE ici, et n'a qu'un seul usage : reprendre le
+         siège d'hôte d'une table dont l'hôte s'est tu (cf. `rejoindreSalle`).
+         Un invité normal ne l'envoie pas et n'en a jamais besoin. */
+      const res = await rejoindreSalle({
+        id: corps.id, motDePasse: corps.motDePasse, pseudo: corps.pseudo, ip,
+        cleRelais: corps.cleRelais,
+      });
       if (res.erreur) { repondre(reponse, 403, { erreur: res.erreur }, origine); return; }
       deposer(res.salle, [...res.salle.participants.keys()],
         { t: "presence", joueurs: presence(res.salle), sieges: res.salle.sieges });
       repondre(reponse, 200, {
-        id: res.salle.id, jeton: res.jeton, ref: refDe(res.salle, res.jeton), siege: "invite",
+        id: res.salle.id, jeton: res.jeton, ref: refDe(res.salle, res.jeton),
+        siege: res.repriseHote ? "hote" : "invite",
+        repriseHote: Boolean(res.repriseHote),
         joueurs: presence(res.salle), sieges: res.salle.sieges,
         etat: res.salle.etat, versionEtat: res.salle.versionEtat,
       }, origine);

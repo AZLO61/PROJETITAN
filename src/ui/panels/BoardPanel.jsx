@@ -3,7 +3,7 @@ import CardVisual from "../cards/CardVisual.jsx";
 import { CARD_EFFECT } from "../cards/cardEffects.js";
 import TitanResourceBand from "../titans/TitanResourceBand.jsx";
 import { TitanIcon } from "../titans/TitanVisuals.jsx";
-import { TITAN_COLORS } from "../titans/constants.js";
+import { TITAN_COLORS, accentDeplacement } from "../titans/constants.js";
 import { CARD_LABEL, PHASE_LABELS } from "../../domain/index.js";
 import { smallBtn, cancelBtn } from "../styles.js";
 import { T, marquee, readout, label, prose } from "../theme.js";
@@ -129,6 +129,37 @@ export default function BoardPanel({ vm }) {
   // panneau de déplacement après annulation, et ses clics sur le plateau
   // ne produisaient plus rien (bug remonté le 2026-08-17).
   React.useEffect(() => { setMoveSkipped(false); }, [vm.activePlayerId, vm.undoTick]);
+
+  /* ── QUAND C'EST À MOI, L'ÉCRAN VIENT À MOI ───────────────
+     Nikola, 2026-08-30 : « quand c'est mon tour, ça switch automatiquement sur
+     mon interface Périmètre / Énergie / Déplacer ».
+
+     Sous 1100 px, la mise en page redevient une pile : le plateau d'abord, ce
+     panneau ensuite. Le tour changeait donc sans que rien ne bouge à l'écran —
+     le joueur regardait le plateau, c'était à lui, et il devait s'en rendre
+     compte tout seul puis faire défiler pour trouver ses commandes. Sur un
+     téléphone, ça fait un écran et demi de défilement à chaque tour.
+
+     Au-dessus de 1100 px on ne bouge rien : les deux colonnes sont visibles en
+     même temps, il n'y a rien à aller chercher, et un défilement automatique
+     sur un écran où tout est déjà visible ne serait qu'une secousse.
+
+     `scrollIntoView` est absent de jsdom : la garde n'est pas de la prudence
+     décorative, c'est ce qui laisse les tests monter ce panneau. */
+  const panneauRef = React.useRef(null);
+  const { monTitanDistant: vmMonTitanDistant, session: vmSession, phase: vmPhase, titanModes: vmTitanModes } = vm;
+  React.useEffect(() => {
+    if (vmPhase !== "action" || vmActivePlayerId == null) return;
+    if (vmTitanModes?.[vmActivePlayerId] === "ia") return;
+    // À distance, « à moi » a un sens précis : mon siège. En local, l'appareil
+    // circule, donc le Titan actif est forcément celui qui le tient.
+    if (vmSession && vmMonTitanDistant !== vmActivePlayerId) return;
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    if (!window.matchMedia("(max-width: 1099px)").matches) return;
+    const el = panneauRef.current;
+    if (!el || typeof el.scrollIntoView !== "function") return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [vmActivePlayerId, vmPhase, vmSession, vmMonTitanDistant, vmTitanModes]);
   const {
     activePlayerId,
     setActivePlayerId,
@@ -217,6 +248,13 @@ export default function BoardPanel({ vm }) {
     tcSel,
   } = vm;
 
+  /* LA COULEUR DU DÉPLACEMENT EST CELLE DU TITAN QU'ON JOUE (Nikola,
+     2026-08-30). Elle était figée sur le cyan `T.move`, qui se trouve être
+     l'accent du Titan 1 : le panneau et les cases parlaient donc au nom d'un
+     adversaire dès qu'on jouait l'un des trois autres. Une seule source, cf.
+     `accentDeplacement` — la vue 2D et la 3D lisent la même. */
+  const accentMove = accentDeplacement(selectedTitan?.id);
+
   // ── DÉROULÉ DU TOUR ──
   // Une seule étape visible à la fois, dans l'ordre réel : se déplacer,
   // jouer sa carte, ramasser. Le panneau empilait les trois d'un coup, dans
@@ -289,14 +327,29 @@ export default function BoardPanel({ vm }) {
   // En Phase Programmation, chacun programme a son tour : le Titan
   // selectionne est celui qui programme, ses cartes lui appartiennent.
   // En Phase Action, seul le Titan actif voit les siennes.
+  /* ── ET À DISTANCE, LA MAIN NE SUIT PAS LE REGARD ──
+     Nikola, 2026-08-30 : « si je suis hôte, je ne dois pas voir la
+     programmation ou les cartes des autres joueurs tant que ce n'est pas
+     validé de leur part ».
+
+     La règle ci-dessus décrit un appareil qui circule autour d'une table : en
+     Phase Programmation, le Titan sélectionné est forcément celui qui tient
+     l'appareil. À quatre écrans, cette équivalence tombe — l'hôte fait tourner
+     le moteur, il a donc TOUTES les mains chez lui, et un clic sur la plaque
+     d'un adversaire les lui montrait.
+
+     `titanMasque` dit qui tient quoi (cf. le contrôleur). Un Titan tenu par
+     quelqu'un d'autre reste fermé, quelle que soit la Phase — un invité, lui,
+     ne reçoit même pas ces cartes. */
   const cartesVisibles = selectedTitan
     ? (phase === "programmation" || selectedTitan.id === activePlayerId)
+      && !(vm.titanMasque && vm.titanMasque(selectedTitan.id))
     : false;
 
   return <>
       {/* ── PANNEAU TITAN SÉLECTIONNÉ ── */}
       {selectedTitan && (
-        <div style={{
+        <div ref={panneauRef} style={{
           // Panneau d'actions (cartes/passifs) : reste neutre — la
           // surbrillance "c'est ton tour" ne vit que sur le panneau
           // ressources (TitanResourceBand), pas ici, pour éviter que
@@ -473,7 +526,7 @@ export default function BoardPanel({ vm }) {
               deplacement, puis carte, puis ramassage. Chaque etape disparait
               quand elle est faite ou passee. */}
           {titanModes[selectedTitan.id] !== "ia" && stepMove && (
-              <Step n={1} titre="Te déplacer ?" quand="avant ta carte" accent={T.move} ouvert={moveMode}>
+              <Step n={1} titre="Te déplacer ?" quand="avant ta carte" accent={accentMove} ouvert={moveMode}>
                 {!moveMode && (
                   <>
                     <div style={{ ...prose(T.dim, T.small), marginBottom: 9 }}>
@@ -503,7 +556,7 @@ export default function BoardPanel({ vm }) {
                       <button
                         onClick={toggleMoveMode}
                         disabled={!canUseMovePassif(selectedTitan.id)}
-                        style={smallBtn(canUseMovePassif(selectedTitan.id), "#71dbff")}
+                        style={smallBtn(canUseMovePassif(selectedTitan.id), accentMove)}
                       >
                         <Icon name="move" size={14} />
                         Se déplacer
@@ -524,7 +577,7 @@ export default function BoardPanel({ vm }) {
                 {moveMode && (
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 8, flexWrap: "wrap" }}>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, ...label(T.move, T.small) }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, ...label(accentMove, T.small) }}>
                         <Icon name="pointer" size={14} />
                         Clique une case ({moveReachable.size} dispo)
                       </span>
@@ -551,12 +604,12 @@ export default function BoardPanel({ vm }) {
                         grille, sinon la légende ment. */}
                     <div style={{ display: "flex", gap: 14, flexWrap: "wrap", ...label(T.dim, T.micro) }}>
                       <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                        <span style={{ width: 13, height: 13, background: "rgba(113,219,255,.25)", border: `2px solid ${T.move}`, display: "inline-block" }} />
+                        <span style={{ width: 13, height: 13, background: `${accentMove}40`, border: `2px solid ${accentMove}`, display: "inline-block" }} />
                         Classique ({moveClassic.size})
                       </span>
                       {moveTeleport.size > 0 && (
                         <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          <span style={{ width: 13, height: 13, background: "rgba(113,219,255,.15)", border: `2px dashed ${T.tele}`, display: "inline-block" }} />
+                          <span style={{ width: 13, height: 13, background: `${accentMove}26`, border: `2px dashed ${T.tele}`, display: "inline-block" }} />
                           <Icon name="teleport" size={12} style={{ color: T.tele }} />
                           Téléporteur ({moveTeleport.size})
                         </span>
@@ -619,7 +672,13 @@ export default function BoardPanel({ vm }) {
           )} {/* fin étape 3 */}
 
           {/* ── ÉTAPE 2 · TA CARTE ── */}
-          {titanModes[selectedTitan.id] !== "ia" && !cartesVisibles && phase === "action" && (
+          {/* Le bandeau couvre aussi la Phase Programmation depuis la partie à
+              distance : là, un Titan peut être masqué non pas parce que ce
+              n'est pas son tour, mais parce qu'il appartient à quelqu'un
+              d'autre. Sans ça, l'hôte qui cliquait la plaque d'un invité
+              voyait un panneau vide, sans rien qui dise pourquoi. */}
+          {titanModes[selectedTitan.id] !== "ia" && !cartesVisibles
+            && (phase === "action" || phase === "programmation") && (
             <div style={{
               border: `2px dashed ${T.rule}`,
               borderRadius: T.rPlate, padding: "16px 14px", marginBottom: 10,
@@ -628,8 +687,11 @@ export default function BoardPanel({ vm }) {
             }}>
               <Icon name="lock" size={16} />
               <span style={prose(T.faint, T.small)}>
-                Jeu caché — les cartes de {titanDisplayName(selectedTitan.id)} ne sont
-                visibles que pendant son tour.
+                {vm.titanMasque && vm.titanMasque(selectedTitan.id)
+                  ? <>Jeu caché — {titanDisplayName(selectedTitan.id)} est joué depuis un
+                      autre écran, sa main et sa programmation ne t&apos;appartiennent pas.</>
+                  : <>Jeu caché — les cartes de {titanDisplayName(selectedTitan.id)} ne sont
+                      visibles que pendant son tour.</>}
               </span>
             </div>
           )}

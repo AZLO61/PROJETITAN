@@ -55,7 +55,27 @@ export default function SetupScreen({
   onBrancherSession = null,
   onQuitterSession = null,
   onPublierSieges = null,
+  monTitanDistant = null,
+  onDemanderSiege = null,
 }) {
+  /* ── UN INVITÉ REGARDE LES RÉGLAGES, IL N'Y TOUCHE PAS ────
+     Nikola, 2026-08-30 : « quand je suis maître de table, les autres ne
+     doivent pas pouvoir régler les paramètres de la partie ; par contre ils
+     peuvent choisir un personnage libre, et si l'hôte change un paramètre ça
+     doit se voir aussi pour les invités ».
+
+     Les réglages ne sont pas seulement inutiles chez un invité, ils sont
+     TROMPEURS : cet écran écrit dans un état local que le premier instantané
+     reçu de l'hôte écrase. L'invité choisissait « 3 Titans », voyait son choix
+     pris en compte, et le voyait redevenir 4 une seconde plus tard sans que
+     rien n'explique pourquoi.
+
+     Les mêmes valeurs s'affichent donc en lecture seule. Elles viennent de
+     l'instantané de l'hôte — c'est le contrôleur qui les y pose (cf. le champ
+     `table` de `instantaneCourant`) — et elles se mettent donc à jour toutes
+     seules quand l'hôte change quelque chose. Ce qui reste actif pour un
+     invité : son nom de joueur, et le choix de son Titan. */
+  const invite = session?.siege === "invite";
   const champ = {
     background: "rgba(0,0,0,.45)",
     color: T.text,
@@ -114,10 +134,60 @@ export default function SetupScreen({
             onQuitterSession={onQuitterSession}
             onPublierSieges={onPublierSieges}
             onLancer={onLancer}
+            monTitanDistant={monTitanDistant}
+            onDemanderSiege={onDemanderSiege}
           />
         )}
 
+        {/* ── CE QUE L'HÔTE A RÉGLÉ, VU D'UN INVITÉ ──
+            Les mêmes informations que les blocs ci-dessous, sans un seul
+            contrôle : rien ici n'est modifiable, et rien ne le laisse croire.
+            Le tout se rafraîchit à chaque instantané reçu, donc dès que l'hôte
+            touche à un réglage. */}
+        {invite && (
+          <Reglage
+            titre="Réglages de la table"
+            aide="C'est l'hôte qui les tient. Ils se mettent à jour ici dès qu'il les change."
+          >
+            <div style={{ display: "grid", gap: 6 }}>
+              {[
+                ["Titans", `${nbJoueurs} — ${manchesMax(nbJoueurs)} Manches`],
+                ["Événements", eventsEnabled ? "activés" : "désactivés"],
+                ["Vol de Phase Repos", modeVolRepos === "main" ? "Emprunt" : "Mise au repos"],
+                ["Seuil Apocalypse", `${apocalypseThreshold} bâtiments`],
+              ].map(([nom, valeur]) => (
+                <div key={nom} style={{
+                  display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap",
+                  border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "9px 12px",
+                }}>
+                  <span style={label(T.faint, T.micro)}>{nom}</span>
+                  <span style={{ ...readout("0.95rem", T.text), marginLeft: "auto" }}>{valeur}</span>
+                </div>
+              ))}
+              <div style={{ display: "grid", gap: 6 }}>
+                {Array.from({ length: nbJoueurs }, (_, i) => i + 1).map((id) => {
+                  const tc = TITAN_COLORS[id];
+                  return (
+                    <div key={id} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      border: `2px solid ${tc?.accent || T.rule}`, borderRadius: T.rPlate,
+                      padding: "8px 11px",
+                    }}>
+                      <TitanIcon titanId={id} size={26} variant="plain" />
+                      <span style={label(T.text, T.small)}>{titanNames[id] || `Titan ${id}`}</span>
+                      <span style={{ ...prose(T.faint, T.micro), marginLeft: "auto" }}>
+                        {titanModes[id] === "ia" ? "tenu par l'IA" : "joueur"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Reglage>
+        )}
+
         {/* ── COMBIEN DE JOUEURS ── */}
+        {!invite && <>
         <Reglage titre="Nombre de Titans">
           <div style={{ display: "flex", gap: 10 }}>
             {[3, 4].map((n) => {
@@ -448,7 +518,9 @@ export default function SetupScreen({
 
         {/* ── LA TOUCHE DE DÉPART ──
             Une borne n'a qu'un seul bouton de cette taille, et il ne fait
-            qu'une chose. */}
+            qu'une chose. Un invité ne l'a pas : ce n'est pas lui qui décide
+            quand la table commence, et un bouton qui ne fait rien vaut moins
+            qu'un bouton absent. */}
         <button
           onClick={onLancer}
           style={{
@@ -466,6 +538,7 @@ export default function SetupScreen({
         >
           Lancer la partie
         </button>
+        </>}
       </div>
     </div>
   );

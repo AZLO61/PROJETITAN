@@ -25,8 +25,9 @@ qu'est la sécurité : la chose joignable ne décide de rien.
 
 Ses garde-fous, tous dans le même fichier, en haut :
 
-- **la clé du relais** : sans elle, personne ne peut ouvrir de table chez toi,
-  même en connaissant l'adresse du tunnel ;
+- **la clé du relais est tirée au sort à chaque lancement** du `.bat` : sans
+  elle, personne ne peut ouvrir de table chez toi, même en connaissant
+  l'adresse du tunnel. 10 caractères, valables le temps de cette fenêtre ;
 - **le mot de passe de table est tiré au sort**, pas choisi — 8 caractères sur
   un alphabet de 32, soit environ mille milliards de combinaisons ;
 - mots de passe hachés (`scrypt`), comparés en temps constant, jamais gardés ni
@@ -42,13 +43,18 @@ Ses garde-fous, tous dans le même fichier, en haut :
 
 | | Qui la connaît | À quoi elle sert |
 |---|---|---|
-| **Clé du relais** | toi seul | ouvrir une table. Posée par `JOUER-A-DISTANCE.bat`, saisie dans le jeu. |
+| **Clé du relais** | toi seul | ouvrir une table. Tirée au sort par `JOUER-A-DISTANCE.bat`, affichée dans sa fenêtre jaune, recopiée dans le jeu. |
 | **Mot de passe de table** | toi et tes joueurs | rejoindre cette table-là. Tiré au sort, affiché une fois. |
 
 La clé **ne doit jamais entrer dans le dépôt** : il est public, le jeu est servi
-depuis GitHub Pages. Elle vit dans `JOUER-A-DISTANCE.bat`, que `.gitignore`
-exclut. Pour la changer, modifie la ligne `set "CLE_RELAIS=…"` du `.bat`, et
-saisis la même valeur dans le jeu.
+depuis GitHub Pages. Elle n'y est plus écrite nulle part — le `.bat` la tire au
+sort à chaque lancement et te l'affiche. Tu n'as donc rien à changer pour en
+changer : relancer le fichier suffit, et l'ancienne ne vaut plus rien.
+
+C'est aussi ce qui la rend sûre. Une phrase écrite en dur survivait à la partie,
+et se tapait de mémoire — donc elle était courte, donc devinable. Dix caractères
+tirés au sort ne valent que le temps de cette fenêtre, et personne n'a besoin de
+les retenir.
 
 ---
 
@@ -84,14 +90,31 @@ la contrepartie du gratuit et du sans-compte.
 Dans le jeu → **Jouer à distance** → **Ouvrir une table**.
 
 - **Adresse du relais** : l'adresse `https://…` du tunnel ;
-- **Clé du relais** : la phrase posée dans le `.bat`.
+- **Clé du relais** : les 10 caractères affichés dans la fenêtre jaune du
+  `.bat`, juste sous l'adresse. Elle change à chaque lancement.
 
 Le salon affiche alors trois choses : un **identifiant de 6 caractères**
 (`AB3K7P`), un **mot de passe tiré au sort** (`SV4K-QLRT`) et l'adresse. Les
 deux se dictent au téléphone : ni `I`, ni `O`, ni `0`, ni `1` dans l'alphabet
 employé.
 
-### 3. Donne trois choses à tes joueurs
+### 3. Donne le lien — ou les trois lignes
+
+**Le plus simple : « Copier le lien d'invitation ».** Le bouton est dans ton
+salon, sous les trois lignes. Le lien porte l'adresse du relais, l'identifiant
+et le mot de passe : ton joueur clique, et il est à la table. Il n'a rien à
+taper, rien à recopier, rien à comprendre.
+
+> **Ce que ça coûte, et il faut le savoir.** Le mot de passe voyage dans le
+> lien. Il finit donc dans l'historique du navigateur de celui qui clique, et
+> dans le fil de discussion par lequel tu l'as envoyé — c'est un secret partagé
+> avec tous ceux qui voient ce fil. Ne le publie pas sur une page ouverte.
+> Deux garde-fous, qui le rendent raisonnable sans le rendre inoffensif :
+> l'adresse est nettoyée de la barre du navigateur dès la connexion faite, et un
+> mot de passe ne vaut que le temps de cette table-là. **La clé du relais, elle,
+> n'est jamais dans un lien** : elle ouvre la porte de ta machine.
+
+### 3 bis. Ou les trois lignes, à la main
 
 L'adresse du relais, l'identifiant, le mot de passe. **Note le mot de passe tout
 de suite** : il ne s'affiche qu'une fois et le relais ne peut pas le retrouver —
@@ -105,7 +128,20 @@ Envoie-le de préférence par un autre canal que l'adresse.
 Chez eux → **Jouer à distance** → **Rejoindre une table** → les trois lignes.
 Ils n'ont **pas** besoin de la clé du relais. Ils apparaissent dans ton salon.
 
-### 5. Distribue les Titans, et lance
+### 5. Ils choisissent leur Titan — et l'IA garde les places vides
+
+Chaque invité prend un Titan libre depuis son propre écran. Tu gardes la main :
+ton salon a toujours le menu déroulant qui réattribue les sièges.
+
+**Un Titan tenu par l'IA est un siège libre.** C'est même le seul qui puisse
+l'être une fois la partie commencée : quelqu'un qui arrive en cours de route, ou
+qui revient après une déconnexion, reprend un Titan à l'IA d'un clic — depuis le
+salon avant le lancement, depuis le bandeau violet en cours de partie.
+
+**Quand un joueur part, l'IA reprend son Titan** au niveau réglé pour la table.
+La partie ne s'arrête pas, et sa place l'attend s'il revient.
+
+### 5 bis. Distribue les Titans, et lance
 
 Chaque Titan humain a un menu déroulant : toi sur cet appareil, ou l'un des
 joueurs connectés. Les Titans laissés en IA sont joués par la machine, chez toi.
@@ -128,8 +164,29 @@ revanche, est rattrapable : tu as deux minutes pour revenir.
 cartes de chacun lui partent à part. Un joueur qui ouvre la console de son
 navigateur ne verra pas le jeu de ses adversaires.
 
+**L'hôte qui perd la liaison ne perd plus la table.** Tant que le relais tourne,
+la salle et son dernier plateau tiennent en mémoire : les autres voient
+« l'hôte s'est déconnecté », et la partie reprend dès qu'il répond. Pour
+reprendre le moteur après une coupure longue, il rejoint sa propre table
+(identifiant + mot de passe) en dépliant **« Tu es l'hôte et tu reprends ta
+table ? »** et en collant la clé du relais.
+
+> Une limite qui reste, et elle est structurelle : si l'hôte **recharge sa
+> page**, le moteur part avec elle. Le relais ne garde qu'un plateau PUBLIC,
+> mains retirées — il ne peut pas rendre les cartes de chacun. La reprise sert
+> aux coupures réseau, pas aux F5.
+
 **Un invité qui recharge sa page** revient dans la partie : il redonne
-l'identifiant et le mot de passe, tu lui rends son siège.
+l'identifiant et le mot de passe (ou reclique le lien d'invitation), et reprend
+son Titan, que l'IA tenait pendant son absence. Mais il n'a
+normalement pas à le faire : le bandeau violet, en haut de l'écran de jeu, porte
+un bouton **Rafraîchir** qui redemande le plateau à l'hôte sans quitter la
+table. C'est lui qu'il faut utiliser quand l'affichage semble figé — recharger
+l'onglet, lui, coupe la session et renvoie à l'écran d'accueil.
+
+**Un invité choisit son Titan lui-même** dans le salon : les Titans libres y sont
+cliquables. L'hôte garde la main — il peut réattribuer les sièges depuis son
+propre salon, et un Titan déjà pris ou confié à l'IA se refuse.
 
 ---
 
@@ -139,9 +196,12 @@ l'identifiant et le mot de passe, tu lui rends son siège.
 |---|---|
 | « Impossible de joindre le relais » | tunnel éteint, ou adresse recopiée de travers |
 | « Identifiant ou mot de passe incorrect » | l'un des deux est faux — le message ne dit pas lequel, c'est voulu |
-| « Clé du relais incorrecte » | la clé saisie ne correspond pas à celle du `.bat` |
+| « Clé du relais incorrecte » | la clé saisie ne correspond pas à celle affichée par le `.bat` — attention, elle change à chaque lancement |
 | « Trop de tentatives » | 10 échecs : attends un quart d'heure, ou redémarre le relais |
-| « L'hôte a quitté la partie » | l'onglet de l'hôte est fermé ou son PC en veille |
+| « L'hôte a quitté la partie » | l'hôte a cliqué **Fermer la table**. C'est la seule fin définitive |
+| « L'hôte s'est déconnecté… » | sa liaison est tombée. **La table reste ouverte**, le plateau est gardé, et la partie reprend à son retour |
+| « Le relais ne répond plus » | la fenêtre `JOUER-A-DISTANCE` a été fermée, ou la machine de l'hôte est en veille. Rouvre-la : la partie reprend toute seule |
+| « Cette table n'existe plus sur le relais » | elle a été fermée, ou le relais a redémarré — il ne garde rien sur disque |
 | « Connexion interrompue, reprise en cours » | coupure réseau ; ça se rattrape tout seul |
 
 Pour vérifier que le relais respire, ouvre `https://…/api/sante` dans un

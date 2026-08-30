@@ -6,7 +6,7 @@ import React, { Suspense, lazy } from "react";
 const Board3D = lazy(() => import("../board3d/Board3D.jsx"));
 import TitanResourceBand from "../titans/TitanResourceBand.jsx";
 import { TitanIcon, TitanBadge } from "../titans/TitanVisuals.jsx";
-import { TITAN_COLORS } from "../titans/constants.js";
+import { TITAN_COLORS, accentDeplacement, accentDeplacement3D } from "../titans/constants.js";
 import { COLOR_HEX, ROWS, isBuildingCell, isSocleMarker, socleValue } from "../../domain/index.js";
 import { BLOCK_NAME } from "../blockNames.js";
 import { btnStyle, cancelBtn } from "../styles.js";
@@ -14,6 +14,45 @@ import BlockIcon from "../BlockIcon.jsx";
 // Le Socle n'a pas d'icône de bloc : il porte la sienne, celle du jeu de traits.
 import Icon from "../icons.jsx";
 import { T, readout, eclaircir, ECLAT_2D, BLOC_SANS_RETOUCHE } from "../theme.js";
+
+/* ── EST-CE QU'ON JOUE SUR UN TÉLÉPHONE ? ──────────────────
+   Nikola, 2026-08-30 : « dans la version mobile le triple débris sur une case
+   dépasse de la case (passe peut-être qu'à 2, et après on prend l'information
+   au survol comme déjà là) ».
+
+   Trois icônes de 17 px et deux écarts tiennent en 53 px : c'était juste sur
+   une case de 68 px, et ça déborde franchement sur les 26 px que la feuille de
+   style laisse à une case sous 560 px de large. Le débordement mordait sur les
+   cases voisines, donc sur la lecture du plateau — exactement là où on ne peut
+   pas se le permettre.
+
+   Le nombre exact de débris reste lisible autrement : le badge en haut à
+   gauche le compte, et la fiche de la case le détaille au survol comme au
+   clic. Il n'y a donc rien à perdre à n'en dessiner que deux.
+
+   Le seuil est celui de la feuille de style (901 px, cf. `index.css`), et pas
+   un chiffre choisi ici : c'est elle qui décide de la taille des cases, cette
+   fonction ne fait que la lire. Le `matchMedia` absent (jsdom des tests, rendu
+   côté serveur) vaut « écran large » : c'est le rendu d'avant, inchangé. */
+function useEcranEtroit() {
+  const [etroit, setEtroit] = React.useState(false);
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const mq = window.matchMedia("(max-width: 900px)");
+    const suivre = () => setEtroit(mq.matches);
+    suivre();
+    /* `addEventListener` sur un MediaQueryList n'existe pas avant Safari 14,
+       et ce jeu se joue sur des tablettes qui traînent. `addListener` est
+       déprécié mais répond encore partout. */
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", suivre);
+      return () => mq.removeEventListener("change", suivre);
+    }
+    mq.addListener(suivre);
+    return () => mq.removeListener(suivre);
+  }, []);
+  return etroit;
+}
 
 /* ── LE SOL DE BIG CITY ────────────────────────────────────
    Un seul matériau pour la rue et pour la parcelle rasée : c'est le même sol,
@@ -63,6 +102,12 @@ export default function RoundPanels({ vm }) {
      le pointeur quitte la case et ne pose aucun voile, sans quoi le plateau
      deviendrait injouable a la souris. */
   const [hoverSource, setHoverSource] = React.useState(null);
+  /* Ce que la largeur de l'écran change dans le rendu du plateau : combien de
+     débris on dessine par case, et à quelle taille l'icône d'un Titan en
+     attente tient dans sa gouttière. Deux réglages, une seule mesure. */
+  const ecranEtroit = useEcranEtroit();
+  const DEBRIS_DESSINES = ecranEtroit ? 2 : 3;
+  const TAILLE_DEBRIS = ecranEtroit ? 15 : 17;
   /* Une seconde d'arret volontaire avant que la fiche d'un batiment ne
      s'ouvre au survol (Nikola : 2s etait trop long). Le minuteur vit dans
      une ref : le redemarrer ne doit pas provoquer de rendu. */
@@ -274,11 +319,29 @@ export default function RoundPanels({ vm }) {
      moment précis où l'œil est sur la grille. Sa couleur la ramène sur la
      case qu'on s'apprête à cliquer.
 
-     `placementRestant[0]` suffit ici : le bandeau lit la même tête de file, et
-     ce n'est qu'un affichage — la pose, elle, repart des Titans (cf.
-     `prochainAPlacer` dans le contrôleur). */
-  const titanQuiPose = (vm.placementRestant || [])[0] ?? null;
+     La grille lisait `placementRestant[0]`, en supposant que le bandeau lisait
+     la même tête de file. Il ne la lisait pas : lui passe par `prochainAPlacer`,
+     qui se fie au drapeau `aPlacer` du Titan. Les deux divergent le temps d'un
+     rendu — la file garde son premier élément jusqu'à ce qu'un effet la solde,
+     le drapeau bascule tout de suite. Résultat, entre deux poses, le bandeau
+     annonçait « Titan 4 prend position » pendant que les cases s'allumaient en
+     orange, la couleur du Titan 2 qui venait de poser (constaté en partie à
+     distance le 2026-08-30, sur l'écran de l'hôte comme sur celui de l'invité :
+     c'est bien un désaccord local, pas un retard réseau).
+
+     Une seule règle, celle du contrôleur, et les deux disent enfin la même
+     chose. */
+  const titanQuiPose = vm.titanQuiPose ?? null;
   const accentPlacement = (titanQuiPose && TITAN_COLORS[titanQuiPose]?.accent) || "#FFD93D";
+  /* LES CASES DE DÉPLACEMENT PRENNENT LA COULEUR DE CELUI QUI SE DÉPLACE
+     (Nikola, 2026-08-30 : « je suis le Titan rose, mes cases de déplacement
+     passif sont bleues »). Le cyan était écrit en dur, et c'est exactement
+     l'accent du Titan 1 : la couleur avait l'air juste tant qu'on jouait
+     celui-là. Même règle que le placement d'ouverture juste au-dessus, et
+     même source pour les deux vues (cf. `accentDeplacement`). Le violet du
+     téléporteur, lui, ne bouge pas : il ne dit pas QUI se déplace mais PAR OÙ,
+     et c'est une information distincte. */
+  const accentMouvement = accentDeplacement(selectedTitanId);
   const accentPlacement3D = Number(`0x${accentPlacement.slice(1)}`);
 
   const traceParCase = new Map((traceVol || []).map((e) => [e.key, e]));
@@ -333,7 +396,7 @@ export default function RoundPanels({ vm }) {
     } else if (teaMode) {
       teaTargets.forEach((_, k) => add(k, 0xfb923c, 0.55));
     } else if (moveMode) {
-      moveClassic.forEach((k) => add(k, 0x71dbff, 0.55));
+      moveClassic.forEach((k) => add(k, accentDeplacement3D(selectedTitanId), 0.55));
       moveTeleport.forEach((k) => { if (!moveClassic.has(k)) add(k, 0xb88cff, 0.38); });
     } else if (recupMode) {
       recupPool.forEach((k) => add(k, 0xffd93d, 0.5));
@@ -555,16 +618,36 @@ export default function RoundPanels({ vm }) {
              icônes de 15 px seraient illisibles. Le chevauchement dit « ils
              sont deux au même endroit », ce qui est précisément le cas. */
           const seul = attendants.length === 1;
+          /* ── L'ICÔNE TIENT DANS SA GOUTTIÈRE, MÊME SUR TÉLÉPHONE ──
+             Nikola, 2026-08-30 : « sur mobile, un Titan en Warp déplace un peu
+             sur le plateau ».
+
+             La gouttière s'ouvre à 34 px quand elle est occupée — mais cette
+             largeur est posée en style en ligne, et la feuille de style la
+             REMPLACE par 14 px sous 560 px de large (`!important`, cf.
+             `.titan-grid` dans index.css). Une icône de 30 px se retrouvait
+             donc dans une piste de 14 : elle débordait sur la première colonne
+             du plateau, et le Titan éjecté avait l'air de mordre sur les cases
+             de la ligne A.
+
+             L'icône suit donc la largeur réelle de sa piste. Le
+             `overflow: hidden` ferme le cas restant — deux Titans qui
+             attendent au même endroit, dont le chevauchement est voulu mais ne
+             doit pas sortir de la gouttière pour autant. */
+          const tailleAttente = ecranEtroit ? (seul ? 13 : 11) : (seul ? 30 : 24);
           return (
             <div
               title={attendants
                 .map((t) => `${titanDisplayName(t.id)} attend hors de BIG CITY — rentre par ${cle} au début de son tour`)
                 .join(" · ")}
-              style={{ display: "flex", placeItems: "center", justifyContent: "center", opacity: 0.5 }}
+              style={{
+                display: "flex", placeItems: "center", justifyContent: "center",
+                opacity: 0.5, overflow: "hidden", minWidth: 0,
+              }}
             >
               {attendants.map((t, i) => (
-                <span key={t.id} style={{ marginLeft: i === 0 ? 0 : -10, display: "inline-flex" }}>
-                  <TitanIcon titanId={t.id} size={seul ? 30 : 24} />
+                <span key={t.id} style={{ marginLeft: i === 0 ? 0 : (ecranEtroit ? -5 : -10), display: "inline-flex" }}>
+                  <TitanIcon titanId={t.id} size={tailleAttente} />
                 </span>
               ))}
             </div>
@@ -722,9 +805,9 @@ export default function RoundPanels({ vm }) {
               } else if (teaSelectable) {
                 cellBg = "rgba(251,146,60,.25)"; // orange TEA
               } else if (moveIsClassic) {
-                cellBg = "rgba(113,219,255,.25)"; // classique : +10% opacité (0.25 vs 0.15)
+                cellBg = `${accentMouvement}40`; // classique : +10% opacité (0.25 vs 0.15)
               } else if (moveIsTeleport) {
-                cellBg = "rgba(113,219,255,.15)"; // téléporteur : plus transparent
+                cellBg = `${accentMouvement}26`; // téléporteur : plus transparent
               } else if (recupSelectable) {
                 cellBg = "rgba(255,217,61,.15)";
               } else if (bbBloquee) {
@@ -996,12 +1079,18 @@ export default function RoundPanels({ vm }) {
                             retour à la ligne (`flexWrap` retiré, il aurait poussé
                             la troisième sous les deux autres au premier pixel
                             manquant). */}
-                        <div style={{ position: "absolute", bottom: 1, left: 2, display: "flex", gap: 1, maxWidth: "94%", alignItems: "center", zIndex: 4 }}>
-                          {colorBlocks.slice(-3).map((c, i) => (
-                            <BlockIcon key={i} color={c} size={17} />
+                        {/* `overflow: hidden` en plus du comptage : c'est la
+                            ceinture qui va avec les bretelles. Un « +N » à deux
+                            chiffres, une police de repli plus large — il suffit
+                            de peu pour repasser au-dessus de la case, et le
+                            débordement d'une case se lit comme un contenu de la
+                            case voisine. Rien ne doit sortir d'une case. */}
+                        <div style={{ position: "absolute", bottom: 1, left: 2, right: 2, display: "flex", gap: 1, alignItems: "center", overflow: "hidden", zIndex: 4 }}>
+                          {colorBlocks.slice(-DEBRIS_DESSINES).map((c, i) => (
+                            <BlockIcon key={i} color={c} size={TAILLE_DEBRIS} />
                           ))}
-                          {colorBlocks.length > 3 && (
-                            <span style={{ fontSize: "9px", color: "rgba(255,255,255,.75)", fontWeight: 700, lineHeight: "11px" }}>+{colorBlocks.length - 3}</span>
+                          {colorBlocks.length > DEBRIS_DESSINES && (
+                            <span style={{ fontSize: "9px", color: "rgba(255,255,255,.75)", fontWeight: 700, lineHeight: "11px" }}>+{colorBlocks.length - DEBRIS_DESSINES}</span>
                           )}
                         </div>
                       </>

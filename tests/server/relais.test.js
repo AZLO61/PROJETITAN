@@ -15,7 +15,7 @@
    pas se marcher dessus, et rien ne reste ouvert après coup.
 ============================================================ */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { serveur, salles, compteursIp } from "../../server/relais.mjs";
+import { serveur, salles, compteursIp, menage } from "../../server/relais.mjs";
 
 let base = "";
 
@@ -493,5 +493,142 @@ describe("Quitter la table", () => {
     expect(salle).toBeTruthy();
     expect(salle.participants.size).toBe(1);
     expect(salle.sieges).toEqual({});
+  });
+});
+
+/* ============================================================
+   CE QUI ARRIVE AUX GENS QUAND ILS PARTENT — 2026-08-30
+   ============================================================
+   Trois demandes de Nikola le même jour, et une seule idée derrière : une
+   table ne se referme pas parce que quelqu'un s'absente.
+
+     · « on doit savoir qui a quitté la partie » ;
+     · « si c'est l'hôte, tant que le relais est ouvert on ne ferme pas la
+       partie » ;
+     · « si un joueur quitte, une IA reprend sa place ».
+
+   Le relais tient les deux premières ; la troisième vit dans le contrôleur,
+   mais elle a besoin de la première pour savoir QUEL Titan rendre à l'IA.
+============================================================ */
+describe("Un départ se nomme, et rend son siège", () => {
+  it("annonce le partant et le Titan qu'il libère", async () => {
+    const hote = await creerPartie();
+    const r = await poster("/api/rejoindre", {
+      id: hote.id, motDePasse: hote.motDePasse, pseudo: "Eddy",
+    });
+    const invite = await r.json();
+
+    // L'hôte lui donne le Titan 3, puis l'invité s'en va.
+    await poster("/api/envoyer", {
+      id: hote.id, jeton: hote.jeton,
+      message: { t: "sieges", sieges: { 3: invite.ref } },
+    });
+    await poster("/api/quitter", { id: hote.id, jeton: invite.jeton });
+
+    const flux = await fetch(
+      `${base}/api/flux?id=${hote.id}&jeton=${hote.jeton}&versionEtat=0`
+    ).then((x) => x.json());
+    const depart = (flux.messages || []).find((m) => m.t === "depart");
+
+    expect(depart).toBeTruthy();
+    expect(depart.pseudo).toBe("Eddy");
+    // Le siège part AVEC le message : l'hôte n'a pas à comparer deux listes.
+    expect(depart.titanId).toBe(3);
+    expect(flux.sieges[3]).toBeUndefined();
+  });
+});
+
+describe("Un hôte muet ne ferme pas la table", () => {
+  it("la salle survit au ménage, et la table est prévenue sans être coupée", async () => {
+    const hote = await creerPartie();
+    const invite = await poster("/api/rejoindre", {
+      id: hote.id, motDePasse: hote.motDePasse, pseudo: "Eddy",
+    }).then((r) => r.json());
+
+    // On vieillit l'hôte au-delà de sa grâce, sans toucher à l'invité.
+    const salle = salles.get(hote.id);
+    salle.participants.get(hote.jeton).vuLe = Date.now() - 10 * 60_000;
+    menage();
+
+    // La salle tient, avec son plateau : c'est tout l'enjeu.
+    expect(salles.has(hote.id)).toBe(true);
+
+    const flux = await fetch(
+      `${base}/api/flux?id=${hote.id}&jeton=${invite.jeton}&versionEtat=0`
+    ).then((r) => r.json());
+    const types = (flux.messages || []).map((m) => m.t);
+    expect(types).toContain("hoteAbsent");
+    // Surtout PAS `hoteParti` : celui-là arrête la partie pour tout le monde.
+    expect(types).not.toContain("hoteParti");
+  });
+
+  it("mais « Fermer la table » ferme bien la table", async () => {
+    const hote = await creerPartie();
+    await poster("/api/rejoindre", { id: hote.id, motDePasse: hote.motDePasse, pseudo: "Eddy" });
+    await poster("/api/quitter", { id: hote.id, jeton: hote.jeton });
+    expect(salles.has(hote.id)).toBe(false);
+  });
+});
+
+describe("L'hôte reprend sa table", () => {
+  it("récupère le moteur avec le mot de passe ET la clé du relais", async () => {
+    process.env.CLE_RELAIS = "cle-de-test";
+    try {
+      const hote = await creerPartie("cle-de-test");
+      const salle = salles.get(hote.id);
+      salle.participants.get(hote.jeton).vuLe = Date.now() - 10 * 60_000;
+      menage();
+
+      const repris = await poster("/api/rejoindre", {
+        id: hote.id, motDePasse: hote.motDePasse, pseudo: "Nikola",
+        cleRelais: "cle-de-test",
+      }).then((r) => r.json());
+
+      expect(repris.siege).toBe("hote");
+      expect(repris.repriseHote).toBe(true);
+      // Jeton NEUF : l'ancien ne vaut plus rien, deux moteurs sur une table
+      // sont exactement ce que tout ce montage évite.
+      expect(repris.jeton).not.toBe(hote.jeton);
+      expect(salles.get(hote.id).hote).toBe(repris.jeton);
+    } finally {
+      delete process.env.CLE_RELAIS;
+    }
+  });
+
+  it("sans la clé, il rentre en simple invité", async () => {
+    process.env.CLE_RELAIS = "cle-de-test";
+    try {
+      const hote = await creerPartie("cle-de-test");
+      const salle = salles.get(hote.id);
+      salle.participants.get(hote.jeton).vuLe = Date.now() - 10 * 60_000;
+      menage();
+
+      const res = await poster("/api/rejoindre", {
+        id: hote.id, motDePasse: hote.motDePasse, pseudo: "Curieux",
+      }).then((r) => r.json());
+
+      expect(res.siege).toBe("invite");
+      expect(res.repriseHote).toBe(false);
+    } finally {
+      delete process.env.CLE_RELAIS;
+    }
+  });
+
+  it("tant que l'hôte est là, la clé ne donne pas son siège", async () => {
+    process.env.CLE_RELAIS = "cle-de-test";
+    try {
+      const hote = await creerPartie("cle-de-test");
+      // Aucun ménage : l'hôte relève toujours son courrier.
+      const res = await poster("/api/rejoindre", {
+        id: hote.id, motDePasse: hote.motDePasse, pseudo: "Doublon",
+        cleRelais: "cle-de-test",
+      }).then((r) => r.json());
+
+      // Une table n'a jamais deux arbitres.
+      expect(res.siege).toBe("invite");
+      expect(salles.get(hote.id).hote).toBe(hote.jeton);
+    } finally {
+      delete process.env.CLE_RELAIS;
+    }
   });
 });

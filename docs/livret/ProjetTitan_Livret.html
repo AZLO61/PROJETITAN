@@ -311,10 +311,11 @@
   <div class="grid-2">
     <div class="panel">
       <h4 class="kicker"><img src="Rebond_256.png" alt="Arrêt faute de puissance" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Arrêt faute de puissance</h4>
-      <p>Tout élément percutant un <strong>bâtiment avec <img src="Energie_256.png" alt="Énergie" class="icon-img--sm" style="vertical-align:middle"></strong> ou atteignant le <strong>bord du plateau</strong> sans l'énergie du Seuil 4 s'arrête net. <strong style="color:var(--y1)">Il ne repart pas en sens inverse.</strong></p>
+      <p>Tout élément percutant un <strong>bâtiment avec <img src="Energie_256.png" alt="Énergie" class="icon-img--sm" style="vertical-align:middle"></strong> sans l'énergie du Seuil 4 s'arrête net. <strong style="color:var(--y1)">Il ne repart pas en sens inverse.</strong></p>
+      <p style="margin-top:8px"><strong style="color:var(--y1)">Le bord du plateau, lui, n'arrête plus rien</strong> (ruling du 30 août 2026). Il demandait le Seuil 4 pour être franchi ; tout élément qui l'atteint traverse désormais par la Faille, quelle que soit son énergie.</p>
       <ul style="margin-top:10px;list-style:none;padding-left:0">
         <li style="padding:4px 0"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"> → l'élément <strong style="color:var(--y1)">sort du plateau</strong> et réapparaît de l'autre côté (bord opposé, ou point exactement opposé si la sortie est diagonale — voir encadré ci-dessous).</li>
-        <li style="padding:4px 0"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm"> → l'élément se pose sur la case <strong style="color:var(--y1)">adjacente</strong>, à la fois à celle où il était et à celle où il aurait dû aller (ou sur place, au bord du plateau).</li>
+        <li style="padding:4px 0"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm"> → l'élément se pose sur la case <strong style="color:var(--y1)">adjacente</strong>, à la fois à celle où il était et à celle où il aurait dû aller. Ne vaut que face à un obstacle : au bord du plateau, il traverse.</li>
       </ul>
       <div class="callout">Si la case de réapparition (sortie de Faille) est occupée → l'élément se pose sur une case <strong style="color:var(--y1)">adjacente</strong> entre la case d'impact et la case de destination, comme d'habitude.</div>
     </div>
@@ -396,11 +397,11 @@
 
   <h3 class="sub">Élément hors du plateau</h3>
   <div class="panel" style="border-color:rgba(255,217,61,.4)">
-    <p style="margin-bottom:10px">À l'arrivée d'un <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"> <strong>/</strong> <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> sur une case impossible, <strong style="color:var(--y1)">l'énergie restante décide du résultat</strong> :</p>
+    <p style="margin-bottom:10px">À l'arrivée d'un <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"> <strong>/</strong> <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> sur une case impossible, <strong style="color:var(--y1)">c'est la nature de l'obstacle qui décide</strong> — un bord se traverse toujours, un bâtiment fait mur sous le Seuil 4 :</p>
     <div class="grid-2">
       <div class="panel">
         <h4 class="kicker">🌀 Faille spatio-temporelle</h4>
-        <p>Si l'élément <strong style="color:var(--y1)">sort du plateau</strong> (bord dépassé, énergie suffisante) → il réapparaît <strong style="color:var(--y1)">du côté opposé</strong> (point exactement opposé si la sortie est diagonale, cf. encadré « Sortie diagonale du plateau ») et <strong>finit son déplacement</strong>. Le bouclage est possible plusieurs fois si l'énergie restante le permet. Les règles normales s'appliquent au reste de sa trajectoire.</p>
+        <p>Si l'élément <strong style="color:var(--y1)">sort du plateau</strong> (bord dépassé, <strong>sans aucune condition d'énergie</strong> — la traversée coûte 1, comme un pas de plus) → il réapparaît <strong style="color:var(--y1)">du côté opposé</strong> (point exactement opposé si la sortie est diagonale, cf. encadré « Sortie diagonale du plateau ») et <strong>finit son déplacement</strong>. Le bouclage est possible plusieurs fois si l'énergie restante le permet. Les règles normales s'appliquent au reste de sa trajectoire.</p>
       </div>
       <div class="panel">
         <h4 class="kicker">🚧 Case impossible</h4>
@@ -413,7 +414,7 @@
 
   <h3 class="sub">🥊 Titan poussé hors du plateau</h3>
   <div class="panel" style="border-color:rgba(255,146,57,.5)">
-    <p style="margin-bottom:10px">Un <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> poussé au-delà du bord ne rebondit pas et ne passe pas par la faille. <strong style="color:var(--o1)">C'est du catch : on le sort du ring.</strong> Aucune condition d'énergie, aucun seuil.</p>
+    <p style="margin-bottom:10px">Un <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"> poussé au-delà du bord ne rebondit pas et ne finit pas son déplacement de l'autre côté. <strong style="color:var(--o1)">C'est du catch : on le sort du ring.</strong> Aucune condition d'énergie, aucun seuil — comme pour un débris depuis le 30 août 2026. Ce qui change entre les deux n'est plus la condition mais la <strong>conséquence</strong> : le débris finit sa course de l'autre côté, le Titan quitte la partie jusqu'à son tour.</p>
     <div class="grid-2">
       <div class="panel">
         <h4 class="kicker">⏳ Il attend son tour</h4>

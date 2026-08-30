@@ -20,9 +20,12 @@
    classe de bugs qu'on ne referme jamais. Un seul arbitre, et le plateau qu'il
    voit fait foi.
 
-   Ce que ça coûte, et il faut le dire : si l'hôte ferme son onglet, la partie
-   s'arrête. Le relais l'annonce aux autres (`hoteParti`) au lieu de les laisser
-   attendre devant un plateau figé.
+   Ce que ça coûte, et il faut le dire : sans l'hôte, personne ne calcule. Mais
+   depuis le 2026-08-30, son absence n'efface plus rien — le relais garde la
+   salle et son dernier instantané, annonce `hoteAbsent` à la table, et rend le
+   moteur à l'hôte quand il revient (il redonne alors la clé du relais avec le
+   mot de passe). Seule la fermeture explicite de la table envoie `hoteParti`,
+   qui est la vraie fin.
 
    ── POURQUOI DU LONG-POLLING ──
 
@@ -41,6 +44,13 @@ export const MESSAGE = {
   CHAT: "chat",
   PRESENCE: "presence",
   HOTE_PARTI: "hoteParti",
+  /* Trois nouvelles du 2026-08-30, toutes de la même famille : dire ce qui
+     arrive aux gens plutôt que de laisser un plateau se figer sans explication.
+     `depart` nomme celui qui s'en va et rend son Titan ; `hoteAbsent` dit que
+     l'arbitre s'est tu SANS fermer la table ; `hoteRevenu` annonce sa reprise. */
+  DEPART: "depart",
+  HOTE_ABSENT: "hoteAbsent",
+  HOTE_REVENU: "hoteRevenu",
 };
 
 export function urlPropre(brut) {
@@ -77,6 +87,7 @@ function construireSession({
   const abonnes = {
     etat: new Set(), intention: new Set(), presence: new Set(),
     prive: new Set(), chat: new Set(), fin: new Set(), erreur: new Set(),
+    depart: new Set(), liaison: new Set(),
   };
   let vivante = true;
   let version = versionEtat || 0;
@@ -109,8 +120,14 @@ function construireSession({
         );
         if (!vivante) return;
         if (reponse.status === 403) {
-          // La salle a disparu (hôte parti, relais redémarré) : inutile d'insister.
-          emettre("fin", { raison: "Session terminée." });
+          /* La salle a disparu, et le relais, lui, répond : ce n'est donc pas
+             une coupure réseau. Deux causes seulement, et le joueur doit savoir
+             laquelle : l'hôte a fermé sa table, ou le relais a été redémarré et
+             a tout oublié (rien n'est jamais écrit sur disque). Dire « session
+             terminée » laissait croire à une fin de partie normale. */
+          emettre("fin", {
+            raison: "Cette table n'existe plus sur le relais — elle a été fermée, ou le relais a redémarré.",
+          });
           vivante = false;
           return;
         }
@@ -128,6 +145,18 @@ function construireSession({
             coupe = true;
           } else if (m.t === MESSAGE.PRESENCE) {
             emettre("presence", { joueurs: m.joueurs, sieges: m.sieges || {} });
+          } else if (m.t === MESSAGE.DEPART) {
+            emettre("depart", m);
+          } else if (m.t === MESSAGE.HOTE_ABSENT) {
+            /* Pas un `fin` : la table tient, son plateau aussi, et l'hôte peut
+               revenir la reprendre. On le dit sur le canal des nouvelles de
+               liaison, celui qui n'arrête rien. */
+            emettre("liaison", {
+              message: "L'hôte s'est déconnecté. La table reste ouverte : la partie reprendra à son retour.",
+              grave: true,
+            });
+          } else if (m.t === MESSAGE.HOTE_REVENU) {
+            emettre("liaison", { message: "L'hôte est de retour, la partie reprend.", grave: false });
           } else if (m.t === MESSAGE.INTENTION) emettre("intention", m);
           else if (m.t === MESSAGE.PRIVE) emettre("prive", m.charge);
           else if (m.t === MESSAGE.CHAT) emettre("chat", m);
@@ -140,8 +169,25 @@ function construireSession({
            On attend de plus en plus longtemps (1 s, 2 s, 4 s… plafonné à 10 s),
            et on prévient l'interface pour qu'elle dise « reconnexion » plutôt
            que de laisser croire que le tour est passé. */
+        /* ── DIRE QUAND LE RELAIS N'EST PLUS LÀ ──
+           Nikola, 2026-08-30 : « si le serveur a été fermé, il faut le savoir
+           aussi, avec un message d'information ».
+
+           Le message ne changeait jamais : « reprise en cours… », à l'infini,
+           qu'il s'agisse d'un wifi qui hoquette une seconde ou de la fenêtre du
+           relais fermée par mégarde. Le premier se rattrape tout seul et ne
+           demande rien à personne ; le second ne se rattrapera jamais, et il
+           faut aller rouvrir JOUER-A-DISTANCE.bat.
+
+           Trois échecs d'affilée, c'est déjà sept secondes de silence : au-delà
+           du hoquet, en deçà de la certitude. On nomme donc la cause probable à
+           partir de là, sans arrêter la boucle — elle continue de réessayer, et
+           se rattrape toute seule si le relais revient. */
         echecsDeSuite += 1;
-        emettre("erreur", { message: "Connexion interrompue, reprise en cours…", echecs: echecsDeSuite });
+        const message = echecsDeSuite >= 3
+          ? "Le relais ne répond plus. Vérifie que la fenêtre JOUER-A-DISTANCE est toujours ouverte — la partie reprendra dès qu'il répondra."
+          : "Connexion interrompue, reprise en cours…";
+        emettre("erreur", { message, echecs: echecsDeSuite });
         const attente = Math.min(1000 * 2 ** (echecsDeSuite - 1), 10_000);
         await new Promise((ok) => { setTimeout(ok, attente); });
       }
@@ -193,6 +239,28 @@ function construireSession({
 
     estVivante() { return vivante; },
 
+    /* ── REDEMANDER LE PLATEAU, SANS QUITTER LA PARTIE ──
+       Nikola, 2026-08-30 : « l'interface de l'invité n'était plus actualisée,
+       et quand je rafraîchis la page ça me remet sur le panneau d'accueil ;
+       il faudrait un bouton refresh sans relancer le panneau d'accueil ».
+
+       Recharger l'onglet est la mauvaise réponse à ce problème : la session
+       ne vit qu'en mémoire, donc F5 la détruit et renvoie à l'accueil. Ce
+       qu'on veut n'est pas de repartir de zéro, c'est de redemander l'état.
+
+       Deux gestes, et ils comptent tous les deux. `version = 0` fait mentir
+       le client sur ce qu'il a déjà vu : le relais ne descend l'état que
+       s'il a bougé depuis la version annoncée, donc en repartant de zéro on
+       le force à tout renvoyer. `abort()` solde le long-poll en cours, qui
+       pouvait dormir encore vingt-cinq secondes avec l'ANCIEN numéro de
+       version dans son URL — sans lui, le rafraîchissement n'aurait lieu
+       qu'à la requête suivante, et le bouton semblerait ne rien faire. */
+    resynchroniser() {
+      if (!vivante) return;
+      version = 0;
+      controleur?.abort();
+    },
+
     async quitter() {
       if (!vivante) return;
       vivante = false;
@@ -233,11 +301,15 @@ export async function creerSession({ urlRelais, cleRelais, pseudo }) {
   return construireSession({ base, ...res });
 }
 
-export async function rejoindreSession({ urlRelais, id, motDePasse, pseudo }) {
+/* `cleRelais` est FACULTATIVE, et n'a qu'un seul usage : reprendre le siège
+   d'hôte d'une table dont l'hôte s'est tu. Un invité n'en a jamais besoin et ne
+   la connaît pas ; l'hôte qui revient la fournit, et le relais lui rend le
+   moteur si et seulement si la place est libre. */
+export async function rejoindreSession({ urlRelais, id, motDePasse, pseudo, cleRelais }) {
   const base = urlPropre(urlRelais);
   const res = await appeler(`${base}/api/rejoindre`, {
     method: "POST",
-    body: JSON.stringify({ id: String(id || "").trim(), motDePasse, pseudo }),
+    body: JSON.stringify({ id: String(id || "").trim(), motDePasse, pseudo, cleRelais }),
   });
   return construireSession({ base, ...res });
 }

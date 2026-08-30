@@ -432,9 +432,13 @@ function SectionTransversales() {
       <Sub>Arrêt faute de puissance et projection</Sub>
       <Panel style={{ marginBottom: 10 }}>
         <strong style={{ color: C.teal }}>Arrêt faute de puissance —</strong> un élément qui percute
-        un bâtiment ou atteint le bord du plateau sans l'énergie du Seuil 4 s'arrête net, sur une
-        case adjacente à la fois à celle où il se trouvait et à celle qu'il visait (ou sur place,
-        au bord du plateau, faute de case au-delà). Il ne repart plus en sens inverse.
+        un bâtiment sans l'énergie du Seuil 4 s'arrête net, sur une case adjacente à la fois à celle
+        où il se trouvait et à celle qu'il visait. Il ne repart plus en sens inverse.
+        <div style={{ marginTop: 10 }}>
+          <strong style={{ color: C.y1 }}>Le bord du plateau n'arrête plus rien.</strong> Il
+          demandait autrefois le Seuil 4 pour être franchi ; ce n'est plus le cas depuis le 30 août
+          2026. Un élément qui l'atteint traverse, quelle que soit son énergie.
+        </div>
       </Panel>
       <Panel style={{ marginBottom: 10 }}>
         <strong style={{ color: C.teal }}>Projection —</strong> un <strong>Titan</strong> qui arrive
@@ -484,8 +488,17 @@ function SectionTransversales() {
         dans la direction du choc. En dessous du Seuil 4, le bâtiment fait mur comme avant.
       </Panel>
       <Panel>
-        <strong style={{ color: C.teal }}>🌀 Faille spatio-temporelle —</strong> un élément qui sort du
-        plateau avec une énergie de 4 ou plus ressort par le bord opposé et poursuit sa trajectoire.
+        <strong style={{ color: C.teal }}>🌀 Faille spatio-temporelle —</strong> un élément qui sort
+        du plateau ressort par le bord opposé et poursuit sa trajectoire.{" "}
+        <strong style={{ color: C.y1 }}>Sans aucune condition d'énergie</strong> — la traversée coûte
+        simplement 1 de l'énergie restante, comme un pas de plus. Arrivé au bord avec 1, l'élément
+        passe donc et se pose de l'autre côté au lieu de rester collé au rebord.
+        <div style={{ marginTop: 10 }}>
+          Un <strong>Titan</strong> poussé au-delà du bord, lui, ne finit pas son déplacement : il
+          quitte BIG CITY et rentre par le côté opposé au début de son propre tour (cf. « Poussé hors
+          du ring » ci-dessus). C'est la seule différence qui reste entre un Titan et un débris au
+          bord, et c'est une conséquence, plus une condition.
+        </div>
       </Panel>
 
       <Sub>Socles</Sub>

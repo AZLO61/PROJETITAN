@@ -370,18 +370,27 @@ describe("Un Titan poussé hors du plateau sort du ring", () => {
     expect(cible.horsPlateau).toBe(true);
   });
 
-  it("un débris, lui, garde la faille mais ne rebondit plus", () => {
+  it("un débris, lui, traverse la faille sans rebondir — et sans condition d'énergie", () => {
     setSeed(34);
-    // Même configuration, mais l'élément projeté est un débris : sous le
-    // Seuil 4 il ne sort pas du plateau — et depuis le ruling du
-    // 2026-08-18 (fini les rebonds qui repartent en arrière), il s'arrête
-    // net sur la case où il se trouve déjà, sans repartir en sens inverse.
+    /* Même configuration, mais l'élément projeté est un débris. Ce test
+       attendait « E9 », c'est-à-dire l'arrêt net au rebord : c'était le ruling
+       du 2026-08-18, où la faille demandait le Seuil 4 pour être franchie.
+
+       Nikola l'a levé le 2026-08-30 : « même le débris sort du plateau pour
+       passer de l'autre côté, qu'importe l'énergie ». Avec 2 d'énergie il
+       traverse donc, et se retrouve du côté opposé — le détail complet de la
+       règle est tenu par `faille-sans-condition.test.js`.
+
+       Ce que CE test garde de son intention d'origine, et qui n'a pas bougé :
+       il ne rebondit pas, il ne repart jamais vers l'attaquant. */
     const etat = { board: {}, looseBlocks: {}, titans: [titan(1, "E7")] };
     const landing = projectInDirection("E", 9, 0, 1, 2, {
       board: etat.board, looseBlocks: etat.looseBlocks, titans: etat.titans, log: [], initiatorId: 1,
     });
     expect(landing.hasBounced).toBe(false);
-    expect(landing.row + landing.col).toBe("E9");
+    const arrivee = landing.row + landing.col;
+    expect(arrivee).not.toBe("E9");                       // il ne reste pas collé au bord
+    expect(Number(arrivee.slice(1))).toBeLessThan(5);     // il est ressorti à l'ouest
   });
 });
 

@@ -1289,14 +1289,28 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
 
          Pour un TITAN, le bord n'est ni un mur ni une faille :
          · aucun rebond, il ne repart jamais vers l'attaquant ;
-         · aucune condition de Seuil 4, la faille et son coût d'énergie ne
-           le concernent pas ;
          · il quitte le plateau et réapparaît du côté opposé, où il
            reprendra la partie à son tour.
 
-         Les débris, eux, gardent le comportement habituel : rebond sous le
-         Seuil 4, faille au-dessus. C'est la seule différence de traitement
-         entre un Titan et un débris sur un bord, et elle est voulue. */
+         ── LE DÉBRIS NON PLUS N'A PLUS DE CONDITION (Nikola, 2026-08-30) ──
+         « Finalement même le débris sort du plateau pour passer de l'autre
+         côté, qu'importe l'énergie ; donc normalement il n'y a plus aucune
+         condition différente. »
+
+         Le bord se franchissait au Seuil 4 seulement : en dessous, l'élément
+         s'arrêtait net dessus. Ce n'était pas seulement une règle de plus à
+         retenir, c'était la SEULE case du plateau où l'énergie changeait la
+         nature de ce qui arrive plutôt que sa portée — et elle produisait le
+         cas que Nikola a remonté à la table, un élément collé au rebord alors
+         que tout le monde attendait qu'il traverse.
+
+         Le bord n'est donc plus un obstacle pour personne. Ce qui reste
+         différent entre un Titan et un débris n'est plus une CONDITION mais
+         une CONSÉQUENCE, et elle est voulue : le Titan quitte la partie
+         jusqu'à son tour, le débris finit son déplacement de l'autre côté.
+
+         Le Seuil 4 garde tout le reste : il départage DIL et RAGE, et il
+         décide si un bâtiment percuté casse un bloc ou fait mur. */
       if (ctx.movingTitanId != null) {
         /* ── PAR OÙ IL REVIENT : LA MÊME TRAVERSÉE QUE LES DÉBRIS ──
            Ruling Nikola du 2026-08-18, en réponse au cas remonté en test
@@ -1321,9 +1335,10 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
 
            C'est aussi la règle de la faille spatio-temporelle appliquée aux
            débris, quelques lignes plus bas : un seul comportement de
-           traversée à retenir pour tout le jeu. Ce qui reste propre au Titan,
-           c'est de quitter la partie jusqu'à son tour au lieu de finir son
-           déplacement. */
+           traversée à retenir pour tout le jeu, et depuis le 2026-08-30 une
+           seule condition pour l'emprunter — aucune. Ce qui reste propre au
+           Titan, c'est de quitter la partie jusqu'à son tour au lieu de finir
+           son déplacement. */
         const sortieR = nr < 0 ? 8 : nr > 8 ? 0 : nr;
         const sortieC = nc < 1 ? 9 : nc > 9 ? 1 : nc;
 
@@ -1346,7 +1361,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         };
       }
 
-      if (remaining >= 4) {
+      {
         /* FAILLE SPATIO-TEMPORELLE — l'élément réapparaît du côté opposé.
 
            Bug remonté par Nikola en test réel le 2026-08-15 : « le bloc de
@@ -1376,21 +1391,17 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         else if (nr > 8) nr = 0;
         if (nc < 1) nc = 9;
         else if (nc > 9) nc = 1;
-        remaining -= 1; // le passage par la faille coûte 1 d'énergie
+        /* Le passage coûte 1 d'énergie, et c'est la seule chose que la
+           traversée demande encore. Un élément qui arrive au bord avec 1
+           traverse donc et se pose sur la case de sortie : il finit son
+           déplacement de l'autre côté au lieu de rester collé au rebord. */
+        remaining -= 1;
         // La case de sortie devient le point de chute de référence. Sans
         // ça, un obstacle rencontré juste après renvoyait l'élément sur sa
         // case de départ, à l'autre bout du plateau : c'est le bug du bloc
         // de G9 qui « finissait » sur I9, remonté en test réel.
         sortieDeFaille = rowFromIndex(nr) + nc;
         log.push(`🌀 Faille spatio-temporelle : l'élément ressort en ${sortieDeFaille} (énergie restante ${remaining}).`);
-      } else {
-        // Ruling Nikola (test à la table, 2026-08-18) : fini les rebonds qui
-        // repartent en arrière. Sous le Seuil 4, l'élément qui atteint le
-        // bord sans pouvoir franchir la faille s'arrête net, sur la case où
-        // il se trouve déjà — il n'existe pas de case "adjacente à la case
-        // visée" à proposer ici, puisque cette case est hors plateau.
-        log.push(`${rowFromIndex(r)}${c} : bord du plateau atteint, énergie insuffisante pour la faille (${remaining}) → arrêt net, plus de rebond.`);
-        break;
       }
     }
 
@@ -2328,28 +2339,57 @@ function resolveToutCasserCase(titanId, cible, gameState, percussion, bagarreSet
   }
 }
 
+/* ── UN ÉLÉMENT À LA FOIS, JUSQU'AU BOUT ──────────────────
+   Nikola, 2026-08-30 : « quand on déplace plusieurs éléments avec une action,
+   si j'ai un élément qui fait un rebond ou une percussion, je dois l'appliquer
+   avant de passer à l'élément suivant ».
+
+   Cette fonction enchaînait les QUATRE sous-cas de la carte, chacun balayant
+   tout le Périmètre : tous les bâtiments, puis tous les blocs, puis tous les
+   Titans, puis tous les Amas. Deux conséquences, et aucune n'est voulue.
+
+   La première est une divergence entre joueurs. L'humain résout déjà élément
+   par élément — il clique lequel part maintenant, et le suivant part d'un
+   plateau que le précédent a modifié (cf. `toutCasserFile` dans le contrôleur,
+   qui appelle `resolveToutCasserCase`). L'IA, elle, passait par ici. Deux
+   ordres de résolution pour la même carte, donc deux résultats possibles pour
+   le même coup : c'est exactement ce que ce fichier passe son temps à fermer.
+
+   La seconde est un ordre faux en lui-même. Un bloc projeté qui rebondit peut
+   revenir sur une case que le sous-résolveur suivant s'apprête à traiter ; un
+   Titan poussé en chaîne peut libérer ou occuper une case avant qu'on ne la
+   frappe. Grouper par NATURE fait résoudre chaque élément sur un plateau
+   partiellement périmé — celui d'avant les rebonds des éléments précédents.
+
+   Un seul chemin, donc, et c'est celui de l'humain : on liste les cibles, et
+   chacune est résolue complètement — rebond, percussion, réaction en chaîne —
+   avant qu'on ne regarde la suivante. L'ordre des cibles reste celui du
+   Périmètre, le même que la file proposée au joueur.
+
+   Le relevé de percussion et le compteur de Bagarre restent COMMUNS à toute la
+   carte : une seule énergie, et un Titan distinct ne rapporte qu'une Bagarre
+   même s'il est touché deux fois (FAQ #12). C'est la seule chose que les
+   quatre sous-cas partageaient et qu'il fallait garder. */
 function resolveToutCasser(titanId, gameState, adrenalineBonus = 0) {
-  // Enchaîne les 4 sous-cas de la carte 01 · Tout Casser, tous alimentés par
-  // le MÊME relevé de percussion (cf. releverPercussion) : une carte, une
-  // énergie, une liste de cibles.
-  //
-  // ...et par le MÊME compteur de Bagarre : les quatre sous-cas peuvent
-  // bousculer un Titan en chaîne, mais un Titan distinct ne rapporte qu'UNE
-  // Bagarre pour toute la carte (FAQ #12). Crédité une seule fois, ici.
   const percussion = releverPercussion(titanId, gameState, adrenalineBonus);
   const bagarreSet = new Set();
-  const r1 = resolveToutCasserBatiments(titanId, gameState, adrenalineBonus, percussion, bagarreSet);
-  const r2 = resolveToutCasserBlocs(titanId, gameState, adrenalineBonus, percussion, bagarreSet);
-  const r3 = resolveToutCasserTitans(titanId, gameState, adrenalineBonus, percussion, bagarreSet);
-  const r4 = resolveToutCasserAmas(titanId, gameState, adrenalineBonus, percussion, bagarreSet);
-  const logBagarre = [];
-  crediterBagarre(gameState.titans.find((t) => t.id === titanId), bagarreSet, logBagarre);
-  const logBascule = basculerToursSousTitans(titanId, gameState);
+  const cibles = listerCiblesToutCasser(titanId, gameState, percussion);
+
+  const log = [];
+  const decisions = [];
+  for (const cible of cibles) {
+    const res = resolveToutCasserCase(titanId, cible, gameState, percussion, bagarreSet);
+    log.push(...(res.log || []));
+    decisions.push(...(res.decisions || []));
+  }
+
+  crediterBagarre(gameState.titans.find((t) => t.id === titanId), bagarreSet, log);
+  log.push(...basculerToursSousTitans(titanId, gameState));
   return {
     energie: percussion.energie,
     seuil4: percussion.seuil4,
-    log: [...r1.log, ...r2.log, ...r3.log, ...r4.log, ...logBagarre, ...logBascule],
-    decisions: [...(r3.decisions || [])],
+    log,
+    decisions,
   };
 }
 

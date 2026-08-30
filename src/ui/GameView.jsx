@@ -20,6 +20,97 @@ import PodiumFinal from "./panels/PodiumFinal.jsx";
 import { T, marquee, readout, label } from "./theme.js";
 import Icon from "./icons.jsx";
 
+/* ── LA LIAISON, ET COMMENT LA RATTRAPER ───────────────────
+   Nikola, 2026-08-30 : « l'interface et même le plateau de l'invité n'étaient
+   plus actualisés avec la partie, et le souci c'est que quand je rafraîchis la
+   page ça me remet sur le panneau d'accueil ; il faudrait un bouton refresh
+   sans relancer le panneau d'accueil ».
+
+   Les deux moitiés du problème tiennent dans ce bandeau. F5 est le mauvais
+   geste : la session ne vit qu'en mémoire, recharger l'onglet la détruit et
+   renvoie à l'écran d'accueil, table quittée. Ce bouton-ci ne recharge rien —
+   il redemande l'état à l'hôte sur la connexion déjà ouverte (cf.
+   `resynchroniser` dans `net/session.js`).
+
+   Et il dit à quoi on est branché. Une partie à distance qui décroche
+   ressemble, à l'écran, à une partie où personne ne joue : sans cette ligne,
+   « ça ne bouge plus » et « ils réfléchissent » ont exactement la même tête. */
+function BandeauDistant({ vm }) {
+  const invite = vm.session?.siege === "invite";
+  const nom = vm.monTitanDistant != null ? vm.titanDisplayName(vm.monTitanDistant) : null;
+  /* ── S'ASSEOIR EN COURS DE PARTIE ──
+     Nikola, 2026-08-30 : « un joueur peut rejoindre la partie en cours de
+     route, il prend juste un Titan qui était géré par IA ».
+
+     Le choix du Titan vivait uniquement dans le salon, c'est-à-dire avant le
+     lancement. Un joueur arrivé en cours de Manche — ou revenu après une
+     déconnexion — atterrissait donc sur le plateau sans siège et sans aucun
+     moyen d'en prendre un : spectateur pour le reste de la partie.
+
+     La liste ne montre que ce qui est réellement disponible : un Titan que
+     personne ne tient, ou que l'IA tient à la place de quelqu'un. Le clic
+     DEMANDE, comme dans le salon ; c'est l'hôte qui tranche. */
+  const sansSiege = invite && vm.monTitanDistant == null;
+  const dispos = sansSiege
+    ? Array.from({ length: vm.nbJoueurs }, (_, i) => i + 1)
+      .filter((id) => !vm.distantSieges?.[id])
+    : [];
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+      border: `2px solid ${T.tele}`, borderRadius: T.rChip,
+      padding: "7px 11px", marginBottom: T.s3, background: "rgba(184,140,255,.08)",
+    }}>
+      <Icon name="teleport" size={13} style={{ color: T.tele }} />
+      <span style={label(T.tele, T.micro)}>
+        Table {vm.session.id} · {invite ? "invité" : "hôte"}
+      </span>
+      {nom && <span style={label(T.dim, T.micro)}>tu joues {nom}</span>}
+      {/* L'avis de liaison n'apparaît que quand il a quelque chose à dire :
+          « reconnexion en cours », « diffusion impossible ». */}
+      {vm.distantAvis && (
+        <span style={{ ...label(T.warn, T.micro), flex: "1 1 180px" }}>{vm.distantAvis}</span>
+      )}
+      {sansSiege && (
+        <span style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", flex: "1 1 100%" }}>
+          <span style={label(T.you, T.micro)}>
+            {dispos.length > 0 ? "Prends un Titan :" : "Aucun Titan libre pour l'instant."}
+          </span>
+          {dispos.map((id) => (
+            <button
+              key={id}
+              onClick={() => vm.demanderSiege && vm.demanderSiege(id)}
+              title={vm.titanModes?.[id] === "ia"
+                ? `${vm.titanDisplayName(id)} est tenu par l'IA — reprends-le`
+                : `${vm.titanDisplayName(id)} est libre`}
+              style={{
+                ...label(T.text, T.micro),
+                background: "none", border: `2px solid ${T.rule}`, borderRadius: T.rChip,
+                padding: "4px 9px", cursor: "pointer",
+              }}
+            >
+              {vm.titanModes?.[id] === "ia" ? "🤖 " : ""}{vm.titanDisplayName(id)}
+            </button>
+          ))}
+        </span>
+      )}
+      <button
+        onClick={vm.resynchroniserSession}
+        title="Redemande le plateau à l'hôte. Ne recharge pas la page et ne quitte pas la table."
+        style={{
+          ...label(T.tele, T.micro), marginLeft: "auto",
+          background: "none", border: `2px solid ${T.tele}`, borderRadius: T.rChip,
+          padding: "5px 11px", cursor: "pointer",
+          display: "inline-flex", alignItems: "center", gap: 6,
+        }}
+      >
+        <Icon name="undo" size={12} />
+        Rafraîchir
+      </button>
+    </div>
+  );
+}
+
 /* ── LE FRONTON ────────────────────────────────────────────
    Le haut d'une borne d'arcade porte son titre en grand, éclairé par
    l'arrière, et juste dessous l'afficheur : où on en est. C'est la première
@@ -209,6 +300,8 @@ export default function GameView(vm) {
         />
 
         <HeaderPhase vm={vm} />
+
+        {vm.session && <BandeauDistant vm={vm} />}
 
 
         {/* ── UNE SEULE DÉCISION À L'ÉCRAN ──
