@@ -906,9 +906,36 @@ if (lanceDirectement) {
   serveur.listen(PORT, () => {
     console.log(`Relais Projet Titan à l'écoute sur http://localhost:${PORT}`);
     if (cleAttendue()) {
-      // Jamais la clé elle-même dans le journal : une fenêtre de console reste
-      // ouverte, se photographie et se partage en capture d'écran.
-      console.log("Clé du relais : définie — seul qui la connaît peut ouvrir une table.");
+      /* ── LA CLÉ S'AFFICHE ICI, ET C'EST UN REVIREMENT ASSUMÉ ──
+         Elle ne s'écrivait pas dans ce journal, au motif qu'une fenêtre de
+         console reste ouverte et se photographie. Le raisonnement tenait tant
+         que la clé vivait ailleurs.
+
+         Nikola, 2026-08-30 : « je n'ai plus la fenêtre CMD avec l'adresse
+         relais et clé relais qui s'affiche en clair ». Depuis qu'elle est tirée
+         au sort à chaque lancement, elle n'existe QUE dans la fenêtre du
+         lanceur — perdue celle-là, la clé est irrécupérable, et il faut tout
+         relancer alors que le relais tourne très bien.
+
+         Cette fenêtre-ci est celle qu'on garde ouverte toute la partie. C'est
+         donc le bon endroit. Ce que ça coûte est mince et déjà payé ailleurs :
+         la clé est de toute façon affichée par le lanceur, et elle est lisible
+         dans l'environnement de ce processus par n'importe quel programme de
+         la machine. Ce qu'on gagne est net : elle ne se perd plus.
+
+         Ce qui reste vrai : ne pas partager une capture de CETTE fenêtre, et
+         ne jamais faire voyager la clé dans un lien. */
+      /* Encadrement en ASCII pur, et non en caracteres de dessin : cette
+         fenetre est un `cmd.exe`, dont la page de code par defaut rend les
+         traits Unicode en charabia. Une cle illisible ne vaut pas mieux
+         qu'une cle absente. */
+      console.log("");
+      console.log("  ==============================================");
+      console.log(`     CLE DU RELAIS : ${cleAttendue()}`);
+      console.log("  ==============================================");
+      console.log("  Elle t'ouvre une table dans le jeu, et te la rend si tu");
+      console.log("  te deconnectes. Tes joueurs n'en ont pas besoin.");
+      console.log("");
     } else {
       console.log("");
       console.log("  ⚠️  AUCUNE CLÉ DE RELAIS N'EST DÉFINIE.");

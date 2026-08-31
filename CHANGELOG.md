@@ -74,6 +74,34 @@ de dépiler la sienne — portée « actif », donc bornée à son propre tour.
   partie ne changeant pas le plateau public, le nouvel arrivant ne recevait sa
   main qu'au prochain coup de quelqu'un d'autre.
 
+### La fenêtre qui donne l'adresse et la clé ne se perd plus
+
+Nikola, 2026-08-30 : « je n'ai plus la fenêtre CMD avec l'adresse relais et clé
+relais qui s'affiche en clair ».
+
+**L'attente du tunnel lançait un PowerShell par seconde, quarante-cinq fois.**
+Démarrer PowerShell coûte une à trois secondes sur une machine chargée :
+l'attente annoncée « 5 à 15 secondes » durait en réalité deux à quatre MINUTES,
+pendant lesquelles la fenêtre ne dit rien et a tout l'air d'être plantée. On la
+ferme, ou on la perd derrière les autres, et on conclut qu'elle n'existe pas. Un
+seul PowerShell attend maintenant lui-même, en relisant le journal deux fois par
+seconde : le budget de 45 s redevient un vrai budget de 45 s, et l'adresse
+arrive en une demi-seconde quand elle est déjà là. La fenêtre dit aussi
+explicitement de ne pas la fermer.
+
+**Et la clé s'affiche désormais dans la fenêtre du relais.** C'est un revirement
+assumé : elle en était volontairement absente, au motif qu'une console reste
+ouverte et se photographie. Le raisonnement tenait tant que la clé vivait
+ailleurs — depuis qu'elle est tirée au sort à chaque lancement, elle n'existe
+QUE dans la fenêtre du lanceur, et perdre celle-ci rendait la clé
+irrécupérable alors que le relais tourne très bien. La fenêtre du relais est
+celle qu'on garde ouverte toute la partie : c'est le bon endroit. Le coût est
+mince et déjà payé — le lanceur l'affiche de toute façon, et elle est lisible
+dans l'environnement de ce processus par n'importe quel programme de la machine.
+
+Le livret dit maintenant comment retrouver l'une et l'autre sans rien relancer :
+la clé dans la fenêtre du relais, l'adresse dans le journal du tunnel.
+
 ### Une table ne se referme pas parce que quelqu'un s'absente
 
 Cinq demandes de Nikola, et une seule idée derrière.

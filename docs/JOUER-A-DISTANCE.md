@@ -93,6 +93,14 @@ Dans le jeu → **Jouer à distance** → **Ouvrir une table**.
 - **Clé du relais** : les 10 caractères affichés dans la fenêtre jaune du
   `.bat`, juste sous l'adresse. Elle change à chaque lancement.
 
+> **Tu as perdu la fenêtre jaune ?** La clé est aussi affichée en clair dans la
+> fenêtre du relais — celle qui reste ouverte toute la partie, en haut de son
+> texte. Et l'adresse du tunnel se relit dans son journal, sans rien relancer :
+>
+> ```
+> powershell -NoProfile -Command "(Select-String -Path $env:TEMP\titan-tunnel.log -Pattern 'https://[a-z0-9-]+\.trycloudflare\.com' -AllMatches).Matches[0].Value"
+> ```
+
 Le salon affiche alors trois choses : un **identifiant de 6 caractères**
 (`AB3K7P`), un **mot de passe tiré au sort** (`SV4K-QLRT`) et l'adresse. Les
 deux se dictent au téléphone : ni `I`, ni `O`, ni `0`, ni `1` dans l'alphabet
@@ -195,6 +203,8 @@ propre salon, et un Titan déjà pris ou confié à l'IA se refuse.
 | Symptôme | Cause probable |
 |---|---|
 | « Impossible de joindre le relais » | tunnel éteint, ou adresse recopiée de travers |
+| La fenêtre jaune ne vient jamais | elle attend l'adresse du tunnel, jusqu'à 45 s. Elle le dit (« Attente de l'adresse publique ») — ne la ferme pas, elle est peut-être derrière les autres |
+| J'ai fermé la fenêtre jaune | rien n'est perdu : la clé est dans la fenêtre du relais, l'adresse dans `%TEMP%	itan-tunnel.log` (commande ci-dessus) |
 | « Identifiant ou mot de passe incorrect » | l'un des deux est faux — le message ne dit pas lequel, c'est voulu |
 | « Clé du relais incorrecte » | la clé saisie ne correspond pas à celle affichée par le `.bat` — attention, elle change à chaque lancement |
 | « Trop de tentatives » | 10 échecs : attends un quart d'heure, ou redémarre le relais |
