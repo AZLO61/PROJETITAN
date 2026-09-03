@@ -4,6 +4,9 @@ import {
   scanGraouhhhAxis,
   advanceGraouhhh,
   canDil,
+  getDilOptions,
+  ADRENALINE_OPTION,
+  SOCLE_OPTION,
 } from "../../src/domain/gameRules.js";
 
 /* ============================================================
@@ -83,8 +86,10 @@ describe("« Graouhhh sur 3 Titans : seul le plus proche a perdu un élément »
      `rulesContent.js`). Elles subissent tout le reste — recul, Fatigue,
      Bagarre, bonus d'Adrénaline —, elles ne perdent simplement aucun bloc.
 
-     Si la règle du Dilemme change un jour, c'est ce test qui doit tomber en
-     premier, et son intitulé dira pourquoi. */
+     Nikola a confirmé la règle le 2026-09-03, en l'assouplissant d'un cran :
+     l'Adrénaline compte désormais comme une option (bloc suivant). Les deux
+     cibles de ce scénario n'en avaient aucune, la conclusion ne bouge donc
+     pas — et c'est exactement ce que ce test vérifie. */
 
   it("les trois cibles reculent et subissent une Fatigue, une seule subit un Dilemme", () => {
     const main = () => ["tout_casser", "tete_en_avant", "boing_boing"];
@@ -126,5 +131,77 @@ describe("« Graouhhh sur 3 Titans : seul le plus proche a perdu un élément »
     // …et l'attaquant marque pour les trois.
     expect(titans[0].bagarre).toBe(3);
     expect(titans[0].adrenaline).toBe(2); // +1 par Titan touché au-delà du premier
+  });
+});
+
+describe("« Si la cible a au moins 1 bloc et 1 Adrénaline, un Dilemme est possible »", () => {
+  /* Tranché par Nikola le 2026-09-03, en réponse au Graouhhh ci-dessus. Le
+     Dilemme reste un CHOIX entre deux options ; ce qui change, c'est que
+     l'Adrénaline en est une, comme le Socle depuis le 2026-08-17. */
+
+  it("« 1 bloc + 1 Adrénaline » ouvre le Dilemme", () => {
+    const jeu = { titans: [t(2, "A2", { repaire: ["bleu"], adrenaline: 1 })] };
+    expect(getDilOptions(2, jeu)).toEqual(["bleu", ADRENALINE_OPTION]);
+    expect(canDil(2, jeu)).toBe(true);
+  });
+
+  it("l'Adrénaline ne compte qu'une fois, quel que soit le stock", () => {
+    // On ne perd qu'UNE ressource par Dilemme : proposer « 2 Adrénalines »
+    // comme second choix n'aurait aucun sens.
+    const jeu = { titans: [t(2, "A2", { repaire: ["bleu"], adrenaline: 4 })] };
+    expect(getDilOptions(2, jeu).filter((o) => o === ADRENALINE_OPTION)).toHaveLength(1);
+  });
+
+  it("0 bloc et de l'Adrénaline reste immunisé", () => {
+    // La phrase du ruling dit « à minima 1 bloc ET une Adrénaline ». Une seule
+    // option ne fait pas un dilemme.
+    const jeu = { titans: [t(2, "A2", { repaire: [], adrenaline: 3 })] };
+    expect(getDilOptions(2, jeu)).toEqual([ADRENALINE_OPTION]);
+    expect(canDil(2, jeu)).toBe(false);
+  });
+
+  it("sans Adrénaline, rien ne change", () => {
+    // Non-régression : c'est le cas de la partie qui a déclenché le ruling.
+    const jeu = { titans: [t(2, "A2", { repaire: ["bleu"], adrenaline: 0 })] };
+    expect(canDil(2, jeu)).toBe(false);
+  });
+
+  it("elle s'ajoute aux options existantes sans les remplacer", () => {
+    const jeu = { titans: [t(2, "A2", { repaire: ["bleu", "rose"], socles: [3], adrenaline: 2 })] };
+    expect(getDilOptions(2, jeu)).toEqual(["bleu", "rose", SOCLE_OPTION, ADRENALINE_OPTION]);
+  });
+});
+
+describe("« Quel que soit le maillon, l'initiateur avance sur la piste Bagarre »", () => {
+  /* Tranché par Nikola le 2026-09-03 : « à partir du moment où un Titan que
+     j'ai poussé en impacte un autre, quel que soit le maillon où il se trouve
+     dans la réaction, le Titan initiateur avance sur la piste Bagarre. »
+     C'est la FAQ #12 révisée le 2026-08-24 appliquée jusqu'au bout de la
+     chaîne, là où seule la cible directe en bénéficiait. */
+
+  it("un maillon de chaîne bloqué contre un mur rapporte quand même", () => {
+    const titans = [t(1, "A1"), t(2, "A2"), t(3, "A3")];
+    // A4 est un mur : Titan 3 est percuté par Titan 2, mais ne peut pas reculer.
+    const board = { A4: mur(), B2: mur(), B3: mur(), B4: mur() };
+    const bagarreSet = new Set();
+
+    projectInDirection("A", 1, 0, 1, 3, {
+      board, looseBlocks: {}, titans, log: [], replis: [], bagarreSet,
+      initiatorId: 1, movingTitanId: 2,
+    });
+
+    expect(titans[2].cell).toBe("A3");           // Titan 3 n'a pas bougé…
+    expect(bagarreSet.has(3)).toBe(true);        // …et compte quand même
+  });
+
+  it("un même Titan ne compte jamais deux fois", () => {
+    // Le Set dédoublonne : c'est le plafond que pose déjà la FAQ #12.
+    const titans = [t(1, "A1"), t(2, "A2")];
+    const bagarreSet = new Set();
+    projectInDirection("A", 1, 0, 1, 2, {
+      board: {}, looseBlocks: {}, titans, log: [], replis: [], bagarreSet,
+      initiatorId: 1, movingTitanId: null,
+    });
+    expect([...bagarreSet]).toEqual([2]);
   });
 });

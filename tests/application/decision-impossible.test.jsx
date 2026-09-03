@@ -47,7 +47,9 @@ describe("Décisions devenues impossibles avant d'être affichées", () => {
     act(() => {
       const d = vmCourant.titanState.players.find((t) => t.id === def);
       d.repaire = ["bleu"];       // une seule couleur
-      d.socles = [];              // et aucun Socle : 1 seule option
+      d.socles = [];              // aucun Socle
+      d.adrenaline = 0;           // et aucune Adrénaline (option depuis le 2026-09-03)
+                                  // → 1 seule option, le Dilemme est impossible
       vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
     });
 

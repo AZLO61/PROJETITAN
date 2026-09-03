@@ -140,9 +140,13 @@ describe("Bagarre : toucher suffit, le déplacement n'entre plus dans le calcul"
     const att = t(1, "E5", { programmed: ["tout_casser", "tout_casser", "tout_casser"] });
     const cible1 = t(2, "E6", { repaire: ["bleu"] });
     const cible2 = t(3, "D5", { repaire: ["bleu"] });
-    const mur = t(4, "C5"); // colle derrière cible2 pour la coincer
-    const titans = [att, cible1, cible2, mur];
-    const board = { ...bat("B5", 3) };
+    /* Le mur derrière cible2 était un QUATRIÈME TITAN jusqu'au 2026-09-03.
+       Depuis que toucher suffit à n'importe quel maillon de la chaîne
+       (ruling de Nikola ce jour-là), ce Titan-décor devenait lui-même une
+       Bagarre et le compte montait à 3 — la mesure ne disait plus ce que ce
+       test veut dire. Un bâtiment coince aussi bien, et ne se compte pas. */
+    const titans = [att, cible1, cible2];
+    const board = { ...bat("C5", 3), ...bat("B5", 3) };
 
     resolveFautPasMeChauffer(1, 2, 2, { board, titans, looseBlocks: {}, replis: [] });
     resolveFautPasMeChauffer(1, 3, 2, { board, titans, looseBlocks: {}, replis: [] });

@@ -22,7 +22,7 @@ const {
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, releverPercussion, listerCiblesToutCasser, resolveToutCasserCase, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
   scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, getJeNePartagePasCount, resolveJeNePartagePasElement, deplacerSiDerniereCaseLibre, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
   choisirRepliIA, appliquerRepli, appliquerReplElement,
-  canRage, canDil, SOCLE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
+  canRage, canDil, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
   getRecuperationPool, resolveRecuperation, retirerPileVide, programCards, ensureProgrammableHand, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
   resolveFatigue, refuserFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, resolveFautPasMeChauffer, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS,
@@ -82,6 +82,11 @@ function esperanceSocle(defender) {
 function valeurOptionDil(option, defender, attacker, allPlayers, decision) {
   const versRepaire = decision.destination === "repaire";
   if (option === SOCLE_OPTION) return esperanceSocle(defender);
+  /* L'Adrénaline ne se pose jamais au sol (FAQ #5) : quelle que soit la ligne
+     du tableau des destinations, elle passe chez l'attaquant. Sa valeur pour
+     lui est donc TOUJOURS son gain marginal à lui, jamais la perte de la
+     cible. */
+  if (option === ADRENALINE_OPTION) return valeurMarginaleAdrenaline(attacker.adrenaline || 0);
   if (versRepaire) return marginalValue(option, attacker.repaire, allPlayers, attacker.id);
   return marginalValue(option, defender.repaire, allPlayers, defender.id);
 }
@@ -90,6 +95,10 @@ function valeurOptionDil(option, defender, attacker, allPlayers, decision) {
    toujours la moins chère des deux. */
 function coutOptionDil(option, defender, allPlayers) {
   if (option === SOCLE_OPTION) return esperanceSocle(defender);
+  // Ce que lâcher son dernier jeton coûte à la cible : la valeur marginale du
+  // stock qu'il lui reste une fois celui-ci parti (même barème que le refus
+  // de Fatigue).
+  if (option === ADRENALINE_OPTION) return valeurMarginaleAdrenaline(Math.max(0, (defender.adrenaline || 0) - 1));
   return marginalValue(option, defender.repaire, allPlayers, defender.id);
 }
 
@@ -2919,6 +2928,20 @@ export function useBoardGeneratorController() {
        déjà emportée. Rien ne se perd — il n'y avait simplement plus rien à
        perdre — mais il faut l'écrire, sans quoi ça se lit comme un bloc disparu
        du jeu. */
+    /* L'Adrénaline perdue rejoint TOUJOURS l'attaquant, jamais le sol : il
+       n'existe pas de pile d'Adrénaline sur le plateau (FAQ #5, et le tableau
+       des destinations le note déjà pour la RAGE). Elle ne suit donc pas
+       `decision.destination`. */
+    if (color === ADRENALINE_OPTION) {
+      if ((defender.adrenaline || 0) < 1) return ` → mais Titan ${defender.id} n'a plus d'Adrénaline : rien n'est perdu.`;
+      defender.adrenaline -= 1;
+      if (attacker) {
+        attacker.adrenaline = (attacker.adrenaline || 0) + 1;
+        return ` → 1 Adrénaline passe chez Titan ${attacker.id}.`;
+      }
+      return " → 1 Adrénaline perdue.";
+    }
+
     if (color === SOCLE_OPTION) {
       const tire = retirerSocleAuSort(defender);
       if (!tire) return ` → mais Titan ${defender.id} n'a plus aucun Socle : rien n'est perdu.`;
@@ -3440,7 +3463,7 @@ export function useBoardGeneratorController() {
       }
 
       const suffixe = acheminerBlocPerdu(cur, defender, attacker, defChoice.color);
-      const quoi = defChoice.color === SOCLE_OPTION ? "1 Socle" : `1 bloc ${defChoice.color}`;
+      const quoi = defChoice.color === SOCLE_OPTION ? "1 Socle" : defChoice.color === ADRENALINE_OPTION ? "1 Adrénaline" : `1 bloc ${defChoice.color}`;
       setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} (IA) perd ${quoi} (décision automatique)${suffixe}`]);
       setTitanState((p) => ({ ...p, players: [...p.players] }));
     }
@@ -3456,7 +3479,7 @@ export function useBoardGeneratorController() {
       const defender = titanState.players.find((t) => t.id === cur.defenderId);
       const attacker = titanState.players.find((t) => t.id === cur.attackerId);
       const suffixe = acheminerBlocPerdu(cur, defender, attacker, color);
-      const quoi = color === SOCLE_OPTION ? "1 Socle" : `1 bloc ${color}`;
+      const quoi = color === SOCLE_OPTION ? "1 Socle" : color === ADRENALINE_OPTION ? "1 Adrénaline" : `1 bloc ${color}`;
       setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} perd ${quoi}${suffixe}`]);
       setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
       setDecisionQueue((prev) => prev.slice(1));

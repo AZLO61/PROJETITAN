@@ -60,18 +60,34 @@ canonique de « sur le plateau » au lieu de la recopier à moitié, et le simul
 ne plante plus sur une campagne massive (`Math.min(...tableau)` débordait la pile
 d'appel au moment de l'agrégation, après des heures de calcul).
 
-### Deux règles à trancher
+### Trois règles tranchées dans la foulée
 
-**Un maillon de chaîne bloqué rapporte-t-il sa Bagarre ?** La FAQ #12 révisée le
-24 août dit « touché » et non « déplacé », et les cinq résolveurs l'appliquent
-sur leur cible directe. La chaîne de réaction, elle, ne crédite que ce qui bouge.
-Le test écrit le jour même du ruling attend l'ancien comportement — les deux
-lectures se défendent, et l'écart change le score final. Rien n'a été modifié.
+**L'Adrénaline devient une option de Dilemme.** « On garde comme actuellement,
+mais si la cible dispose à minima de 1 bloc et une Adrénaline, un Dilemme est
+possible. » Le Dilemme reste un choix entre deux options — ce qui change, c'est
+ce qui compte comme option : l'Adrénaline en est une, exactement comme le Socle
+depuis le 17 août. Une cible « 1 bloc + 1 Adrénaline » a désormais deux choses à
+perdre, et personne n'est plus immunisé pour avoir tout misé sur une seule
+couleur. Elle ne compte qu'une fois quel que soit le stock — on ne perd qu'une
+ressource par Dilemme — donc « 0 bloc + 3 Adrénalines » reste intouchable.
+Perdue, elle passe TOUJOURS chez l'attaquant : il n'existe pas de pile
+d'Adrénaline sur le plateau, la FAQ #5 le disait déjà pour la Rage. Effet de bord
+à connaître : un Titan qui n'a que du Vert et un jeton devient attaquable, le
+Vert étant déjà désignable quand il est la seule couleur.
 
-**Une carte empruntée que la Fatigue met au frigo.** Si le voleur subit une
-Fatigue qui pioche justement la carte empruntée, la restitution de fin de Manche
-la reprend en Zone Repos et la rend à son propriétaire — l'embargo de la Fatigue
-saute. Aucun ruling ne couvre ce croisement.
+**Toucher suffit, à n'importe quel maillon de la chaîne.** « À partir du moment
+où un Titan que j'ai poussé en impacte un autre, quel que soit le maillon où il
+se trouve dans la réaction, le Titan initiateur avance sur la piste Bagarre. »
+C'est la FAQ #12 révisée le 24 août appliquée jusqu'au bout : les cinq résolveurs
+le faisaient déjà sur leur cible directe, la chaîne ne créditait que ce qui
+bouge. Un maillon plaqué contre un mur comptait pour rien. Le test du 24 août
+utilisait justement un quatrième Titan comme mur — il est remplacé par un
+bâtiment, qui coince aussi bien et ne se compte pas.
+
+**Une carte empruntée que la Fatigue met au frigo : la restitution l'emporte.**
+Comportement inchangé, désormais assumé : la carte sort du frigo et rentre en
+main de son propriétaire, l'embargo de la Fatigue saute, la dette est honorée à
+l'heure.
 
 
 ## Non publié — vingt-sixième passe du 2026-09-01 (la partie sur téléphone)

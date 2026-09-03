@@ -1,7 +1,8 @@
 import React from "react";
-import { COLOR_HEX, SOCLE_OPTION, getDilOptions } from "../../domain/index.js";
+import { COLOR_HEX, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions } from "../../domain/index.js";
 import { smallBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
+import { AdrenalineIcon } from "../icons.jsx";
 import { BLOCK_NAME } from "../blockNames.js";
 import { TitanIcon } from "../titans/TitanVisuals.jsx";
 
@@ -24,6 +25,10 @@ function TitanTag({ id, titanDisplayName }) {
    savent lequel partira — c'est ce qui empêche le Dilemme de devenir un
    sniper à 4 points. */
 function OptionIcon({ option, size = 30 }) {
+  /* Troisième option depuis le 2026-09-03 : l'Adrénaline. Elle porte l'icône
+     du jeu, la même que partout ailleurs — une option de Dilemme doit se
+     reconnaître au premier coup d'œil, sans lire son étiquette. */
+  if (option === ADRENALINE_OPTION) return <AdrenalineIcon size={size} />;
   if (option !== SOCLE_OPTION) return <BlockIcon color={option} size={size} />;
   return (
     <img
@@ -34,12 +39,16 @@ function OptionIcon({ option, size = 30 }) {
   );
 }
 
-const optionAccent = (option) => (option === SOCLE_OPTION ? "#d8d8d8" : COLOR_HEX[option]);
-const optionNom = (option) => (option === SOCLE_OPTION ? "Socle" : BLOCK_NAME[option]);
+const optionAccent = (option) =>
+  option === SOCLE_OPTION ? "#d8d8d8" : option === ADRENALINE_OPTION ? "#16E08C" : COLOR_HEX[option];
+const optionNom = (option) =>
+  option === SOCLE_OPTION ? "Socle" : option === ADRENALINE_OPTION ? "Adrénaline" : BLOCK_NAME[option];
 const compteOption = (defender, option) =>
   option === SOCLE_OPTION
     ? (defender.socles || []).length
-    : defender.repaire.filter((x) => x === option).length;
+    : option === ADRENALINE_OPTION
+      ? (defender.adrenaline || 0)
+      : defender.repaire.filter((x) => x === option).length;
 
 // Bug #6 (tracker) : DIL/RAGE était rendu tout en bas de l'écran (dans
 // DecisionPanels, après plateau 3D + panneau Titans), donc facilement
@@ -139,6 +148,11 @@ export default function DilRageBanner({ vm }) {
                 );
               })}
             </div>
+            {options.includes(ADRENALINE_OPTION) && (
+              <p style={{ margin: "0 0 8px", fontSize: ".72rem", color: "rgba(255,255,255,.55)" }}>
+                💉 L'Adrénaline est une option comme une autre : désignée et perdue, elle passe chez l'attaquant — elle ne tombe jamais au sol.
+              </p>
+            )}
             {options.includes(SOCLE_OPTION) && (
               <p style={{ margin: "0 0 8px", fontSize: ".72rem", color: "rgba(255,255,255,.55)" }}>
                 🗿 L'option Socle est tirée au sort : tu ne choisis pas lequel, et personne n'en connaît la valeur avant le tirage.

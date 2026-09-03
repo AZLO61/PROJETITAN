@@ -478,6 +478,12 @@ export function appliquerDecisions(decisions, etat, profile = makeProfile()) {
       // au Repaire de l'attaquant (cf. DESTINATION_BLOC_PERDU), un DIL qui
       // coûte moins cher à la cible mais lui rapporte davantage peut valoir
       // mieux qu'un DIL qui coûte plus cher à la cible sans rien lui donner.
+      /* ÉCART ASSUMÉ AVEC LE MOTEUR, à documenter plutôt qu'à corriger ici :
+         ce modèle ne compte que les COULEURS. Le vrai `getDilOptions` compte
+         aussi le Socle (2026-08-17) et l'Adrénaline (2026-09-03), donc une
+         cible « 1 couleur + 1 jeton » y subit un Dilemme que l'IA, elle, ne
+         voit pas venir. L'IA sous-estime ces coups ; elle n'en joue jamais
+         d'illégal, et c'est le sens de la marge. */
       const presentes = COULEURS_SCORABLES.filter((c) => compteCouleur(defenseur.repaire, c) > 0);
       if (presentes.length < 2) continue; // DIL structurellement impossible
 

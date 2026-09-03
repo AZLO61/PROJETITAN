@@ -1716,26 +1716,25 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
          Un débris qui pousse un Titan restait donc en arrière au lieu de
          prendre la case libérée : la poussée avait lieu, mais le tas de
          débris se formait une case trop tôt. */
-      /* ⚠️ POINT DE RÈGLE OUVERT — UN MAILLON DE CHAÎNE BLOQUÉ RAPPORTE-T-IL ?
-         (audit du 2026-09-03, à trancher par Nikola)
+      /* ── TOUCHER SUFFIT, À N'IMPORTE QUEL MAILLON DE LA CHAÎNE ──
+         Tranché par Nikola le 2026-09-03 : « à partir du moment où un Titan
+         que j'ai poussé en impacte un autre, quel que soit le maillon où il
+         se trouve dans la réaction, le Titan initiateur avance sur la piste
+         Bagarre. »
 
-         La FAQ #12 révisée le 2026-08-24 dit « TOUCHÉ » et non « déplacé » :
-         « juste je gagne la Bagarre, je gagne 1 case sur la piste,
-         déplacement ou non ». Les cinq résolveurs de carte l'appliquent déjà
-         sur leur cible DIRECTE (`bagarreSet.add(targetId)` sans condition), et
-         `appliquerReplElement` sur celle d'un repli.
+         C'est la FAQ #12 révisée le 2026-08-24 — « déplacement ou non » —
+         appliquée jusqu'au bout. Les cinq résolveurs de carte le faisaient
+         déjà sur leur cible DIRECTE et `appliquerReplElement` sur celle d'un
+         repli ; seule la chaîne de réaction était restée sur l'ancienne
+         sémantique, le crédit vivant après le `break` du cas « coincé ». Un
+         maillon plaqué contre un mur sortait donc du décompte : Tête en Avant
+         qui pousse un Titan contre un troisième, bloqué, rapportait +1 au
+         lieu de +2.
 
-         La chaîne de réaction, elle, est restée sur l'ancienne sémantique : le
-         crédit vit APRÈS le `break` ci-dessous, donc un maillon coincé sort du
-         décompte. Tête en Avant qui pousse un Titan contre un troisième,
-         lui-même bloqué, rapporte +1 et non +2.
+         Le Set dédoublonne : un même Titan ne compte jamais deux fois, quel
+         que soit le nombre de fois où la chaîne le rencontre. */
+      if (ctx.bagarreSet) ctx.bagarreSet.add(occupantTitanId);
 
-         Ce n'est pas corrigé, et volontairement : le test « Faut Pas Me
-         Chauffer : 2 combats gagnés au même tour = 2 Bagarre » écrit le jour
-         même du ruling attend exactement l'inverse (son quatrième Titan y sert
-         de mur, pas d'adversaire). Les deux lectures se défendent, et l'écart
-         change le score final — c'est un arbitrage de table, pas un correctif
-         de moteur. */
       if (caseApres === caseAvant) {
         // Occupant réellement coincé : personne n'a bougé. Le Titan en vol
         // s'arrête avant, le débris se pose quand même par-dessus.
@@ -1753,8 +1752,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         break; // reste sur la case actuelle (r, c)
       }
 
-      occupant.cell = caseApres;
-      if (ctx.bagarreSet) ctx.bagarreSet.add(occupantTitanId); // FAQ #12 : Titan distinct DÉPLACÉ en chaîne
+      occupant.cell = caseApres; // (Bagarre déjà créditée ci-dessus — toucher suffit)
       log.push(
         `${nextKey} : réaction en chaîne — Titan ${occupantTitanId} repoussé vers ${occupant.cell} (énergie transmise ${remainingAfterArrival}).`
       );
@@ -3898,6 +3896,28 @@ function canRage(defenderId, gameState) {
 ============================================================ */
 
 const SOCLE_OPTION = "socle";
+/* ── L'ADRÉNALINE EST UNE OPTION DE DILEMME ──
+   Tranché par Nikola le 2026-09-03, après un Graouhhh sur trois Titans où
+   deux cibles n'avaient rien perdu : « on garde comme actuellement, mais si
+   la cible dispose à minima de 1 bloc et une Adrénaline, un Dilemme est
+   possible. »
+
+   Le Dilemme reste donc un CHOIX entre deux options — la règle ne bouge pas.
+   Ce qui change, c'est ce qui compte comme option : l'Adrénaline en est une,
+   exactement comme le Socle. Une cible « 1 bloc + 1 Adrénaline » a désormais
+   deux choses à perdre, et n'est plus immunisée pour avoir tout misé sur une
+   seule couleur.
+
+   Elle ne compte qu'UNE FOIS quel que soit le stock : on ne perd qu'une
+   ressource par Dilemme, et proposer « 2 Adrénalines » n'aurait aucun sens
+   comme second choix. Une cible à 0 bloc et 2 Adrénalines reste donc
+   immunisée, ce qui est bien ce que dit la phrase de Nikola.
+
+   La FAQ #5 disait déjà la même chose côté RAGE (« une RAGE peut prendre une
+   Adrénaline plutôt qu'un bloc ») : les deux effets voient maintenant la même
+   réserve. Une Adrénaline perdue rejoint TOUJOURS l'attaquant, jamais le sol
+   — il n'existe pas de pile d'Adrénaline sur le plateau. */
+const ADRENALINE_OPTION = "adrenaline";
 
 function getDilOptions(defenderId, gameState) {
   const t = gameState.titans.find((x) => x.id === defenderId);
@@ -3917,12 +3937,14 @@ function getDilOptions(defenderId, gameState) {
   const options = sansVert.length > 0 ? sansVert : couleurs;
 
   if ((t.socles || []).length > 0) options.push(SOCLE_OPTION);
+  if ((t.adrenaline || 0) >= 1) options.push(ADRENALINE_OPTION);
   return options;
 }
 
 function canDil(defenderId, gameState) {
-  // Anciennement `new Set(t.repaire).size >= 2` : les Socles n'entraient pas
-  // dans le compte, donc une cible « 1 couleur + des Socles » était immunisée.
+  // Anciennement `new Set(t.repaire).size >= 2` : ni les Socles (2026-08-17)
+  // ni l'Adrénaline (2026-09-03) n'entraient dans le compte, donc une cible
+  // « 1 couleur + autre chose » était immunisée à tort.
   return getDilOptions(defenderId, gameState).length >= 2;
 }
 
@@ -5409,6 +5431,7 @@ export {
   canRage,
   canDil,
   SOCLE_OPTION,
+  ADRENALINE_OPTION,
   getDilOptions,
   retirerSocleAuSort,
   DESTINATION_BLOC_PERDU,
