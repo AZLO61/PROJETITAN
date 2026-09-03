@@ -2,6 +2,9 @@ import React, { Suspense, lazy } from "react";
 // Même traitement que la vue 3D : la page Règles n'est chargée qu'à la
 // première ouverture, elle ne pèse pas sur le démarrage du jeu.
 const RulesPage = lazy(() => import("./rules/RulesPage.jsx"));
+// Même traitement pour le tutoriel : sept écrans qu'on ouvre une fois dans une
+// vie de joueur n'ont rien à faire dans le paquet de démarrage.
+const TutorielPage = lazy(() => import("./rules/TutorielPage.jsx"));
 import HeaderPhase from "./panels/HeaderPhase.jsx";
 import RoundPanels from "./panels/RoundPanels.jsx";
 import BoardPanel from "./panels/BoardPanel.jsx";
@@ -94,19 +97,77 @@ function BandeauDistant({ vm }) {
           ))}
         </span>
       )}
-      <button
-        onClick={vm.resynchroniserSession}
-        title="Redemande le plateau à l'hôte. Ne recharge pas la page et ne quitte pas la table."
-        style={{
-          ...label(T.tele, T.micro), marginLeft: "auto",
-          background: "none", border: `2px solid ${T.tele}`, borderRadius: T.rChip,
-          padding: "5px 11px", cursor: "pointer",
-          display: "inline-flex", alignItems: "center", gap: 6,
-        }}
-      >
-        <Icon name="undo" size={12} />
-        Rafraîchir
-      </button>
+      {/* ── RAFRAÎCHIR : L'HÔTE, ET RIEN QUE L'ICÔNE ──
+          Nikola, 2026-09-01 : « seul l'hôte de la partie doit avoir le bouton
+          rafraîchir, et pas besoin d'afficher du texte, juste le bouton
+          suffit ».
+
+          Chez un invité il doublait une reprise que la boucle de réception
+          fait déjà seule. Chez l'hôte il repousse maintenant le plateau à
+          toute la table (cf. `resynchroniserSession`), ce qui est le seul
+          geste de rattrapage qui serve vraiment à quelque chose. Le mot
+          « Rafraîchir » part avec : dans une barre qui porte déjà le numéro de
+          table, le rôle, le Titan tenu et l'avis de liaison, une icône seule se
+          trouve aussi vite et prend cinq fois moins de place. */}
+      {!invite && (
+        <button
+          onClick={vm.resynchroniserSession}
+          aria-label="Renvoyer le plateau à toute la table"
+          title="Renvoie le plateau à tous les invités. Ne recharge pas la page et ne ferme pas la table."
+          style={{
+            ...label(T.tele, T.micro), marginLeft: "auto",
+            background: "none", border: `2px solid ${T.tele}`, borderRadius: T.rChip,
+            padding: "6px 9px", cursor: "pointer",
+            display: "inline-flex", alignItems: "center",
+          }}
+        >
+          <Icon name="undo" size={14} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ── QUI ARRIVE, QUI PART ────────────────────────────────
+   Nikola, 2026-09-01 : « si un joueur quitte la partie il faut un petit
+   panneau bien lisible pour ne pas le rater, pareil s'il rejoint ».
+
+   Il vit SOUS la barre de liaison et non dedans : celle-ci porte déjà quatre
+   informations permanentes, et une nouvelle glissée au milieu s'y serait lue
+   comme un cinquième réglage. Ici, c'est une plaque à part, qui apparaît puis
+   s'en va — la forme dit déjà qu'il vient de se passer quelque chose.
+
+   Le vert de l'arrivée et le rouge du départ sont les mêmes signaux que
+   partout ailleurs dans le jeu : on sait lequel des deux avant d'avoir lu. */
+function MouvementsDistants({ vm }) {
+  const mouvements = vm.distantMouvements || [];
+  if (mouvements.length === 0) return null;
+  return (
+    <div role="status" aria-live="polite" style={{ display: "grid", gap: 6, marginBottom: T.s3 }}>
+      {mouvements.map((m) => {
+        const arrive = m.type === "arrivee";
+        const ton = arrive ? T.go : T.stop;
+        return (
+          <div
+            key={m.id}
+            style={{
+              display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+              border: `${T.edgeW} solid ${ton}`, borderRadius: T.rChip,
+              padding: "9px 13px", background: `${ton}1f`,
+            }}
+          >
+            <Icon name={arrive ? "teleport" : "ringout"} size={16} style={{ color: ton }} />
+            <span style={label(ton, T.small)}>
+              {m.pseudo} {arrive ? "a rejoint la table" : "a quitté la table"}
+            </span>
+            {!arrive && (
+              <span style={{ ...label(T.faint, T.micro), marginLeft: "auto" }}>
+                son Titan repasse à l&apos;IA — il peut le reprendre en revenant
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -302,6 +363,7 @@ export default function GameView(vm) {
         <HeaderPhase vm={vm} />
 
         {vm.session && <BandeauDistant vm={vm} />}
+        {vm.session && <MouvementsDistants vm={vm} />}
 
 
         {/* ── UNE SEULE DÉCISION À L'ÉCRAN ──
@@ -467,6 +529,19 @@ export default function GameView(vm) {
       {vm.showRules && (
         <Suspense fallback={null}>
           <RulesPage onClose={() => vm.setShowRules(false)} />
+        </Suspense>
+      )}
+
+      {/* Le tutoriel, même mécanique que les Règles : une superposition, la
+          partie intacte derrière. Sa dernière page ouvre le livret — on ferme
+          l'un en ouvrant l'autre, pour ne jamais avoir deux plein-écrans
+          empilés. */}
+      {vm.showTutoriel && (
+        <Suspense fallback={null}>
+          <TutorielPage
+            onClose={() => vm.setShowTutoriel(false)}
+            onOuvrirRegles={() => { vm.setShowTutoriel(false); vm.setShowRules(true); }}
+          />
         </Suspense>
       )}
     </div>

@@ -1,5 +1,184 @@
 # Changelog
 
+## Non publié — vingt-septième passe du 2026-09-03 (l'audit)
+
+Trois points remontés après une partie, puis un audit de fond du moteur et de
+l'interface conduit dessus.
+
+### Les trois points de la partie
+
+**Un débris qui pousse un Titan prend sa place.** Deux garde-fous de la
+trajectoire arrêtaient tout ce qui vole devant un Titan. Ils existent pour une
+seule raison — deux TITANS ne partagent jamais une case — et s'appliquaient aussi
+aux débris, qui eux ont parfaitement le droit de se poser sur la case d'un Titan.
+La poussée avait donc lieu, mais le débris restait en arrière et le tas se
+formait une case trop tôt. Même chose face à un Titan coincé : il ne bouge pas,
+le débris se pose quand même par-dessus, comme le repli offensif le fait déjà
+depuis le 1er septembre.
+
+**Un tas de débris ne s'écrase plus sur lui-même.** Le pas d'empilement était
+fixe, à 42 % de l'icône — donc 58 % de recouvrement quel que soit le nombre de
+débris. Il avait été calibré sur le pire cas, une tour de quatre étages qui doit
+tenir dans la case ; le cas courant, deux ou trois débris, payait ce calibrage
+sans en avoir besoin. Le pas se calcule désormais sur la place réellement
+disponible : deux débris s'écartent largement (11 px au lieu de 7), quatre se
+resserrent juste ce qu'il faut pour rester dans la case.
+
+**Graouhhh sur trois Titans : rien à corriger.** Vérifié à la reproduction — les
+trois cibles reculent, subissent leur Fatigue et rapportent leur Bagarre, et
+l'attaquant touche bien ses +2 Adrénaline. Seule la plus proche subit un
+Dilemme, parce que les deux autres n'avaient qu'une couleur en Repaire et que le
+Dilemme exige deux options distinctes. Un test fige ce comportement, pour que la
+question ne se repose pas.
+
+### Ce que l'audit a trouvé
+
+**Une nouvelle partie coupe ce que l'ancienne avait lancé.** Le défaut le plus
+grave, et il se voyait à la table. Deux familles de minuteurs survivaient à
+« Nouvelle partie » : la cascade du tour d'une IA, qui s'étale sur près de huit
+secondes, et les trois secondes d'animation que l'interface s'accorde avant de
+résoudre Tout Casser, Graouhhh ou Faut Pas Me Chauffer. Les deux lisent l'état
+COURANT : après une régénération, ils appliquaient à de vrais Titans de la
+nouvelle partie des coups calculés sur l'ancienne. Un Titan bougeait tout seul
+quelques secondes après le lancement, une carte se jouait sans main pour la
+porter, et le panneau « clique les cibles » s'ouvrait sur des cases disparues.
+
+**La vue 3D rend sa mémoire en partant.** Les fuites de reconstruction avaient
+été réglées ; le démontage, lui, ne libérait rien — ni les 81 géométries du sol,
+ni les quatre caches de textures et de matériaux. Chaque aller-retour 2D/3D
+laissait donc sa trace sur la carte graphique. Sur un téléphone, une dizaine de
+bascules dans une partie longue suffisaient à faire ramer le rendu.
+
+**Deux séquences dangereuses réécrites.** La programmation des cartes et le
+placement d'un bloc faisaient leur travail depuis l'intérieur d'un `setState` —
+le motif déjà éliminé ailleurs dans le fichier. Le plus grave était l'envoi
+réseau : une programmation d'invité pouvait partir deux fois au relais. On lit,
+on décide, on écrit, dans cet ordre et une seule fois.
+
+**Deux garde-fous de fiabilité.** Le contrôle d'intégrité reprend la définition
+canonique de « sur le plateau » au lieu de la recopier à moitié, et le simulateur
+ne plante plus sur une campagne massive (`Math.min(...tableau)` débordait la pile
+d'appel au moment de l'agrégation, après des heures de calcul).
+
+### Deux règles à trancher
+
+**Un maillon de chaîne bloqué rapporte-t-il sa Bagarre ?** La FAQ #12 révisée le
+24 août dit « touché » et non « déplacé », et les cinq résolveurs l'appliquent
+sur leur cible directe. La chaîne de réaction, elle, ne crédite que ce qui bouge.
+Le test écrit le jour même du ruling attend l'ancien comportement — les deux
+lectures se défendent, et l'écart change le score final. Rien n'a été modifié.
+
+**Une carte empruntée que la Fatigue met au frigo.** Si le voleur subit une
+Fatigue qui pioche justement la carte empruntée, la restitution de fin de Manche
+la reprend en Zone Repos et la rend à son propriétaire — l'embargo de la Fatigue
+saute. Aucun ruling ne couvre ce croisement.
+
+
+## Non publié — vingt-sixième passe du 2026-09-01 (la partie sur téléphone)
+
+Deuxième retour de partie réelle à distance, joué sur mobile. Trente-trois
+points, en trois paquets : ce qui ne marche pas au doigt, ce qui manque à une
+table en ligne, et des règles à trancher.
+
+### Le moteur
+
+**Un rebond pousse un Titan.** Un élément arrêté faute de puissance se pose sur
+une case adjacente que l'attaquant désigne, et cette case peut porter un Titan —
+c'était même l'intérêt du choix, tranché le 19 août : « j'aurais aimé le mettre
+en A2 pour le faire sortir ». La poussée était pourtant réservée au repli qui
+déplace un TITAN ; un débris se contentait de se poser par-dessus l'occupant. La
+nature de ce qui arrive ne change plus rien à la poussée. Elle ne change que la
+suite quand la cible est coincée : un débris se pose alors sur sa case, un Titan
+reste sur son point de chute.
+
+**Une carte empruntée ne se perd plus.** « J'ai 7 cartes en main dont 2 doubles,
+ce n'est pas possible. » Une carte volée en Phase Repos peut atterrir dans la
+Zone Repos du VOLEUR — une Fatigue subie pioche dans sa main, où l'emprunt se
+trouve justement. La restitution ne fouillait pas cette liste, et vidait quand
+même l'ardoise : la carte revenait ensuite au voleur pour de bon. La Zone Repos
+est désormais fouillée, et une dette qu'on ne peut pas honorer reste ouverte
+jusqu'à la Phase Repos suivante.
+
+**Graouhhh se dose.** Elle était la seule carte offensive sans mise possible.
+Chaque Adrénaline dépensée allonge d'une case le recul de TOUS les Titans de
+l'axe — une seule poussée, une seule puissance. Elle n'est débitée que si l'axe
+touche quelqu'un.
+
+**Je Ne Partage Pas laisse choisir.** « En Lanterne Rouge j'avais un Socle et un
+débris sur la même case, j'ai eu le Socle sans avoir le choix. » Le moteur
+acceptait déjà une désignation d'élément — c'est ce qui fait marcher le passif
+Récupération — et cet appel-là ne la passait jamais : faute d'indication, on
+prend le sommet de la pile, et un Socle tombé en dernier y est toujours.
+
+**Les égalités en Lanterne Rouge se règlent avant la partie.** Cochées, tous les
+Titans les moins dotés en profitent, comme depuis toujours ; décochées, il faut
+être seul dernier. Les deux lectures se tiennent, donc ça se décide à la table.
+
+**Faut Pas Me Chauffer ferme l'annulation.** Désigner une cible révèle la somme
+de ses Forces. Pouvoir annuler après l'avoir lue revenait à sonder chaque
+adversaire sans s'engager, puis à choisir en connaissance de cause. La pile est
+vidée à la désignation, et de nouveau à la révélation des mises.
+
+### Une projection à la fois
+
+« On fait les résolutions cas par cas. J'ai eu le DIL APRÈS avoir projeté tous
+les éléments suivants. » La file de Tout Casser passait avant tout le reste dans
+l'ordre des décisions bloquantes : le Dilemme qu'un élément venait de provoquer
+restait invisible jusqu'au dernier. Les conséquences d'un élément passent
+désormais avant la désignation du suivant.
+
+Une éjection hors de BIG CITY laisse enfin sa traînée, case de rentrée comprise —
+le `return` anticipé court-circuitait l'enregistrement, et le seul vol
+spectaculaire du jeu était le seul qu'on ne voyait pas passer. Et quand c'est une
+IA qui projette, les traînées se jouent une par une avec deux secondes de pause :
+huit traces simultanées ne racontent rien à la table.
+
+### Ce qui ne marchait pas au doigt
+
+Le survol n'existe pas sur un écran tactile, et trois informations n'étaient
+accessibles que par lui. Les rectangles jaunes des cartes de la Manche s'ouvrent
+maintenant au clic ; le chiffre jaune d'une case ouvre la liste de ses débris ; et
+la fiche d'une case se place où elle tient — amarrée en bas sur téléphone, et
+basculée sous la case quand il n'y a pas la place au-dessus.
+
+Le filtre du journal par Titan renvoyait toujours zéro ligne : il comparait
+`"2"` à `2`. Deux exemplaires de la même carte programmée s'allumaient ensemble :
+la position dans la main les distingue désormais. Un tas de débris se dessine
+comme une tour, parce que sa hauteur est une donnée de jeu. Et la difficulté se
+choisit au carrousel sous 640 px, un niveau à la fois, avec son détail.
+
+### La table en ligne
+
+L'hôte ne s'assied plus jamais sur le siège d'un invité — les cartes étaient
+masquées, le panneau ne l'était pas. Le bouton « Rafraîchir » devient un geste
+d'hôte et repousse le plateau à toute la table, en icône seule. « Lancer la
+partie » laisse cinq secondes pour se raviser. Le niveau des IA voyage jusqu'aux
+invités, et la liste de Titans qui faisait doublon sur l'écran d'accueil a
+disparu. Une arrivée ou un départ s'affiche en grand pendant neuf secondes. Et
+l'écran ne se met plus en veille pendant une partie : le moteur ne tourne que
+chez l'hôte, et un téléphone qui se verrouille gèle la table entière.
+
+Les portraits de Titans et la seringue d'Adrénaline retentent une fois puis se
+replient sur un dessin : un PNG tombé sur une connexion mobile laissait un trou
+pour toute la partie, le navigateur ne réessayant jamais de lui-même.
+
+### Un tutoriel
+
+« Il faudrait un bouton tutoriel pour voir les principes du jeu rapidement et le
+fonctionnement des cartes visuellement. » La page Règles existe et c'est
+justement son problème : huit sections, le livret entier, ce qu'on ouvre pour
+vérifier un point. Sept écrans dans l'ordre du jeu — le but, la Manche, le tour,
+le Périmètre, les six cartes en image, les compteurs, la fin — et une porte vers
+le livret à la dernière page.
+
+### Un dilemme muet
+
+« Il y a bien eu un dilemme, mais je n'ai pas vu le bloc sur le plateau ni chez
+moi. » Les deux sorties « rien à prendre » de l'acheminement renvoyaient une
+chaîne vide : la ligne de journal s'arrêtait après le nom de la couleur, sans
+destination ni raison, et ça se lisait comme un bloc disparu du jeu. Elles
+disent maintenant ce qu'elles font.
+
 ## Non publié — vingt-cinquième passe du 2026-08-30 (la table à distance, jouable)
 
 Retour de partie réelle. Nikola a joué en invité, et en est revenu avec dix

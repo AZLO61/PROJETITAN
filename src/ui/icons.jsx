@@ -274,11 +274,22 @@ export default function Icon({ name, size = 18, strokeWidth, style, title }) {
  *  prend donc pas `currentColor` — il porte ses propres couleurs, comme les
  *  icônes de blocs et le Socle, qui viennent de la même série. */
 export function AdrenalineIcon({ size = 16, style }) {
+  /* Même filet que `TitanIcon` et `BlockIcon` : un PNG servi à côté de
+     l'application peut ne pas arriver chez un invité en connexion mobile, et un
+     `<img>` tombé reste vide pour toute la partie — le navigateur ne retente
+     jamais de lui-même (Nikola, 2026-09-01 : « les invités n'avaient pas les
+     icônes dans le jeu »). Une seconde tentative, dont le paramètre contourne
+     le cache d'échec, puis un repli DESSINÉ : le point d'exclamation du jeu de
+     traits, qui porte `currentColor` et vit donc dans la couleur du signal qui
+     l'entoure. */
+  const [essai, setEssai] = React.useState(0);
+  if (essai >= 2) return <Icon name="alert" size={size} style={style} />;
   return (
     <img
-      src={`${import.meta.env.BASE_URL}assets/rules/adrenaline.png`}
+      src={`${import.meta.env.BASE_URL}assets/rules/adrenaline.png${essai === 1 ? "?r=1" : ""}`}
       alt=""
       aria-hidden="true"
+      onError={() => setEssai((n) => Math.min(2, n + 1))}
       style={{
         width: size,
         height: size,

@@ -867,7 +867,13 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
                   Tous
                 </button>
                 {titanState.players.map((t) => {
-                  const id = String(t.id);
+                  /* L'identifiant reste un NOMBRE. `journal` construit ses
+                     `acteurs` avec `Number(m[1])` ; passer par `String(t.id)`
+                     ici comparait "2" a 2, donc `includes` renvoyait toujours
+                     faux : filtrer par Titan vidait le journal et le compteur
+                     affichait 0 (Nikola, 2026-09-01 : « le journal a un bouton
+                     pour filtrer par titan mais affiche 0 informations »). */
+                  const id = Number(t.id);
                   const actif = filtreTitan === id;
                   return (
                     <button

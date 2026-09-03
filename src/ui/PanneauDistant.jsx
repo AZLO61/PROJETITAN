@@ -113,6 +113,40 @@ export default function PanneauDistant({
   const [occupe, setOccupe] = useState(false);
   const [erreur, setErreur] = useState(null);
   const [lienCopie, setLienCopie] = useState(false);
+  /* ── CINQ SECONDES POUR SE RAVISER ──
+     Nikola, 2026-09-01 : « après avoir cliqué sur "lancer partie" il faut
+     laisser 5 secondes pour annuler ».
+
+     Lancer est le geste le plus irréversible de cet écran : il fige le nombre
+     de Titans, la difficulté et les sièges, et tire le plateau. Un clic de trop
+     pendant qu'un dernier joueur finit d'arriver, et il faut fermer la table
+     puis tout recommencer.
+
+     `null` = aucun lancement en cours. Le compte vit dans un état pour
+     l'affichage ET dans une variable locale au minuteur pour la décrémentation :
+     lire l'état depuis l'intervalle rendrait une valeur figée au rendu qui l'a
+     armé. Même piège que le compte à rebours de programmation. */
+  const [compteAvantLancement, setCompteAvantLancement] = useState(null);
+  const minuteurLancementRef = useRef(null);
+  useEffect(() => () => { if (minuteurLancementRef.current) clearInterval(minuteurLancementRef.current); }, []);
+  const annulerLancement = () => {
+    if (minuteurLancementRef.current) clearInterval(minuteurLancementRef.current);
+    minuteurLancementRef.current = null;
+    setCompteAvantLancement(null);
+  };
+  const armerLancement = () => {
+    if (minuteurLancementRef.current) return; // déjà armé : un second clic ne relance pas le compte
+    let reste = 5;
+    setCompteAvantLancement(reste);
+    minuteurLancementRef.current = setInterval(() => {
+      reste -= 1;
+      if (reste > 0) { setCompteAvantLancement(reste); return; }
+      clearInterval(minuteurLancementRef.current);
+      minuteurLancementRef.current = null;
+      setCompteAvantLancement(null);
+      onLancer();
+    }, 1000);
+  };
 
   /* ── UN LIEN OUVERT REJOINT TOUT SEUL ──
      Le joueur clique le lien, la page s'ouvre, il est à la table. Aucun champ,
@@ -396,10 +430,24 @@ export default function PanneauDistant({
         {distantAvis && (
           <p style={{ ...prose(T.dim, T.micro), margin: "0 0 8px" }}>{distantAvis}</p>
         )}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button onClick={onLancer} style={btnStyle(T.you)}>
-            Lancer la partie
-          </button>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {compteAvantLancement == null ? (
+            <button onClick={armerLancement} style={btnStyle(T.you)}>
+              Lancer la partie
+            </button>
+          ) : (
+            <>
+              {/* Le décompte occupe la place du bouton, il ne s'ajoute pas à
+                  côté : tant qu'il tourne, il n'y a plus qu'une chose à
+                  décider, et c'est de l'arrêter ou non. */}
+              <span style={{ ...btnStyle(T.go), cursor: "default" }} aria-live="polite">
+                Départ dans {compteAvantLancement}…
+              </span>
+              <button onClick={annulerLancement} style={btnStyle(T.stop)}>
+                Annuler le lancement
+              </button>
+            </>
+          )}
           <button onClick={onQuitterSession} style={cancelBtn()}>Fermer la table</button>
         </div>
       </div>

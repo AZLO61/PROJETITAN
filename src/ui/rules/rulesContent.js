@@ -22,7 +22,7 @@ export const LEXIQUE = [
   { icon: ICON("amas"), nom: "Amas de béton", def: "Deux Blocs de béton ou plus empilés sur une même case — une tour de débris. Un Titan peut y monter avec son Mouvement gratuit, et elle tient : il l'a choisie. Le reste dépend du GESTE. On la PERCUTE (une charge, un Titan projeté dessus) : elle bascule DANS L'AXE de la percussion, chaque débris partant d'autant de cases que sa hauteur dans le tas — sans condition d'énergie, le Seuil 4 ne commande plus rien ici. On SAUTE dessus (Boing Boing) : elle s'ÉCROULE autour, sur les 8 cases voisines, au choix du joueur. Un Titan qui y arrive sans l'avoir choisi et sans qu'elle bascule la fait tomber sous lui." },
   { icon: ICON("titan"), nom: "Titan", def: "Le personnage que tu incarnes : un colosse qui détruit BIG CITY." },
   { icon: ICON("socle"), nom: "Socle", def: "Placé sous chaque bâtiment à sa construction. Sa valeur est fixe, même si le bâtiment perd des blocs ensuite." },
-  { icon: ICON("rebond"), nom: "Arrêt faute de puissance", def: "Un élément qui percute un bâtiment sans l'énergie du Seuil 4 s'arrête net, sur une case adjacente à la fois à celle où il était et à celle qu'il visait. Il ne repart pas en sens inverse. Le BORD DU PLATEAU, lui, n'arrête plus rien : depuis le 30 août 2026, tout élément qui l'atteint passe de l'autre côté par la Faille, quelle que soit son énergie. Titan comme débris, sans condition." },
+  { icon: ICON("rebond"), nom: "Arrêt faute de puissance", def: "Un élément qui percute un bâtiment sans l'énergie du Seuil 4 s'arrête net, sur une case adjacente à la fois à celle où il était et à celle qu'il visait. Il ne repart pas en sens inverse. C'est l'ATTAQUANT qui désigne cette case parmi celles que la règle autorise, et depuis le 1er septembre 2026 il peut y viser un Titan : l'occupant est alors POUSSÉ, exactement comme sous n'importe quelle projection, et il rapporte sa Bagarre. Peu importe que ce qui arrive soit un Titan ou un débris — la seule différence tient à l'occupant qu'on n'a pas pu déloger : un débris se pose alors sur sa case, un Titan reste sur son point de chute par défaut. Le BORD DU PLATEAU, lui, n'arrête plus rien : depuis le 30 août 2026, tout élément qui l'atteint passe de l'autre côté par la Faille, quelle que soit son énergie. Titan comme débris, sans condition." },
   { icon: ICON("projection"), nom: "Projection", def: "Un TITAN qui arrive sur une case occupée pousse ce qui s'y trouve, d'un nombre de cases égal à l'énergie restante, et toujours d'au moins 1 case même s'il ne lui reste qu'une énergie de 1. Un DÉBRIS en vol, lui, ne pousse pas ce qu'il croise : il s'empile dessus et forme un Amas. La chaîne de poussée peut se poursuivre de proche en proche, et chaque Titan DISTINCT TOUCHÉ rapporte 1 Bagarre à l'initiateur, qu'il ait été déplacé ou non — mais un Titan déjà en mouvement dans la réaction n'est jamais poussé une seconde fois." },
   { icon: ICON("amas"), nom: "Formation d'Amas", def: "Bloc + Bloc = Amas, Bloc + Amas = Amas. Un DÉBRIS projeté qui rencontre du béton au sol s'arrête dessus et s'y empile : il ne le chasse pas plus loin. Un TITAN projeté, lui, RENVERSE le tas dans l'axe de son vol s'il lui reste de l'énergie, et prend la case ; à bout de course il monte dessus, et la tour lui tombe sous les pieds. Le béton s'empile, le Titan bouscule." },
   { icon: ICON("titan"), nom: "Hors de BIG CITY", def: "Un Titan poussé hors du plateau réapparaît de l'autre côté et attend SON tour pour rentrer, jamais avant. Seul l'axe par lequel il est sorti boucle : sorti par la gauche depuis la ligne G, il revient en G9 ; sorti par un coin, où les deux axes dépassent, il revient au coin opposé. Sa rentrée lui coûte 1 case de son Mouvement gratuit, et 1 case de plus par obstacle à contourner." },
@@ -93,11 +93,11 @@ export const CARTES = [
     couleur: "#2DD4BF",
     resume: "Tu choisis un axe. Un bâtiment sur l'axe fait mur : ce qui est derrière est protégé.",
     effets: [
-      "Tous les Titans de l'axe reculent.",
+      "Tous les Titans de l'axe reculent de (nombre de Titans touchés + 1) cases.",
       "Chacun subit Fatigue + DIL.",
       "+1 Bagarre par Titan touché.",
     ],
-    note: "🎁 Bonus : +1 Adrénaline par Titan touché au-delà du premier (2 touchés → +1, 3 touchés → +2). 🚫 Aucune Adrénaline dépensable sur cette action.",
+    note: "💉 Chaque Adrénaline dépensée allonge le recul d'une case, pour TOUS les Titans de l'axe : c'est une seule poussée, elle a une seule puissance (Nikola, 1er septembre 2026). Elle n'est débitée que si l'axe touche au moins un Titan. 🎁 Bonus : +1 Adrénaline par Titan touché au-delà du premier (2 touchés → +1, 3 touchés → +2).",
   },
   {
     num: "04",
@@ -139,7 +139,7 @@ export const CARTES = [
       "🏆 Lanterne Rouge : si tu as autant ou moins de blocs que le moins doté, tu en ramasses 3 au lieu de 2.",
       "Une case entièrement vidée t'oblige à t'y déplacer.",
     ],
-    note: "🚫 Aucune Adrénaline dépensable sur cette action.",
+    note: "🚫 Aucune Adrénaline dépensable sur cette action. ⚙️ Les ÉGALITÉS en Lanterne Rouge se règlent avant la partie (Nikola, 1er septembre 2026) : cochées — le réglage par défaut — tous les Titans les moins dotés en profitent ; décochées, il faut être SEUL dernier, et à égalité personne ne l'est. 🎯 Une case qui porte plusieurs éléments différents te laisse choisir lequel tu prends, Socle compris.",
   },
 ];
 

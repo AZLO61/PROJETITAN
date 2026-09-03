@@ -421,6 +421,17 @@ function moyenne(valeurs) {
   return valeurs.reduce((s, v) => s + v, 0) / valeurs.length;
 }
 
+/* `Math.min(...tableau)` étale un argument par élément : au-delà de quelques
+   dizaines de milliers de parties, la pile d'appel de V8 déborde et la
+   campagne meurt sur un `RangeError` APRÈS avoir tourné des heures — le pire
+   moment possible pour planter. Un `reduce` n'a pas cette limite.
+
+   Le tableau vide rend `NaN` là où `Math.min()` sans argument rendait
+   `Infinity` : aucun des deux n'a de sens, mais `NaN` se repère dans un
+   rapport alors qu'`Infinity` s'y lit comme une vraie mesure. */
+const borneMin = (valeurs) => (valeurs.length === 0 ? NaN : valeurs.reduce((a, b) => (b < a ? b : a)));
+const borneMax = (valeurs) => (valeurs.length === 0 ? NaN : valeurs.reduce((a, b) => (b > a ? b : a)));
+
 function ecartType(valeurs) {
   if (valeurs.length < 2) return 0;
   const m = moyenne(valeurs);
@@ -476,8 +487,8 @@ export function agreger(resultats) {
         tauxVictoire: e.parties > 0 ? e.victoires / e.parties : 0,
         scoreMoyen: Number(moyenne(e.scores).toFixed(2)),
         scoreEcartType: Number(ecartType(e.scores).toFixed(2)),
-        scoreMin: Math.min(...e.scores),
-        scoreMax: Math.max(...e.scores),
+        scoreMin: borneMin(e.scores),
+        scoreMax: borneMax(e.scores),
       };
     }
     return out;
@@ -522,17 +533,17 @@ export function agreger(resultats) {
     },
     duree: {
       manchesMoyennes: Number(moyenne(durees).toFixed(2)),
-      mancheMin: Math.min(...durees),
-      mancheMax: Math.max(...durees),
+      mancheMin: borneMin(durees),
+      mancheMax: borneMax(durees),
       causesFin,
     },
     tension: {
       ecartMoyenPremierDernier: Number(moyenne(ecarts).toFixed(2)),
-      ecartMin: Math.min(...ecarts),
-      ecartMax: Math.max(...ecarts),
+      ecartMin: borneMin(ecarts),
+      ecartMax: borneMax(ecarts),
       scoreGagnantMoyen: Number(moyenne(scoresGagnants).toFixed(2)),
-      scoreGagnantMin: Math.min(...scoresGagnants),
-      scoreGagnantMax: Math.max(...scoresGagnants),
+      scoreGagnantMin: borneMin(scoresGagnants),
+      scoreGagnantMax: borneMax(scoresGagnants),
     },
   };
 }

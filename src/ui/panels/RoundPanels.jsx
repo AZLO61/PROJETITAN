@@ -81,6 +81,19 @@ export default function RoundPanels({ vm }) {
   // toujours le dernier empilé sans jamais laisser le joueur choisir.
   // recupChoiceCell mémorise la case en attente de choix (popup rendu plus
   // bas, juste après la grille) ; nul tant qu'aucun choix n'est nécessaire.
+  //
+  /* ── LA MÊME FENÊTRE SERT AUX DEUX RAMASSAGES ──
+     Nikola, 2026-09-01 : « en Lanterne Rouge j'avais un Socle et un débris sur
+     la même case, j'ai eu le Socle sans avoir le choix de prendre le débris ».
+
+     Le choix n'existait que pour le passif Récupération. Je Ne Partage Pas
+     ramasse pourtant les mêmes éléments, sur les mêmes cases, et prenait
+     silencieusement le sommet de la pile — sur la carte de Force 3, celle qu'on
+     joue justement pour choisir.
+
+     `null`, ou `{ cle, mode }` où `mode` vaut "recup" ou "jnp". Une seule
+     fenêtre, deux appelants : dupliquer le composant aurait garanti que l'un
+     des deux prenne du retard sur l'autre. */
   const [recupChoiceCell, setRecupChoiceCell] = React.useState(null);
   // Composition d'un batiment : elle ne tient pas dans une case de 30px, et
   // un panneau pose EN ABSOLU dans la case etait tronque par le defilement
@@ -133,12 +146,21 @@ export default function RoundPanels({ vm }) {
        depuis le plateau 3D, alors que c'est le meme aiguilleur de clic. Sans
        element, on affiche la fiche au centre de l'ecran. */
     if (!el) {
-      setHoverPos({ x: window.innerWidth / 2, y: Math.round(window.innerHeight * 0.35) });
+      setHoverPos({ x: window.innerWidth / 2, y: Math.round(window.innerHeight * 0.35), bas: Math.round(window.innerHeight * 0.35) });
       setHoverCell(key);
       return;
     }
     const r = el.getBoundingClientRect();
-    setHoverPos({ x: r.left + r.width / 2, y: r.top });
+    /* LE BAS DE LA CASE VOYAGE AVEC LE HAUT (Nikola, 2026-09-01 : « les
+       panneaux qui donnent des informations au survol d'un élément comme les
+       débris et le socle sont parfois mal situés et gênent la lisibilité »).
+
+       La fiche se posait TOUJOURS au-dessus de la case. Sur les deux premières
+       rangées du plateau — et sur un téléphone, où la grille commence haut —
+       elle sortait par le haut de l'écran, ou recouvrait la case qu'on venait
+       justement de désigner. Sans le bas de la case, il n'y avait aucun moyen
+       de la basculer en dessous : on ne connaissait qu'un seul des deux bords. */
+    setHoverPos({ x: r.left + r.width / 2, y: r.top, bas: r.bottom });
     setHoverCell(key);
   };
   const {
@@ -260,7 +282,19 @@ export default function RoundPanels({ vm }) {
     }
     if (currentRepli) { if (currentRepli.cases.includes(key)) choisirRepli(key); return; }
     if (ecroulement) { if (ecroulementCells.includes(key)) ecroulementPoserDebris(key); return; }
-    if (jnpMode) { if (jnpPool.has(key)) jnpToggleCell(key); return; }
+    if (jnpMode) {
+      if (jnpPool.has(key)) {
+        /* Même règle que le passif Récupération juste en dessous : plusieurs
+           éléments DIFFÉRENTS sur la case → le joueur choisit ; un seul type →
+           on ramasse sans fenêtre inutile. Sans ça, Je Ne Partage Pas prenait
+           toujours le sommet de la pile, et un Socle tombé en dernier est
+           toujours au sommet. */
+        const distincts = [...new Set(looseBlocks[key] || [])];
+        if (distincts.length > 1) setRecupChoiceCell({ cle: key, mode: "jnp" });
+        else jnpToggleCell(key);
+      }
+      return;
+    }
     if (bbMode) { bbPathClick(key); return; }
     if (teaMode) { if (teaTargets.has(key)) jouerTeteEnAvant(key); return; }
     if (moveMode) { if (moveReachable.has(key)) jouerMouvementGratuit(key); return; }
@@ -269,7 +303,7 @@ export default function RoundPanels({ vm }) {
         const distinct = [...new Set(looseBlocks[key] || [])];
         // Plusieurs débris DIFFÉRENTS sur la case : le livret laisse le choix,
         // on ouvre le popup au lieu de prendre le dernier empilé.
-        if (distinct.length > 1) setRecupChoiceCell(key);
+        if (distinct.length > 1) setRecupChoiceCell({ cle: key, mode: "recup" });
         else jouerRecuperation(key);
       }
       return;
@@ -1026,18 +1060,43 @@ export default function RoundPanels({ vm }) {
                             Le conteneur ne se rend plus quand il n'a rien à
                             afficher — son fond noir laissait un petit carré
                             sombre sur les cases qui ne portaient qu'un Socle. */}
+                        {/* ── LE CHIFFRE JAUNE OUVRE LA LISTE ──
+                            Nikola, 2026-09-01 : « c'est compliqué de survoler un
+                            élément sur mobile ; peut-être que rendre le chiffre
+                            jaune sur la case cliquable, et donc permettre de voir
+                            la liste des débris, serait pratique ».
+
+                            La composition d'une case ne s'ouvrait au clic que sur
+                            un BÂTIMENT DEBOUT (cf. `clicCase`) : un tas au sol
+                            n'était consultable qu'au survol, c'est-à-dire jamais
+                            sur un écran tactile. Or c'est justement le tas dont
+                            on a besoin de connaître le contenu — c'est lui qu'on
+                            ramasse, et sa hauteur décide de la portée d'une
+                            bascule.
+
+                            Le badge devient donc sa propre commande. Il
+                            `stopPropagation` : le clic dit « montre-moi ce qu'il
+                            y a là », il ne doit pas se transformer en
+                            déplacement, en ramassage ni en pose de repli selon le
+                            mode ouvert au même instant. Le reste de la case
+                            continue de faire ce qu'elle a toujours fait. */}
                         {colorBlocks.length > 0 && (
-                          <div style={{
-                            position: "absolute", top: 1, left: 2,
-                            background: "rgba(0,0,0,.65)", borderRadius: 3,
-                            padding: "1px 3px", display: "flex", alignItems: "center", gap: 3,
-                          }}>
-                            {colorBlocks.length > 0 && (
-                              <span style={{ fontSize: ".68rem", fontWeight: 700, color: "#FFD93D", lineHeight: 1 }}>
-                                {colorBlocks.length}
-                              </span>
-                            )}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); openComposition(key, e.currentTarget.parentElement || e.currentTarget); }}
+                            title={`${colorBlocks.length} débris au sol en ${key} — clique pour voir lesquels`}
+                            aria-label={`Voir les ${colorBlocks.length} débris de la case ${key}`}
+                            style={{
+                              position: "absolute", top: 1, left: 2, zIndex: 5,
+                              background: "rgba(0,0,0,.65)", borderRadius: 3,
+                              border: "none", padding: "2px 5px", cursor: "pointer",
+                              display: "flex", alignItems: "center", gap: 3, lineHeight: 1,
+                            }}
+                          >
+                            <span style={{ fontSize: ".68rem", fontWeight: 700, color: "#FFD93D", lineHeight: 1 }}>
+                              {colorBlocks.length}
+                            </span>
+                          </button>
                         )}
                         {/* Le Socle vit a droite de la case, les blocs a
                             gauche : les deux ne se confondent plus. Sa valeur
@@ -1085,14 +1144,107 @@ export default function RoundPanels({ vm }) {
                             de peu pour repasser au-dessus de la case, et le
                             débordement d'une case se lit comme un contenu de la
                             case voisine. Rien ne doit sortir d'une case. */}
-                        <div style={{ position: "absolute", bottom: 1, left: 2, right: 2, display: "flex", gap: 1, alignItems: "center", overflow: "hidden", zIndex: 4 }}>
-                          {colorBlocks.slice(-DEBRIS_DESSINES).map((c, i) => (
-                            <BlockIcon key={i} color={c} size={TAILLE_DEBRIS} />
-                          ))}
-                          {colorBlocks.length > DEBRIS_DESSINES && (
-                            <span style={{ fontSize: "9px", color: "rgba(255,255,255,.75)", fontWeight: 700, lineHeight: "11px" }}>+{colorBlocks.length - DEBRIS_DESSINES}</span>
-                          )}
-                        </div>
+                        {/* ── UN TAS SE DESSINE COMME UNE TOUR ──
+                            Nikola, 2026-09-01 : « quand ça forme un tas de
+                            débris, on superpose les débris par-dessus les autres
+                            sur le plan visuel, ça forme une sorte de tour ».
+
+                            Deux débris côte à côte disaient « il y a deux
+                            débris » ; ils ne disaient pas « il y a un TAS ». Or
+                            la différence est une règle entière du jeu : un tas
+                            bascule dans l'axe quand on le percute, et chaque
+                            bloc part avec pour énergie SA HAUTEUR dans la pile.
+                            La hauteur est donc une donnée de jeu, et elle se
+                            lisait en comptant des icônes alignées.
+
+                            Empilés, l'ordre du dessin devient l'ordre réel de la
+                            pile — le sommet en haut, celui qui volera le plus
+                            loin — et un tas se repère à sa silhouette, sans
+                            compter. Le recouvrement de 58 % laisse voir la
+                            couleur de chaque étage tout en gardant la tour dans
+                            la case.
+
+                            Un seul débris garde son ancien rendu : il n'y a pas
+                            de tour à montrer, et le décaler du fond de la case
+                            ne ferait que le faire flotter. */}
+                        {(() => {
+                          const ETAGES_DESSINES = Math.max(2, DEBRIS_DESSINES + 1);
+                          const visibles = colorBlocks.slice(-ETAGES_DESSINES);
+                          const caches = colorBlocks.length - visibles.length;
+                          /* ── LE PAS S'ADAPTE À LA HAUTEUR DE LA TOUR ──
+                             Nikola, 2026-09-03 : « pour un tas de débris le bloc
+                             au-dessus écrase trop le premier visuellement sur
+                             une case ».
+
+                             Le pas était fixe, à 42 % de l'icône — donc 58 % de
+                             recouvrement quelle que soit la hauteur du tas. Il
+                             avait été calibré sur le pire cas, une tour de
+                             quatre étages qui doit tenir dans la case ; le cas
+                             COURANT, deux ou trois débris, payait ce calibrage
+                             sans en avoir besoin et se retrouvait écrasé.
+
+                             Le pas se calcule donc sur la place réellement
+                             disponible, divisée par le nombre d'étages À
+                             DESSINER : deux débris s'écartent largement, quatre
+                             se resserrent juste ce qu'il faut pour rester dans
+                             la case. Le plafond (65 %) garde les étages
+                             solidaires — au-delà la tour se lit comme des blocs
+                             qui flottent — et le plancher (34 %) garantit que
+                             chaque couleur reste visible même sur la tour la
+                             plus haute : c'est exactement l'ancienne valeur
+                             fixe, qui devient donc un plancher au lieu d'être
+                             la règle.
+
+                             `HAUTEUR_TOUR_MAX` est le budget vertical. La case
+                             est carrée et vaut au plus CASE_MAX (68 px, 30 px au
+                             plancher de la grille) ; on en retire le badge de
+                             comptage, qui vit en haut de la même case. */
+                          const HAUTEUR_TOUR_MAX = ecranEtroit ? 30 : 46;
+                          const PAS = Math.max(
+                            Math.round(TAILLE_DEBRIS * 0.34),
+                            Math.min(
+                              Math.round(TAILLE_DEBRIS * 0.65),
+                              Math.floor((HAUTEUR_TOUR_MAX - TAILLE_DEBRIS) / Math.max(1, visibles.length - 1)),
+                            ),
+                          );
+                          if (colorBlocks.length <= 1) {
+                            return (
+                              <div style={{ position: "absolute", bottom: 1, left: 2, right: 2, display: "flex", gap: 1, alignItems: "center", overflow: "hidden", zIndex: 4 }}>
+                                {visibles.map((c, i) => (
+                                  <BlockIcon key={i} color={c} size={TAILLE_DEBRIS} />
+                                ))}
+                              </div>
+                            );
+                          }
+                          return (
+                            <div style={{
+                              position: "absolute", bottom: 1, left: 2, right: 2,
+                              height: TAILLE_DEBRIS + PAS * (visibles.length - 1),
+                              overflow: "hidden", zIndex: 4,
+                            }}>
+                              {visibles.map((c, i) => (
+                                <span key={i} style={{
+                                  position: "absolute", left: 0, bottom: i * PAS,
+                                  // L'étage du dessus passe devant celui du
+                                  // dessous : sans ça, la pile se lirait à
+                                  // l'envers et le sommet disparaîtrait sous sa
+                                  // propre base.
+                                  zIndex: i + 1,
+                                  filter: "drop-shadow(0 1px 1px rgba(0,0,0,.75))",
+                                }}>
+                                  <BlockIcon color={c} size={TAILLE_DEBRIS} />
+                                </span>
+                              ))}
+                              {caches > 0 && (
+                                <span style={{
+                                  position: "absolute", right: 0, bottom: 0, zIndex: visibles.length + 1,
+                                  fontSize: "9px", color: "rgba(255,255,255,.75)", fontWeight: 700, lineHeight: "11px",
+                                  background: "rgba(0,0,0,.6)", borderRadius: 3, padding: "0 2px",
+                                }}>+{caches}</span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </>
                     );
                   })()}
@@ -1140,12 +1292,46 @@ export default function RoundPanels({ vm }) {
               style={{ position: "fixed", inset: 0, zIndex: 300 }}
             />
           )}
+          {/* ── LA FICHE SE PLACE OÙ ELLE TIENT ──
+              Nikola, 2026-09-01 : « les panneaux qui donnent des informations
+              au survol d'un élément comme les débris et le socle sont parfois
+              mal situés et gênent la lisibilité ».
+
+              Deux règles, et elles suffisent :
+
+              · SUR TÉLÉPHONE, elle s'amarre en bas de l'écran, sur toute la
+                largeur utile. Une bulle de 200 px flottant au-dessus d'une case
+                de 40 px sur un écran de 375 px recouvrait forcément quelque
+                chose ; en bas, elle ne masque jamais la case qu'on vient de
+                désigner, et on la lit sans plisser les yeux. C'est le geste
+                normal d'un détail sur mobile.
+
+              · SUR GRAND ÉCRAN, elle reste ancrée à la case, mais BASCULE EN
+                DESSOUS quand il n'y a pas la place au-dessus. La hauteur
+                réservée (170 px) couvre la fiche la plus haute — un bâtiment de
+                quatre étages plus son Socle.
+
+              Le calage horizontal tient compte de la largeur réelle de la
+              fiche, et plus d'une demi-largeur devinée à 90 px : c'est ce qui
+              la faisait déborder à droite sur les colonnes de fin. */}
           <div
             style={{
               position: "fixed", zIndex: 301,
-              left: Math.min(Math.max(hoverPos.x, 90), window.innerWidth - 90),
-              top: hoverPos.y - 8,
-              transform: "translate(-50%, -100%)",
+              ...(ecranEtroit
+                ? {
+                  left: "50%", bottom: 12, transform: "translateX(-50%)",
+                  width: "min(92vw, 340px)", maxHeight: "42vh", overflowY: "auto",
+                }
+                : (() => {
+                  const placeAuDessus = hoverPos.y > 170;
+                  const demiLargeur = 110;
+                  return {
+                    left: Math.min(Math.max(hoverPos.x, demiLargeur), window.innerWidth - demiLargeur),
+                    top: placeAuDessus ? hoverPos.y - 8 : hoverPos.bas + 8,
+                    transform: placeAuDessus ? "translate(-50%, -100%)" : "translate(-50%, 0)",
+                    maxWidth: 220,
+                  };
+                })()),
               background: "rgba(14,4,32,.97)", border: "1px solid rgba(255,217,61,.55)",
               borderRadius: 10, padding: "8px 10px",
               boxShadow: "0 10px 30px rgba(0,0,0,.7)", pointerEvents: "none",
@@ -1190,13 +1376,22 @@ export default function RoundPanels({ vm }) {
             }}
           >
             <div style={{ fontFamily: "'Bowlby One', sans-serif", color: "#7CF5C8", fontSize: ".95rem", marginBottom: 10 }}>
-              🤲 Case {recupChoiceCell} — que ramasser ?
+              🤲 Case {recupChoiceCell.cle} — que ramasser ?
+              {recupChoiceCell.mode === "jnp" && (
+                <span style={{ display: "block", fontFamily: T.ui, fontSize: ".7rem", fontWeight: 600, color: "rgba(255,255,255,.6)", marginTop: 4 }}>
+                  Je Ne Partage Pas — élément {jnpSelected.length + 1} sur {vm.jnpNbToPick}
+                </span>
+              )}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {[...new Set(looseBlocks[recupChoiceCell] || [])].map((val) => (
+              {[...new Set(looseBlocks[recupChoiceCell.cle] || [])].map((val) => (
                 <button
                   key={val}
-                  onClick={() => { jouerRecuperation(recupChoiceCell, val); setRecupChoiceCell(null); }}
+                  onClick={() => {
+                    if (recupChoiceCell.mode === "jnp") jnpToggleCell(recupChoiceCell.cle, val);
+                    else jouerRecuperation(recupChoiceCell.cle, val);
+                    setRecupChoiceCell(null);
+                  }}
                   style={{
                     display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
                     borderRadius: 8, border: "1.5px solid rgba(255,255,255,.25)",

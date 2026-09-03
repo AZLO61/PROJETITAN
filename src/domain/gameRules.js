@@ -1080,11 +1080,27 @@ function appliquerReplElement(repli, cellKey, gameState) {
 
   const { board, titans = [], looseBlocks = {}, replis, trajectoires } = gameState;
 
-  // 1. L'occupant éventuel dégage AVANT que l'élément prenne sa place.
+  /* ── 1. L'OCCUPANT DÉGAGE AVANT QUE L'ÉLÉMENT PRENNE SA PLACE ──
+     ⚠️ UN REBOND DE DÉBRIS POUSSE AUSSI (Nikola, 2026-09-01 : « même un
+     rebond pousse un Titan »).
+
+     La poussée était conditionnée à `repli.titanId != null`, c'est-à-dire au
+     seul repli qui déplace un TITAN. Un débris arrêté faute de puissance —
+     ce que le jeu appelle un rebond — se contentait donc de se poser SUR le
+     Titan sans le bouger. Or c'est très exactement le geste que le repli
+     offensif existe pour permettre : « il aurait pu aller en B1, B2 ou A2 —
+     il y avait un Titan en A2, j'aurais aimé le mettre en A2 pour le faire
+     sortir » (2026-08-19). Poser le débris à ses pieds sans le déloger vide
+     ce choix de son sens.
+
+     La nature de ce qui arrive ne change donc plus rien à la poussée. Elle
+     ne change plus que la SUITE, quand la cible est coincée : deux Titans ne
+     partagent jamais une case, alors qu'un débris se pose sans problème sur
+     celle d'un Titan. */
   const occupant = titans.find(
     (t) => estSurLePlateau(t) && t.cell === cellKey && t.id !== repli.titanId
   );
-  if (occupant && repli.titanId != null) {
+  if (occupant) {
     const dr = Math.sign(rowIndex(cellKey[0]) - rowIndex(repli.defaut[0]));
     const dc = Math.sign(Number(cellKey.slice(1)) - Number(repli.defaut.slice(1)));
     const bagarreSet = new Set();
@@ -1104,11 +1120,16 @@ function appliquerReplElement(repli, cellKey, gameState) {
         `${cellKey} : Titan ${occupant.id} poussé en ${occupant.cell} par le repli — +${bagarreSet.size} Bagarre (Titan ${initiateur.id} → ${initiateur.bagarre}).`
       );
     }
-    // Occupant réellement coincé : la case reste prise, l'élément ne peut
-    // pas s'y poser et garde son point de chute par défaut.
+    // Occupant réellement coincé. Un TITAN qui arrive ne peut pas entrer : la
+    // case reste prise, il garde son point de chute par défaut. Un DÉBRIS, lui,
+    // se pose par-dessus — c'est légal, et c'est ce que le joueur a demandé en
+    // désignant cette case.
     if (occupant.cell === cellKey) {
-      log.push(`${cellKey} : Titan ${occupant.id} coincé, impossible de le déloger — l'élément reste en ${repli.defaut}.`);
-      return { log, applied: false };
+      if (repli.titanId != null) {
+        log.push(`${cellKey} : Titan ${occupant.id} coincé, impossible de le déloger — l'élément reste en ${repli.defaut}.`);
+        return { log, applied: false };
+      }
+      log.push(`${cellKey} : Titan ${occupant.id} coincé, il ne bouge pas — le débris se pose sur sa case.`);
     }
   }
 
@@ -1267,6 +1288,12 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
      trois points d'arrêt « je ne passe pas » ; reste null quand l'élément
      s'arrête pour une autre raison (énergie épuisée, case libre atteinte). */
   let choixRepli = null;
+  /* CE QUI VOLE : un TITAN, ou un DÉBRIS. La distinction commande trois
+     comportements différents plus bas — l'empilement sur un tas, la poussée
+     d'un tas, et le droit de se poser sur la case d'un Titan. Elle est donc
+     lue ici, une seule fois, plutôt qu'à chaque endroit qui en a besoin :
+     `ctx.movingTitanId` ne change pas pendant l'appel. */
+  const elementEstUnDebris = ctx.movingTitanId == null;
   const noterRepli = (depuis, cible) => {
     const cases = getCasesRepliDebris(depuis, cible, curDr, curDc, {
       board, looseBlocks, titans,
@@ -1351,6 +1378,32 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
           ejecte.cell = rowFromIndex(sortieR) + sortieC;
         }
         log.push(`🥊 Titan ${ctx.movingTitanId} poussé hors de BIG CITY — il attend son tour pour rentrer par ${rowFromIndex(sortieR)}${sortieC}.`);
+        /* ── LA SORTIE DE RING A DROIT À SA TRAÎNÉE ──
+           Nikola, 2026-09-01 : « j'ai envoyé un Titan en dehors — déjà, il
+           manquait la traînée ».
+
+           Ce `return` court-circuite la fin de la fonction, où la trajectoire
+           est normalement enregistrée : le seul vol vraiment spectaculaire du
+           jeu était donc le seul qu'on ne voyait pas passer. Le Titan
+           disparaissait de sa case sans que rien ne dise par où.
+
+           On ajoute la case de RENTRÉE au chemin : c'est là qu'il réapparaîtra,
+           de l'autre côté du plateau, et l'y peindre est précisément
+           l'information qui manquait — sans elle, personne ne sait où il va
+           revenir. Même geste que la traversée de faille, qui peint elle aussi
+           sa case de sortie. */
+        if (Array.isArray(ctx.trajectoires)) {
+          const cases = [...chemin, rowFromIndex(sortieR) + sortieC];
+          if (cases.length > 1) {
+            ctx.trajectoires.push({
+              cases,
+              arrivee: rowFromIndex(sortieR) + sortieC,
+              titanId: ctx.movingTitanId ?? null,
+              initiatorId: ctx.initiatorId ?? null,
+              ejecte: true,
+            });
+          }
+        }
         return {
           row: rowFromIndex(sortieR),
           col: sortieC,
@@ -1648,7 +1701,52 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
       // réaction en chaîne n'avait jamais reçu le garde-fou correspondant.
       // Ici l'élément arrivant s'arrête simplement sur la case précédente,
       // comme face à n'importe quel obstacle infranchissable.
+      /* ── UN DÉBRIS N'EST JAMAIS ARRÊTÉ PAR UN TITAN ──
+         Nikola, 2026-09-03 : « si un débris pousse un titan il le pousse et
+         prend sa place ».
+
+         Les deux garde-fous ci-dessous existent pour une seule raison : deux
+         TITANS ne partagent jamais une case. Ils étaient appliqués à tout ce
+         qui vole, débris compris, alors qu'un débris se pose sans difficulté
+         sur la case d'un Titan — c'est déjà ce que dit l'immunité de
+         l'initiateur (« il s'arrête immédiatement dessus ») quelques lignes
+         plus haut, la garantie de sortie en fin de fonction, et le repli
+         offensif (cf. `appliquerReplElement`, ruling du 2026-09-01).
+
+         Un débris qui pousse un Titan restait donc en arrière au lieu de
+         prendre la case libérée : la poussée avait lieu, mais le tas de
+         débris se formait une case trop tôt. */
+      /* ⚠️ POINT DE RÈGLE OUVERT — UN MAILLON DE CHAÎNE BLOQUÉ RAPPORTE-T-IL ?
+         (audit du 2026-09-03, à trancher par Nikola)
+
+         La FAQ #12 révisée le 2026-08-24 dit « TOUCHÉ » et non « déplacé » :
+         « juste je gagne la Bagarre, je gagne 1 case sur la piste,
+         déplacement ou non ». Les cinq résolveurs de carte l'appliquent déjà
+         sur leur cible DIRECTE (`bagarreSet.add(targetId)` sans condition), et
+         `appliquerReplElement` sur celle d'un repli.
+
+         La chaîne de réaction, elle, est restée sur l'ancienne sémantique : le
+         crédit vit APRÈS le `break` ci-dessous, donc un maillon coincé sort du
+         décompte. Tête en Avant qui pousse un Titan contre un troisième,
+         lui-même bloqué, rapporte +1 et non +2.
+
+         Ce n'est pas corrigé, et volontairement : le test « Faut Pas Me
+         Chauffer : 2 combats gagnés au même tour = 2 Bagarre » écrit le jour
+         même du ruling attend exactement l'inverse (son quatrième Titan y sert
+         de mur, pas d'adversaire). Les deux lectures se défendent, et l'écart
+         change le score final — c'est un arbitrage de table, pas un correctif
+         de moteur. */
       if (caseApres === caseAvant) {
+        // Occupant réellement coincé : personne n'a bougé. Le Titan en vol
+        // s'arrête avant, le débris se pose quand même par-dessus.
+        if (elementEstUnDebris) {
+          log.push(
+            `${nextKey} : Titan ${occupantTitanId} coincé, il ne bouge pas — le débris se pose sur sa case.`
+          );
+          avancerVers(nr, nc);
+          remaining = 0;
+          break;
+        }
         log.push(
           `${nextKey} : Titan ${occupantTitanId} coincé, il ne peut pas être repoussé → l'élément s'arrête en ${rowFromIndex(r)}${c}.`
         );
@@ -1662,8 +1760,9 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
       );
 
       // Même précaution que pour le bloc transmis : la chaîne a pu ramener
-      // un TROISIÈME Titan sur la case que l'occupant vient de libérer.
-      if (caseOccupeeParUnAutreTitan(nextKey)) {
+      // un TROISIÈME Titan sur la case que l'occupant vient de libérer. Elle
+      // ne vaut, elle aussi, que pour un Titan en vol.
+      if (!elementEstUnDebris && caseOccupeeParUnAutreTitan(nextKey)) {
         break; // reste sur la case actuelle (r, c)
       }
 
@@ -1690,8 +1789,10 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
        (« dès qu'un élément arrive sur une case occupée, il projette les
        éléments présents »), et un Titan a la masse pour ça — c'est même par
        là qu'il se fraie un chemin. La différence de traitement est voulue et
-       tient en une phrase : le béton s'empile, le Titan bouscule. */
-    const elementEstUnDebris = ctx.movingTitanId == null;
+       tient en une phrase : le béton s'empile, le Titan bouscule.
+
+       (`elementEstUnDebris` est calculé une fois pour tout l'appel, en tête
+       de fonction : la poussée d'un Titan s'en sert elle aussi.) */
 
     /* Un Titan projeté sur une tour de débris MONTE dessus, comme avant.
        Ce qui suit son atterrissage — la tour qui bascule, parce qu'il n'a
@@ -2940,7 +3041,23 @@ function isLanterneRouge(titanId, gameState) {
   const titan = titans.find((t) => t.id === titanId);
   const totals = titans.map((t) => t.repaire.length);
   const minTotal = Math.min(...totals);
-  return titan.repaire.length <= minTotal;
+  if (titan.repaire.length > minTotal) return false;
+  /* ── LES ÉGALITÉS, RÉGLÉES AVANT LA PARTIE ──
+     Nikola, 2026-09-01 : « rajoute dans la configuration : les égalités en
+     Lanterne Rouge ne fonctionnent plus — on coche ou pas ».
+
+     À égalité, TOUS les Titans les moins dotés touchaient le bonus. C'est
+     défendable — la Lanterne Rouge est un rattrapage — et c'est aussi ce qui
+     permet à trois joueurs sur quatre d'y avoir droit en début de Manche, quand
+     tout le monde est à zéro. Les deux lectures se tiennent, donc ça se règle à
+     la table plutôt que de se trancher dans le moteur.
+
+     `true` par défaut : c'est la règle telle qu'elle a toujours tourné, et un
+     appelant qui ne fournit pas le champ (simulateur, tests, plans d'IA écrits
+     avant ce jour) garde exactement son comportement. */
+  const { egalitesLanterneRouge = true } = gameState;
+  if (egalitesLanterneRouge) return true;
+  return totals.filter((n) => n === minTotal).length === 1;
 }
 
 function getJeNePartagePasPool(titanId, gameState) {
@@ -4682,9 +4799,30 @@ function refuserFatigue(attackerId, targetId, cardId, gameStateTitans) {
 
    La carte revient a son proprietaire EN MAIN, ou qu'elle soit : encore en
    main du voleur, programmee, jouee, ou defaussee face cachee. */
+/* ⚠️ UNE DETTE NON HONORÉE NE S'EFFACE PAS (Nikola, 2026-09-01 : « j'ai 7
+   cartes en main dont 2 doubles, ce n'est pas possible vu qu'on rend
+   forcément la carte au Titan à la fin de la Manche suivante »).
+
+   Deux trous, et ils se cumulaient à chaque Manche :
+
+   · LA ZONE REPOS N'ÉTAIT PAS FOUILLÉE. Une carte empruntée peut y atterrir
+     — une Fatigue subie par le voleur pioche dans SA main, où la carte
+     empruntée se trouve justement, et `sendCardToOwnRepos` la met au frigo
+     chez lui. Aucune des quatre listes cherchées ne la contenait plus.
+   · L'ARDOISE ÉTAIT REMISE À ZÉRO QUAND MÊME. `titan.empruntees = []`
+     s'exécutait que la carte ait été retrouvée ou non : la dette
+     disparaissait avec elle. La carte revenait ensuite en main du VOLEUR par
+     `applyRestitution`, définitivement. Une main à 7 cartes avec un doublon,
+     une autre à 5, et l'écart ne se refermait jamais.
+
+   La Zone Repos est donc fouillée comme les autres — la carte rendue quitte
+   le frigo du voleur et retourne en main de son propriétaire, où elle est
+   redevenue disponible — et ce qui n'a pas pu être rendu RESTE dû : on le
+   retentera à la Phase Repos suivante, quand la carte sera ressortie. */
 function rendreCartesEmpruntees(titans) {
   const log = [];
   for (const titan of titans) {
+    const encoreDues = [];
     for (const emprunt of titan.empruntees || []) {
       const proprietaire = titans.find((t) => t.id === emprunt.proprietaire);
       if (!proprietaire) continue;
@@ -4694,12 +4832,19 @@ function rendreCartesEmpruntees(titans) {
         const i = (titan[nom] || []).indexOf(emprunt.cardId);
         if (i !== -1) { titan[nom].splice(i, 1); rendue = true; break; }
       }
+      if (!rendue) {
+        const iRepos = (titan.repos || []).findIndex((e) => e.cardId === emprunt.cardId);
+        if (iRepos !== -1) { titan.repos.splice(iRepos, 1); rendue = true; }
+      }
       if (rendue) {
         proprietaire.hand.push(emprunt.cardId);
         log.push(`Titan ${titan.id} rend ${CARD_LABEL[emprunt.cardId]} à son propriétaire, Titan ${proprietaire.id}.`);
+      } else {
+        encoreDues.push(emprunt);
+        log.push(`Titan ${titan.id} doit encore ${CARD_LABEL[emprunt.cardId]} à Titan ${proprietaire.id} — introuvable pour l'instant, la dette reste ouverte.`);
       }
     }
-    titan.empruntees = [];
+    titan.empruntees = encoreDues;
   }
   return log;
 }

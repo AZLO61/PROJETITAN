@@ -19,7 +19,7 @@
    · les tests, qui peuvent l'appeler sur un état construit à la main.
 ============================================================ */
 
-import { STOCK_INITIAL, isSocleMarker } from "./gameRules.js";
+import { STOCK_INITIAL, isSocleMarker, estSurLePlateau, ROWS } from "./gameRules.js";
 
 // Nombre total de blocs de chaque couleur existant dans la boîte. Un
 // Repaire ne peut pas en contenir davantage : si le compte explose,
@@ -43,7 +43,16 @@ export function verifierInvariants(etat, contexte = "") {
   // Nikola du 2026-08-16, « ça évite l'acharnement »). Il n'occupe alors
   // aucune case : sa `cell` ne désigne plus sa position mais la case par
   // laquelle il rentrera. Les contrôles de position ne le concernent pas.
-  const surPlateau = titans.filter((t) => !t.horsPlateau);
+  /* `estSurLePlateau` plutôt que `!t.horsPlateau` : c'est la définition
+     canonique du moteur, et elle écarte AUSSI `aPlacer` — un Titan qui
+     attend son tour de mise en place porte déjà dans `cell` l'emplacement
+     que le tirage lui réserve, sans l'occuper. Filtrer à la main ici
+     signalait une fausse superposition dès qu'un Titan posait réellement sur
+     la case encore virtuelle d'un autre. Dormant aujourd'hui (le simulateur
+     appelle `placeTitans` sans modes, donc `aPlacer` reste faux), mais ce
+     module existe pour être branché un jour sur une partie interactive, où
+     le cas se produit à chaque mise en place. */
+  const surPlateau = titans.filter(estSurLePlateau);
 
   // ── 1. Deux Titans ne partagent jamais une case ──
   // Ruling explicite de Nikola, déjà corrigé une fois dans le moteur
@@ -82,7 +91,9 @@ export function verifierInvariants(etat, contexte = "") {
 
   // ── 3. Toute case occupée est sur le plateau 9x9 ──
   for (const t of titans) {
-    const ligne = "ABCDEFGHI".indexOf(t.cell?.[0]);
+    // `ROWS` vient du moteur : recopier "ABCDEFGHI" ici ferait diverger le
+    // contrôle du plateau qu'il est censé contrôler.
+    const ligne = ROWS.indexOf(t.cell?.[0]);
     const colonne = Number(t.cell?.slice(1));
     if (ligne < 0 || !Number.isInteger(colonne) || colonne < 1 || colonne > 9) {
       signaler("case-hors-plateau", `Titan ${t.id} en "${t.cell}"`);

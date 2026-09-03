@@ -131,6 +131,11 @@ export default function TitanResourceBand({
      secret. On applique la même règle en Phase Action. */
   const estSonTour = (id) => selectedTitanId === id;
   const enAttenteIds = new Set((titansEnAttente || []).map((x) => x.id));
+  /* Quel Titan a son détail de cartes ouvert. Un seul à la fois : ce panneau
+     répond à « qui a joué quoi », une question qu'on se pose Titan par Titan.
+     `null` = aucun. (cf. le bouton des rectangles jaunes plus bas) */
+  const [cartesOuvertes, setCartesOuvertes] = React.useState(null);
+  const nomDe = (id) => (titanDisplayName ? titanDisplayName(id) : `Titan ${id}`);
 
   /* ── L'ORDRE DE PASSAGE, SUR LA PLAQUE DE CHAQUE TITAN ──
      Demande de Nikola, 2026-08-27 : « sois sûr qu'on ait l'information de
@@ -419,28 +424,94 @@ export default function TitanResourceBand({
                   if (!c.cardId) return "Carte défaussée face cachée — jamais révélée";
                   return `Déjà jouée : ${CARD_LABEL[c.cardId]} (Force ${CARD_FORCE[c.cardId]})`;
                 };
+                /* ── LE SURVOL NE SUFFIT PAS, ON PEUT CLIQUER ──
+                   Nikola, 2026-09-01 : « c'est compliqué voire pas possible de
+                   savoir facilement qui a joué quoi pendant la Manche ; le
+                   survol des rectangles jaunes vides ne fonctionne pas bien sur
+                   mobile ».
+
+                   Toute l'information était là, et entièrement enfermée dans un
+                   attribut `title` — c'est-à-dire dans l'infobulle native du
+                   navigateur, qui n'existe pas sur un écran tactile. Sur
+                   téléphone, ces rectangles ne disaient donc RIEN, alors qu'ils
+                   portent la seule trace publique de ce qui s'est joué.
+
+                   La rangée devient un bouton, et son détail une petite liste :
+                   une ligne par carte de la Manche, exactement ce que le `title`
+                   disait. Les `title` restent en place — à la souris, ils vont
+                   plus vite qu'un clic — et rien de secret ne s'ouvre : `libelle`
+                   décide déjà quoi montrer selon qu'on regarde sa propre plaque
+                   ou celle d'un adversaire. */
+                const ouvert = cartesOuvertes === t.id;
                 return (
-                  <span
-                    title={`${t.programmed.length} carte(s) encore à jouer sur ${total} cette Manche`}
-                    style={{ display: "inline-flex", gap: 3, alignItems: "center", cursor: "help" }}
-                  >
-                    {cases.map((c, i) => (
-                      <span
-                        key={i}
-                        title={libelle(c)}
-                        style={{
-                          /* FORMAT CARTE, Nikola 2026-08-18 : « fais des
-                             rectangles à la verticale, ça fera plus carte ».
-                             `flexShrink: 0` reste indispensable, sans lui le
-                             conteneur écrase la largeur sur une ligne chargée. */
-                          width: 9, height: 12, flexShrink: 0, alignSelf: "center",
-                          display: "inline-block", boxSizing: "border-box",
-                          background: c.restante ? T.you : "transparent",
-                          border: `1.5px solid ${T.you}`,
-                          opacity: c.restante ? 1 : 0.45,
-                        }}
-                      />
-                    ))}
+                  <span style={{ position: "relative", display: "inline-flex" }}>
+                    <button
+                      type="button"
+                      onClick={() => setCartesOuvertes((prev) => (prev === t.id ? null : t.id))}
+                      aria-expanded={ouvert}
+                      title={`${t.programmed.length} carte(s) encore à jouer sur ${total} cette Manche — clique pour le détail`}
+                      style={{
+                        display: "inline-flex", gap: 3, alignItems: "center", cursor: "pointer",
+                        background: "none", border: "none", padding: "3px 2px", margin: 0,
+                      }}
+                    >
+                      {cases.map((c, i) => (
+                        <span
+                          key={i}
+                          title={libelle(c)}
+                          style={{
+                            /* FORMAT CARTE, Nikola 2026-08-18 : « fais des
+                               rectangles à la verticale, ça fera plus carte ».
+                               `flexShrink: 0` reste indispensable, sans lui le
+                               conteneur écrase la largeur sur une ligne chargée. */
+                            width: 9, height: 12, flexShrink: 0, alignSelf: "center",
+                            display: "inline-block", boxSizing: "border-box",
+                            background: c.restante ? T.you : "transparent",
+                            border: `1.5px solid ${T.you}`,
+                            opacity: c.restante ? 1 : 0.45,
+                          }}
+                        />
+                      ))}
+                    </button>
+                    {ouvert && (
+                      <>
+                        {/* Le voile referme au clic suivant, où qu'il tombe : sur
+                            un téléphone, viser à nouveau trois rectangles de 9 px
+                            pour fermer un panneau serait une punition. */}
+                        <span
+                          onClick={() => setCartesOuvertes(null)}
+                          style={{ position: "fixed", inset: 0, zIndex: 320 }}
+                        />
+                        <span
+                          style={{
+                            position: "absolute", zIndex: 321, top: "calc(100% + 6px)", left: 0,
+                            minWidth: 210, maxWidth: "80vw",
+                            background: "rgba(14,4,32,.97)",
+                            border: `${T.edgeW} solid ${T.you}`,
+                            borderRadius: T.rChip, padding: "9px 11px",
+                            boxShadow: "0 10px 30px rgba(0,0,0,.7)",
+                            display: "flex", flexDirection: "column", gap: 6,
+                          }}
+                        >
+                          <span style={label(T.you, T.micro)}>
+                            {nomDe(t.id)} — cartes de la Manche
+                          </span>
+                          {cases.map((c, i) => (
+                            <span key={i} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                              <span style={{
+                                width: 9, height: 12, flexShrink: 0,
+                                background: c.restante ? T.you : "transparent",
+                                border: `1.5px solid ${T.you}`,
+                                opacity: c.restante ? 1 : 0.45,
+                              }} />
+                              <span style={{ ...label(c.restante ? T.text : T.dim, T.micro), whiteSpace: "normal" }}>
+                                {libelle(c)}
+                              </span>
+                            </span>
+                          ))}
+                        </span>
+                      </>
+                    )}
                   </span>
                 );
               })()}

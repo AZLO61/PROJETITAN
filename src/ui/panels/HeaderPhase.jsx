@@ -54,6 +54,7 @@ export default function HeaderPhase({ vm }) {
     show3D,
     setShow3D,
     setShowRules,
+    setShowTutoriel,
     regenerate,
     animating,
     animLabel,
@@ -140,6 +141,23 @@ export default function HeaderPhase({ vm }) {
           title="Ouvrir le livret sans quitter la partie"
         >
           Règles
+        </Commande>
+        {/* TUTORIEL À CÔTÉ DES RÈGLES, ET C'EST VOULU (Nikola, 2026-09-01 :
+            « il faudrait un bouton tutoriel pour voir les principes du jeu
+            rapidement et le fonctionnement des cartes visuellement »).
+
+            Les deux répondent à deux questions différentes. « Comment on joue,
+            déjà ? » se règle en sept écrans ; « que fait exactement cette carte
+            au Seuil 4 ? » demande le livret. Les mettre côte à côte laisse
+            choisir la bonne porte, au lieu d'enterrer la réponse courte sous la
+            longue. */}
+        <Commande
+          onClick={() => setShowTutoriel(true)}
+          icon="bolt"
+          nomComplet="Tutoriel"
+          title="Les principes du jeu et les six cartes, en sept écrans"
+        >
+          Tutoriel
         </Commande>
         {/* JOURNAL À LA PLACE DE SIGNALER — Nikola, 2026-08-28 : « place
             l'historique "journal" à la place de Signaler, car Signaler je ne

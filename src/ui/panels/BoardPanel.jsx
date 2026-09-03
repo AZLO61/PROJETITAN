@@ -130,6 +130,23 @@ export default function BoardPanel({ vm }) {
   // ne produisaient plus rien (bug remonté le 2026-08-17).
   React.useEffect(() => { setMoveSkipped(false); }, [vm.activePlayerId, vm.undoTick]);
 
+  /* ── UN EXEMPLAIRE PROGRAMME, PAS UN TITRE ──
+     Nikola, 2026-09-01 : « quand j'ai 2 fois la meme carte programmee, si j'en
+     selectionne 1 ca selectionne forcement l'autre ».
+
+     Depuis que le vol de Phase Repos transfere la carte, `programmed` peut
+     contenir deux fois le meme identifiant. La grille des cartes a jouer
+     n'avait que `cardId` pour se reperer : la surbrillance (`activeMode`,
+     `pendingCardConfirm.cardId`) s'allumait sur les DEUX exemplaires, et
+     `key={cardId}` donnait en prime deux cles React identiques.
+
+     La position dans `programmed` identifie l'exemplaire. Elle ne sert qu'a
+     l'affichage : le moteur ne recoit toujours qu'un `cardId`, et il compte
+     les exemplaires de son cote. Remise a zero au changement de Titan actif et
+     apres une annulation, comme `moveSkipped`. */
+  const [progIdxOuvert, setProgIdxOuvert] = React.useState(null);
+  React.useEffect(() => { setProgIdxOuvert(null); }, [vm.activePlayerId, vm.undoTick]);
+
   /* ── QUAND C'EST À MOI, L'ÉCRAN VIENT À MOI ───────────────
      Nikola, 2026-08-30 : « quand c'est mon tour, ça switch automatiquement sur
      mon interface Périmètre / Énergie / Déplacer ».
@@ -177,6 +194,8 @@ export default function BoardPanel({ vm }) {
     setTeaAdrenaline,
     tcAdrenaline,
     setTcAdrenaline,
+    graouAdrenaline,
+    setGraouAdrenaline,
     direction,
     setDirection,
     jnpMode,
@@ -408,6 +427,29 @@ export default function BoardPanel({ vm }) {
                 )}
               </div>
             </div>
+
+            {/* ── LA FORCE DE LA MANCHE ──
+                Nikola, 2026-09-01 : « affiche la force totale des cartes
+                programmées, jouées ou non, à côté du seuil ».
+
+                C'est le nombre que Faut Pas Me Chauffer compare, et il ne
+                s'affichait nulle part : on le découvrait au moment de la
+                confrontation, quand il n'y a plus rien à en faire. Il vaut
+                pour la Manche entière et ne bouge pas quand on joue — une
+                carte jouée garde sa Force dans le total, c'est la règle de
+                `getProgrammedSum`.
+
+                Il n'apparaît que sur une main qu'on a le droit de voir : à
+                distance, la Force d'un autre Titan est exactement le secret
+                que FPMC met en jeu. */}
+            {cartesVisibles && vm.getProgrammedSum && (
+              <div title="Somme des Forces des 3 cartes de la Manche (programmées, jouées ou défaussées). C'est elle que Faut Pas Me Chauffer compare.">
+                <div style={label(T.faint)}>Force</div>
+                <div style={{ marginTop: 5 }}>
+                  <span style={readout("1.15rem", T.text)}>{vm.getProgrammedSum(selectedTitan)}</span>
+                </div>
+              </div>
+            )}
 
             {/* ANNULER VIT ICI DEPUIS LE 2026-08-28 (Nikola : « le bouton
                 Annuler devrait plutôt être à côté de Périmètre / Énergie, sur
@@ -948,6 +990,23 @@ export default function BoardPanel({ vm }) {
                     <p style={{ margin: "8px 0 0", fontSize: ".7rem", color: "rgba(255,255,255,.5)" }}>
                       Direction choisie : <strong style={{ color: "#7cf5e8" }}>{direction.label}</strong>
                     </p>
+                    {/* LE DOSEUR (Nikola, 2026-09-01 : « on peut augmenter de
+                        +1 par Adrénaline la projection des Titans avec
+                        Graouhhh »). Graouhhh était la seule carte offensive
+                        sans mise possible. Le recul de base — nombre de Titans
+                        touchés + 1 — est rappelé à côté, sans quoi le joueur
+                        mise à l'aveugle sur un total qu'il ne voit pas. */}
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+                      <AdrenalinePicker
+                        value={graouAdrenaline}
+                        max={selectedTitan.adrenaline || 0}
+                        onChange={setGraouAdrenaline}
+                        label="Chaque Adrénaline dépensée recule les Titans touchés d'une case de plus"
+                      />
+                      <span style={{ fontSize: ".7rem", color: "rgba(255,255,255,.5)" }}>
+                        recul = Titans touchés + 1{graouAdrenaline > 0 ? ` + ${graouAdrenaline}` : ""}
+                      </span>
+                    </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
                       <button
                         onClick={() => {
@@ -979,15 +1038,17 @@ export default function BoardPanel({ vm }) {
                       gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                       gap: 5, justifyItems: "center",
                     }}>
-                      {selectedTitan.programmed.map((cardId) => {
+                      {selectedTitan.programmed.map((cardId, idxProg) => {
                         const canPlay = canPlayCard(cardId);
-                        const activeMode = (cardId === "boing_boing" && bbMode)
+                        const modeOuvert = (cardId === "boing_boing" && bbMode)
                           || (cardId === "je_ne_partage_pas" && jnpMode)
                           || (cardId === "tete_en_avant" && teaMode)
                           || (cardId === "graouhhh" && graouMode);
+                        // Le mode appartient a l'exemplaire clique, pas au titre.
+                        const activeMode = modeOuvert && progIdxOuvert === idxProg;
                         const needsDir = cardId === "graouhhh"; // TEA n'utilise plus le select
                         return (
-                          <div key={cardId} style={{
+                          <div key={`${cardId}-${idxProg}`} style={{
                             display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
                             background: canPlay ? "rgba(255,217,61,.06)" : "transparent",
                             border: canPlay ? "1px solid rgba(255,217,61,.2)" : "1px solid transparent",
@@ -995,11 +1056,15 @@ export default function BoardPanel({ vm }) {
                           }}>
                             <CardVisual
                               cardId={cardId}
-                              selected={activeMode || pendingCardConfirm?.cardId === cardId}
+                              selected={activeMode || (pendingCardConfirm?.cardId === cardId && progIdxOuvert === idxProg)}
                               selectable={canPlay}
                               accentColor={TITAN_COLORS[selectedTitan.id]?.accent}
                               onClick={() => {
                                 if (!canPlay || animating) return;
+                                // Recliquer le meme exemplaire le referme (les
+                                // `toggle*` plus bas font le reste) ; cliquer un
+                                // autre exemplaire deplace la surbrillance.
+                                setProgIdxOuvert((prev) => (prev === idxProg && modeOuvert ? null : idxProg));
 
                                 /* ⚠️ UNE SEULE CARTE OUVERTE À LA FOIS.
                                    Bug remonté par Nikola le 2026-08-28 : « j'ai

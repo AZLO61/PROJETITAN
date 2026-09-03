@@ -751,6 +751,41 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
       window.removeEventListener("pointerup", onPointerUp);
       dom.removeEventListener("pointerleave", onPointerLeave);
       dom.removeEventListener("wheel", onWheel);
+
+      /* ── LE DÉMONTAGE REND LA MÉMOIRE GPU, LUI AUSSI ──
+         Trouvé à l'audit du 2026-09-03. `viderGroupe` (voir plus haut) avait
+         réglé les fuites de RECONSTRUCTION ; le DÉMONTAGE, lui, ne rendait
+         rien. Or la vue 3D est un composant qu'on monte et démonte à chaque
+         bascule 2D/3D, pas un écran permanent.
+
+         `renderer.dispose()` ne libère que ce qui appartient au renderer —
+         programmes compilés, listes de rendu. Restaient alloués : les 81
+         géométries et 81 matériaux du sol (jamais passés par `viderGroupe`,
+         le sol ne se reconstruit pas), et les quatre caches partagés, qui
+         portent justement le drapeau `userData.partage` pour SURVIVRE aux
+         reconstructions — drapeau qui n'a plus lieu d'être quand la scène
+         entière disparaît.
+
+         Sur un téléphone, une dizaine d'allers-retours 2D/3D dans une partie
+         d'une heure et demie suffisaient à faire monter la mémoire sans
+         jamais la rendre : rendu qui rame, puis perte du contexte WebGL. */
+      scene.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose();
+        const materiaux = Array.isArray(obj.material) ? obj.material : obj.material ? [obj.material] : [];
+        for (const mat of materiaux) {
+          if (mat.map) mat.map.dispose();
+          mat.dispose();
+        }
+      });
+      facadeTextureCache.forEach((texture) => texture.dispose());
+      facadeTextureCache.clear();
+      blockMaterialCache.forEach((materiaux) => materiaux.forEach((m) => m.dispose()));
+      blockMaterialCache.clear();
+      spriteTextureCache.forEach((texture) => texture.dispose());
+      spriteTextureCache.clear();
+      outlineMaterial.dispose();
+      scene.clear();
+
       renderer.dispose();
       if (mount.contains(dom)) mount.removeChild(dom);
     };
