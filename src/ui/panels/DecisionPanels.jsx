@@ -290,19 +290,51 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
   /* Une Piste ADN : « où j'en suis → ce que ça rapporte ». La position est
      celle qui SERT AU CALCUL, Vert placé compris, et le Vert est signalé —
      c'est le seul endroit où un Vert envoyé sur une piste devient visible. */
-  const cellulePiste = (t, piste, pts) => {
+  /* ── LE MENEUR D'UNE PISTE SE RECONNAÎT À SA COULEUR, ICI AUSSI ──
+     Nikola, 2026-09-07 : « dans le scoring final, colorise les chiffres des
+     meneurs des pistes ADN comme dans les encarts ».
+
+     La rangée des Titans le fait depuis le 27 août — le meilleur de la table
+     prend la couleur de sa piste, les autres l'encre ordinaire — et le tableau
+     de décompte, lui, écrivait quatre nombres identiques. Or c'est justement
+     là qu'on cherche qui mène : le classement d'une piste vaut jusqu'à 7 points
+     (`PODIUM_POINTS`), et il fallait comparer les quatre colonnes de tête.
+
+     Le meilleur est lu sur les valeurs AJUSTÉES, celles qui servent au calcul,
+     Verts placés compris — sinon la couleur désignerait un meneur que le
+     décompte ne retient pas. À égalité, tous les premiers sont colorés : ils
+     partagent réellement la tête, et le barème du podium les départage
+     ailleurs. */
+  const meilleurPiste = (piste) => Math.max(
+    0,
+    ...titanState.players.map((p) => finalScoreResult.adjADN[p.id]?.[piste] ?? 0)
+  );
+
+  const cellulePiste = (t, piste, pts, couleurPiste) => {
     const valeur = finalScoreResult.adjADN[t.id][piste];
     const base = t[piste] || 0;
     const boostéParVert = valeur > base;
+    const meilleur = meilleurPiste(piste);
+    const estMeilleur = meilleur > 0 && valeur === meilleur;
     return (
       <span
-        title={boostéParVert
+        title={(boostéParVert
           ? `Piste à ${base} + ${valeur - base} Vert placé ici → ${pts} pts de classement`
-          : `Piste à ${valeur} → ${pts} pts de classement`}
+          : `Piste à ${valeur} → ${pts} pts de classement`)
+          + (estMeilleur ? " — meilleur de la table" : meilleur > 0 ? ` — le meilleur de la table en a ${meilleur}` : "")}
         style={{ display: "inline-flex", alignItems: "baseline", gap: 4, cursor: "help" }}
       >
         <strong style={{
-          color: valeur === 0 ? "rgba(255,255,255,.3)" : boostéParVert ? "#7ef2a8" : "#fffaee",
+          /* L'ordre compte : le Vert placé passe AVANT le rang, parce qu'il
+             explique d'où vient la valeur — sans lui, le chiffre semble sorti
+             de nulle part. Le meneur garde son cerne dans l'infobulle. */
+          color: valeur === 0
+            ? "rgba(255,255,255,.3)"
+            : boostéParVert
+            ? "#7ef2a8"
+            : estMeilleur
+            ? couleurPiste
+            : "#fffaee",
           fontVariantNumeric: "tabular-nums",
         }}>
           {valeur}
@@ -699,8 +731,8 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
                     // impossible de vérifier le classement à l'œil, et un
                     // Vert placé sur une piste devenait invisible. On montre
                     // la position sur la piste, puis ce qu'elle rapporte.
-                    [ligneIcone(<Icon name="brawl" size={15} style={{ color: T.stop }} />, "Bagarre"), (t) => cellulePiste(t, "bagarre", finalScoreResult.totals[t.id].bagarrePts)],
-                    [ligneIcone(<Icon name="wreck" size={15} style={{ color: T.warn }} />, "Destruction"), (t) => cellulePiste(t, "destruction", finalScoreResult.totals[t.id].destructionPts)],
+                    [ligneIcone(<Icon name="brawl" size={15} style={{ color: T.stop }} />, "Bagarre"), (t) => cellulePiste(t, "bagarre", finalScoreResult.totals[t.id].bagarrePts, T.stop)],
+                    [ligneIcone(<Icon name="wreck" size={15} style={{ color: T.warn }} />, "Destruction"), (t) => cellulePiste(t, "destruction", finalScoreResult.totals[t.id].destructionPts, T.warn)],
                     /* Le barème est LU, jamais recopié : la ligne annonçait « ×3 »
                        après le ruling du 2026-08-19 qui l'avait passé à 2, et
                        promettait donc une valeur d'Adrénaline que le décompte

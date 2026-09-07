@@ -1,5 +1,100 @@
 # Changelog
 
+## Non publié — vingt-neuvième passe du 2026-09-07 (seconde salve du même jour)
+
+Neuf retours de plus après la passe précédente, puis une seconde enquête —
+divergences entre le livret et le moteur d'un côté, performance et
+accessibilité de l'autre.
+
+### Les retours
+
+**Le décompte de traînée passe aussi en 3D.** Chaque case traversée porte, en
+relief comme à plat, ce qu'il restait à parcourir. Le sprite prend la couleur
+de ce qui a volé et se pose au-dessus des bâtiments : une traînée passe par
+dessus la ville, pas dedans.
+
+**La valeur du Socle descend en bas à droite de la case.** Elle occupait le
+coin que le décompte de traînée venait de prendre, et deux chiffres au même
+endroit se lisent comme un seul. Le bas est libre — le compteur d'étages qui y
+vit appartient à un bâtiment DEBOUT, et un Socle ne tombe que quand ce bâtiment
+a disparu. C'est aussi la bonne place au sens propre : un socle se lit par le
+bas.
+
+**La pastille de gain ADN tient jusqu'au Titan suivant.** Elle vivait 2,2
+secondes, ce qui suffit à la manquer quand on regarde le plateau. Son repère de
+fin n'est plus une durée mais un évènement de jeu, et deux gains dans le même
+tour s'additionnent au lieu de s'écraser.
+
+**Les meneurs des Pistes ADN sont colorisés dans le décompte final**, comme
+dans les encarts de Titan. Le classement d'une piste vaut jusqu'à 7 points, et
+il fallait comparer quatre colonnes de chiffres identiques pour savoir qui
+menait.
+
+**Plus de Phase Repos quand il n'y a plus de Manche après.** Elle ne sert qu'à
+préparer la suivante : sans suivante, elle déplace des cartes que personne ne
+jouera et fait attendre la table entre le dernier coup et le décompte. La
+condition est celle du moteur (`checkEndGameTriggers`), donc la Phase saute
+aussi bien sur la dernière Manche que sur une Apocalypse, une Pénurie ou un
+Vide Spatial.
+
+**L'IA sait désormais qu'elle peut mettre le meneur à l'abri.** Un terme
+volontairement faible, qui pèse le fait de laisser le Titan en tête hors de
+portée de tout le monde — modulé par son avance et par la proximité de la fin,
+donc nul en Manche 1 et sensible en dernière Manche. Il départage deux coups
+équivalents ; il ne fait jamais renoncer à des points, comme demandé.
+
+**Le rebond d'un débris reste borné à sa charnière**, et un test le fige :
+départ, plus les cases qui touchent à la fois le départ et la cible, jamais
+derrière l'obstacle. Le correctif du Titan coincé de la passe précédente ouvre
+volontairement toutes les cases libres adjacentes — les deux règles vivent dans
+la même fonction et ne doivent pas se contaminer.
+
+**Le Dilemme d'un Graouhhh sur deux cibles : pas de défaut trouvé.** Deux
+chemins vérifiés bout en bout par un nouveau test — les deux cibles laissent
+bien leur bloc sur leur case d'impact, la seconde comme la première. Un défaut
+d'ordre a tout de même été refermé au passage dans
+`resolveDilCancelWithAdrenaline`, qui relançait la chaîne AVANT de dépiler la
+décision tranchée, à l'inverse des trois autres résolveurs.
+
+### Le livret disait trois choses fausses
+
+Toutes trois trouvées en comparant, mécanique par mécanique, le livret, le
+glossaire de l'application et le moteur. Le glossaire, lui, était juste partout.
+
+**Le Socle d'un bâtiment détruit n'est attribué à personne.** Le livret se
+contredisait lui-même : sa section « Socles » donnait le Socle au destructeur,
+sa propre FAQ #9 disait « personne », et le moteur suit la FAQ. C'est un point
+de score, et un joueur qui suivait la première ligne comptait des points qu'il
+n'avait pas.
+
+**Un Amas percuté bascule DANS L'AXE du choc**, jamais en direction opposée.
+Le livret l'écrivait à trois endroits, le moteur fait l'inverse depuis le
+19 août — et c'est le moteur qui a raison, ruling à l'appui.
+
+**On ne peut rien dépenser pour rentrer plus tôt sur le plateau.** Cette
+possibilité datait de la toute première version du livret et a été abandonnée
+le jour même, au profit de l'attente qui « évite l'acharnement ». Le moteur ne
+l'a jamais implémentée.
+
+### Performance et accessibilité
+
+**Le plateau en relief ne se reconstruit plus en entier pour un clic.**
+Sélectionner un autre Titan, ou ouvrir un mode de déplacement, jetait et
+recréait chaque géométrie de socle, de bloc, de contour et d'ombre du plateau
+9×9 — alors que la ville n'avait pas bougé. Elle a maintenant son propre effet,
+déclenché par le seul changement de plateau ; les Titans et la surbrillance
+gardent le leur.
+
+**Les cases du plateau se jouent au clavier.** C'étaient de simples `div`
+cliquables : ni rôle, ni tabulation, ni touche, alors que tout le jeu passe par
+elles. Elles reprennent le motif déjà en place sur les cartes, et seules les
+cases qui font réellement quelque chose entrent dans l'ordre de tabulation.
+
+**`npm run lint` est de nouveau utilisable.** Un second dossier de build
+(`dist-sm/`) traînait à la racine et faisait analyser des bundles minifiés :
+427 erreurs sur du code généré, qui noyaient les deux seuls vrais
+avertissements du projet. Ignoré par ESLint et par git, comme `dist/`.
+
 ## Non publié — vingt-huitième passe du 2026-09-07 (les retours de table, la revue de sécurité et l'IA)
 
 Quatorze retours après plusieurs parties, une revue de sécurité complète du mode

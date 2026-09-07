@@ -23,7 +23,13 @@ import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
   {
-    ignores: ["dist/**", "public/**", "node_modules/**"],
+    /* `dist-*` ajouté le 2026-09-07 : une seconde sortie de build (`dist-sm`)
+       traînait à la racine et faisait analyser des bundles minifiés — 427
+       erreurs `react-hooks/rules-of-hooks` sur du code généré, qui noyaient
+       les deux seuls vrais avertissements du projet et rendaient
+       `npm run lint` inutilisable. Le motif couvre les variantes futures
+       plutôt que de les rattraper une par une. */
+    ignores: ["dist/**", "dist-*/**", "public/**", "node_modules/**"],
   },
   js.configs.recommended,
   {

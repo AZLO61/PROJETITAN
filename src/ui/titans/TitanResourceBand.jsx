@@ -75,33 +75,54 @@ const MAX_CARRES = 8;
    décompte, c'est trop cher pour se lire après coup.
 
    On montre donc l'ÉCART, pas la valeur : la pastille dit ce que l'action
-   vient de rapporter, puis s'efface. Une baisse (« Annuler », ou une
-   restauration d'instantané) ne clignote pas — seul un gain est un évènement
-   à signaler. */
-const DUREE_GAIN_MS = 2200;
+   vient de rapporter. Une baisse (« Annuler », ou une restauration
+   d'instantané) ne clignote pas — seul un gain est un évènement à signaler.
 
-function usePisteGain(valeur) {
+   ── ELLE TIENT JUSQU'AU TITAN SUIVANT ──
+   Nikola, 2026-09-07 : « pour la pastille de gain sur piste ADN, laisse ça
+   visible et ajusté jusqu'au fait de passer au Titan suivant, comme ça c'est
+   bien clair ».
+
+   Elle vivait 2,2 secondes, ce qui suffit à la manquer : le regard est sur le
+   plateau pendant la résolution, et quand il remonte sur les plaques, la
+   pastille est déjà partie. Le repère de fin n'est donc plus une durée mais un
+   ÉVÈNEMENT DE JEU — le changement de Titan actif, c'est-à-dire le clic sur
+   « Titan suivant ». Tant qu'on est dans le même tour, le gain reste affiché,
+   et un second gain dans ce tour s'AJOUTE au premier plutôt que de l'écraser :
+   ce qu'on veut lire, c'est ce que le tour entier a rapporté.
+
+   Plus aucun minuteur ici, donc : c'est l'état du jeu qui décide, pas
+   l'horloge. */
+function usePisteGain(valeur, tour) {
   const [gain, setGain] = React.useState(0);
   // Initialisé sur la valeur d'arrivée : monter le composant n'est pas un gain.
   const precedentRef = React.useRef(valeur);
+  const tourRef = React.useRef(tour);
 
   React.useEffect(() => {
+    // Nouveau tour : on repart de zéro, quelle que soit la valeur.
+    if (tourRef.current !== tour) {
+      tourRef.current = tour;
+      precedentRef.current = valeur;
+      setGain(0);
+      return;
+    }
     const avant = precedentRef.current;
     precedentRef.current = valeur;
-    if (valeur <= avant) { setGain(0); return; }
-    setGain(valeur - avant);
-    const minuteur = setTimeout(() => setGain(0), DUREE_GAIN_MS);
-    return () => clearTimeout(minuteur);
-  }, [valeur]);
+    // Une baisse remet le compteur à plat : c'est une annulation, pas un gain.
+    if (valeur < avant) { setGain(0); return; }
+    if (valeur === avant) return;
+    setGain((g) => g + (valeur - avant));
+  }, [valeur, tour]);
 
   return gain;
 }
 
-function Piste({ icone, nom, valeur, meilleur, couleur }) {
+function Piste({ icone, nom, valeur, meilleur, couleur, tour }) {
   const montres = Math.min(valeur, MAX_CARRES);
   const reste = valeur - montres;
   const estMeilleur = meilleur > 0 && valeur === meilleur;
-  const gain = usePisteGain(valeur);
+  const gain = usePisteGain(valeur, tour);
   return (
     <div
       title={`Piste ADN ${nom} : ${valeur} point${valeur > 1 ? "s" : ""}${
@@ -145,7 +166,9 @@ function Piste({ icone, nom, valeur, meilleur, couleur }) {
           style={{
             ...readout("0.6rem", "#0b0b0b"),
             background: couleur, borderRadius: 3, padding: "0 3px",
-            animation: "pisteGain 2.2s ease-out forwards",
+            // Une apparition, pas une disparition : la pastille reste ensuite
+            // en place jusqu'au Titan suivant.
+            animation: "pisteGain 420ms ease-out both",
           }}
         >
           +{gain}
@@ -164,10 +187,8 @@ function Piste({ icone, nom, valeur, meilleur, couleur }) {
       <style>{`
         @keyframes pisteGain {
           0%   { opacity: 0; transform: translateY(5px) scale(.85); }
-          14%  { opacity: 1; transform: translateY(0) scale(1.12); }
-          24%  { transform: scale(1); }
-          78%  { opacity: 1; }
-          100% { opacity: 0; transform: translateY(-4px); }
+          60%  { opacity: 1; transform: translateY(0) scale(1.14); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
         }
         @media (prefers-reduced-motion: reduce) {
           @keyframes pisteGain { from { opacity: 1; } to { opacity: 1; } }
@@ -446,8 +467,12 @@ export default function TitanResourceBand({
                   2026-08-27). Les deux étaient inversées : le gant portait
                   l'orange de l'alerte et l'explosion le rouge de l'arrêt.
                   Le rouge appartient au coup porté, l'orange au feu. */}
-              <Piste icone="brawl" nom="Bagarre" valeur={t.bagarre || 0} meilleur={maxBagarre} couleur={T.stop} />
-              <Piste icone="wreck" nom="Destruction" valeur={t.destruction || 0} meilleur={maxDestruction} couleur={T.warn} />
+              {/* `tour` : le repère qui efface la pastille de gain. C'est le
+                  Titan actif, donc le clic sur « Titan suivant » (cf.
+                  `usePisteGain`). En Phase Programmation il n'y a pas de Titan
+                  actif — la phase y suffit comme repère. */}
+              <Piste icone="brawl" nom="Bagarre" valeur={t.bagarre || 0} meilleur={maxBagarre} couleur={T.stop} tour={`${phase}|${activePlayerId ?? "-"}`} />
+              <Piste icone="wreck" nom="Destruction" valeur={t.destruction || 0} meilleur={maxDestruction} couleur={T.warn} tour={`${phase}|${activePlayerId ?? "-"}`} />
             </div>
 
             {/* ── Ligne d'état : cartes, Repos, trophée, validation ── */}

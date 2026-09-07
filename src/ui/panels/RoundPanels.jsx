@@ -403,7 +403,10 @@ export default function RoundPanels({ vm }) {
 
   const cellulesActives = (() => {
     const out = [];
-    const add = (key, couleur, opacite) => out.push({ key, couleur, opacite });
+    // `reste` : le décompte de la traînée, transmis tel quel au plateau en
+    // relief (Nikola, 2026-09-07 : « mets le décompte aussi en vue 3D »). Nul
+    // pour toutes les autres cases actives, qui n'en ont pas.
+    const add = (key, couleur, opacite, reste = 0) => out.push({ key, couleur, opacite, reste });
     /* La trace de vol se dessine dans les DEUX vues : elle est ajoutee en
        PREMIER pour que les cases d'action, ajoutees ensuite, restent visibles
        par-dessus si les deux se superposent. */
@@ -411,7 +414,7 @@ export default function RoundPanels({ vm }) {
        jaune générique quand c'est un élément projeté — même intensité dans les
        deux cas (Nikola, 2026-08-28). */
     if (traceVol && traceVol.length > 0) {
-      traceVol.forEach((e) => add(e.key, teinteTrace3D(e), 0.7));
+      traceVol.forEach((e) => add(e.key, teinteTrace3D(e), 0.7, e.reste ?? 0));
     }
     if (vm.decisionBloquante === "placement") {
       // La couleur de CELUI QUI POSE, pas le jaune générique (Nikola,
@@ -890,6 +893,16 @@ export default function RoundPanels({ vm }) {
               // un Titan n'en est pas une).
               const estActionnable = placementSelectable || tcSelectable || repliSelectable || jnpSelectable || bbSelectable
                 || teaSelectable || moveSelectable || recupSelectable || ecroulSelectable;
+              /* Ce qui rend une case atteignable au clavier : elle déclenche
+                 une action, ou elle porte un Titan qu'on peut sélectionner.
+                 C'est exactement la condition du `cursor: "pointer"` juste
+                 en dessous — une case qui a l'air cliquable doit l'être au
+                 clavier, et l'inverse aussi. */
+              const caseInteractive = Boolean(estActionnable || bbInPath || titansByCell[key]);
+              const occupantDeLaCase = titansByCell[key];
+              const libelleAccessible = occupantDeLaCase
+                ? `Case ${key}, ${titanDisplayName ? titanDisplayName(occupantDeLaCase) : `Titan ${occupantDeLaCase}`}`
+                : `Case ${key}`;
 
               return (
                 <div
@@ -899,6 +912,27 @@ export default function RoundPanels({ vm }) {
                   // tête de composant) : une seule description de ce que
                   // « cliquer une case » veut dire, quelle que soit la vue.
                   onClick={(e) => clicCase(key, e.currentTarget)}
+                  /* ── UNE CASE QUI SE CLIQUE SE JOUE AUSSI AU CLAVIER ──
+                     Audit du 2026-09-07. Ces 81 cases sont la surface de jeu
+                     ENTIÈRE — tout déplacement, toute attaque, tout placement,
+                     toute décision de repli passe par elles — et c'étaient de
+                     simples `<div onClick>` : ni rôle, ni `tabIndex`, ni
+                     touche. À la souris uniquement.
+
+                     Le motif est déjà dans le projet et déjà juste :
+                     `CardVisual` fait exactement ça pour la main. On l'étend
+                     ici, et seulement aux cases qui FONT quelque chose — mettre
+                     les 81 dans l'ordre de tabulation transformerait la
+                     navigation clavier en corvée de 81 tabulations pour
+                     atteindre un bouton. */
+                  role={caseInteractive ? "button" : undefined}
+                  tabIndex={caseInteractive ? 0 : undefined}
+                  aria-label={caseInteractive ? libelleAccessible : undefined}
+                  onKeyDown={caseInteractive ? (e) => {
+                    if (e.key !== "Enter" && e.key !== " ") return;
+                    e.preventDefault();   // l'Espace ferait défiler la page
+                    clicCase(key, e.currentTarget);
+                  } : undefined}
                   // Les icones empilees dans une case de 30px etaient
                   // illisibles. La composition exacte passe dans l'infobulle,
                   // du haut vers le bas, et la case garde des reperes
@@ -1138,12 +1172,30 @@ export default function RoundPanels({ vm }) {
                         {/* Le Socle vit a droite de la case, les blocs a
                             gauche : les deux ne se confondent plus. Sa valeur
                             est le nombre d'etages du batiment a sa
-                            construction, et vaut autant de points. */}
+                            construction, et vaut autant de points.
+
+                            ── EN BAS À DROITE DEPUIS LE 2026-09-07 ──
+                            Nikola : « le nombre qui donne la valeur du Socle
+                            rentre en conflit avec la valeur de traînée du
+                            chemin, plaque-le en bas à droite de la case au lieu
+                            de en haut à droite — surtout que c'est UN socle ».
+
+                            Le décompte de traînée est arrivé en haut à droite le
+                            jour même, et deux chiffres au même endroit se lisent
+                            comme un seul. Le bas de la case est libre pour un
+                            Socle : le compteur d'étages qui y vit appartient à un
+                            bâtiment DEBOUT, et un Socle ne tombe au sol que
+                            lorsque ce bâtiment a été entièrement vidé — les deux
+                            ne coexistent jamais.
+
+                            Et c'est la bonne place au sens propre : un socle est
+                            ce sur quoi le bâtiment reposait, il se lit par le
+                            bas. */}
                         {hasSocle && (
                           <div
                             title={`Socle de valeur ${stack.filter(isSocleMarker).map(socleValue).join(" + ")} — autant que d'étages qu'avait le bâtiment à sa construction`}
                             style={{
-                              position: "absolute", top: 1, right: 2, zIndex: 4,
+                              position: "absolute", bottom: 1, right: 2, zIndex: 4,
                               display: "flex", alignItems: "center", gap: 2,
                               background: "rgba(0,0,0,.65)", borderRadius: 3,
                               padding: "1px 3px", cursor: "help",

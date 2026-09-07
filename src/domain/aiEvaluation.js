@@ -964,6 +964,73 @@ function gestesAvantLaFin(gameState) {
   return Math.min(apocalypse, vide, penurie, manches);
 }
 
+/* Portée au-delà de laquelle un Titan est « hors d'atteinte » pour ce terme.
+   Quatre cases : c'est la portée d'un Boing Boing à une Adrénaline, donc la
+   distance à partir de laquelle plus aucune carte ne va le chercher en un
+   tour. Au-delà, inutile de continuer à compter — le mal est fait. */
+const PORTEE_MENACE = 4;
+
+/* Ce que coûte, en points de note, le fait que le meneur soit à l'abri. Petit
+   par construction : cf. le pavé qui l'appelle dans `evaluatePosition` — il
+   doit départager deux coups équivalents, jamais faire renoncer à des points.
+   À 0,15, un meneur avec dix points d'avance, isolé, à la toute dernière
+   Manche, pèse 1,5 point de note : moins qu'un seul bloc de béton bien
+   placé. */
+const POIDS_ABRI_MENEUR = 0.15;
+
+function distanceEntreCases(a, b) {
+  if (!a || !b) return Infinity;
+  // Chebyshev : le plateau se parcourt en 8 directions, la diagonale ne coûte
+  // pas plus cher qu'un pas droit.
+  return Math.max(
+    Math.abs(a.charCodeAt(0) - b.charCodeAt(0)),
+    Math.abs(Number(a.slice(1)) - Number(b.slice(1)))
+  );
+}
+
+function valeurAbriDuMeneur(titanId, gameState, scores) {
+  const { titans = [] } = gameState;
+  const surLePlateau = titans.filter((t) => !t.horsPlateau && !t.aPlacer && t.cell);
+  if (surLePlateau.length < 2) return 0;
+
+  // Le meneur, moi compris : me protéger MOI-MÊME est parfaitement légitime,
+  // donc on ne compte rien dans ce cas.
+  let meneur = null;
+  let meilleur = -Infinity;
+  for (const t of surLePlateau) {
+    const total = scores.totals[t.id]?.total ?? 0;
+    if (total > meilleur) { meilleur = total; meneur = t; }
+  }
+  if (!meneur || meneur.id === titanId) return 0;
+
+  // L'avance sur le second : sans avance, il n'y a pas de meneur à ménager.
+  let second = -Infinity;
+  for (const t of surLePlateau) {
+    if (t.id === meneur.id) continue;
+    second = Math.max(second, scores.totals[t.id]?.total ?? 0);
+  }
+  const avance = meilleur - (second === -Infinity ? meilleur : second);
+  if (avance <= 0) return 0;
+
+  // Sa distance au Titan le plus proche : c'est ce qui décide s'il est encore
+  // sous la menace de quelqu'un.
+  let plusProche = Infinity;
+  for (const t of surLePlateau) {
+    if (t.id === meneur.id) continue;
+    plusProche = Math.min(plusProche, distanceEntreCases(meneur.cell, t.cell));
+  }
+  if (!Number.isFinite(plusProche)) return 0;
+
+  const isolement = Math.min(plusProche, PORTEE_MENACE) / PORTEE_MENACE;
+  // Même horizon que `valeurFinDePartie` : ça ne pèse que quand le classement
+  // est sur le point de se figer.
+  const restant = gestesAvantLaFin(gameState);
+  if (restant > PORTEE_FIN_DE_PARTIE) return 0;
+  const proximite = (PORTEE_FIN_DE_PARTIE + 1 - restant) / (PORTEE_FIN_DE_PARTIE + 1);
+
+  return avance * isolement * proximite * POIDS_ABRI_MENEUR;
+}
+
 function valeurFinDePartie(titanId, gameState, scores) {
   const restant = gestesAvantLaFin(gameState);
   if (restant > PORTEE_FIN_DE_PARTIE) return 0;
@@ -1158,6 +1225,36 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
   const poidsFin = reglages.poidsFinDePartie ?? 0;
   if (poidsFin > 0 && reglages.voitAdversaires) {
     note += valeurFinDePartie(titanId, gameState, scores) * poidsFin;
+  }
+
+  /* ── METTRE LE MENEUR À L'ABRI EST UN SERVICE QU'ON LUI REND ──
+     Nikola, 2026-09-07, après une partie : « un Titan a projeté le Titan qui
+     était assez devant par rapport aux autres, et du coup ça l'a protégé de
+     mon coup — qui possiblement aurait pu rebattre le classement ; je suis la
+     dernière de la Manche 4, donc mon coup pouvait être assez important là. »
+
+     Son arbitrage, mot pour mot : « il faut que l'IA ait connaissance de son
+     acte, que ça protège la cible possiblement, MAIS il ne faut pas que ce
+     soit un frein si ça permet de marquer des points. » Ce terme est donc
+     délibérément FAIBLE — il départage deux coups de valeur proche, il ne
+     renonce jamais à des points.
+
+     Ce qu'on mesure est une POSITION, pas une transition : à quelle distance
+     le meneur se trouve du Titan le plus proche. Un meneur au contact reste
+     attaquable par n'importe qui ; un meneur isolé au fond du plateau est hors
+     de portée de tout le monde jusqu'à la fin. L'évaluation n'a jamais accès
+     au coup lui-même, seulement à l'état qu'il produit — cette formulation est
+     donc la seule qui puisse marcher ici, et elle couvre du même geste le cas
+     symétrique : rester près du meneur pour le garder sous la menace.
+
+     Modulé par l'AVANCE du meneur (personne à protéger quand la table est
+     serrée) et par la proximité de la fin (un classement qui va se figer coûte
+     cher, un classement de Manche 1 ne coûte rien) — le même horizon que
+     `valeurFinDePartie`, pour ne pas inventer une seconde notion de « la fin
+     approche ». Réservé aux forces qui lisent le score de leurs adversaires :
+     sans cette lecture, il n'y a pas de meneur à connaître. */
+  if (reglages.voitAdversaires) {
+    note -= valeurAbriDuMeneur(titanId, gameState, scores) * (reglages.poidsAdversaires ?? 0) * poids.adn;
   }
 
   /* ── LA NUISANCE, REMISE — ET LA MESURE QUI L'AVAIT CONDAMNEE ──

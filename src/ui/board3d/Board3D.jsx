@@ -43,6 +43,9 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
   const mountRef = useRef(null);
   const apiRef = useRef(null);
   const rebuildRef = useRef(null);
+  // Reconstruction PARTIELLE : Titans et surbrillance seulement, sans toucher
+  // à la ville (cf. « DEUX RECONSTRUCTIONS, PAS UNE » plus bas).
+  const rebuildMobilesRef = useRef(null);
   const dataRef = useRef({ board, looseBlocks, titans, selectedTitanId, cellulesActives, onCellClick, onSelectTitan });
   dataRef.current = { board, looseBlocks, titans, selectedTitanId, cellulesActives, onCellClick, onSelectTitan };
   const [hoverSocle, setHoverSocle] = useState(null);
@@ -528,7 +531,7 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
       const titan = titansData.find((t) => t.id === selId);
       const slabSize = CELL - GAP;
 
-      function addSlab(cellKey, color, opacity) {
+      function addSlab(cellKey, color, opacity, reste = 0) {
         const r = rowIndex(cellKey[0]);
         const c = Number(cellKey.slice(1));
         if (r < 0 || r > 8 || c < 1 || c > 9) return;
@@ -543,6 +546,29 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
         const slab = new THREE.Mesh(geo, mat);
         slab.position.set(x, boxH / 2, z);
         highlightGroup.add(slab);
+
+        /* ── LE DÉCOMPTE DE LA TRAÎNÉE, EN RELIEF AUSSI ──
+           Nikola, 2026-09-07 : « mets le décompte aussi en vue 3D ». Le
+           chiffre est ce qu'il RESTAIT à parcourir en arrivant sur la case,
+           donc il décroît le long du vol et vaut 1 à l'arrivée : c'est ce qui
+           donne son SENS à une trajectoire qui rebondit.
+
+           Il arrive dans `cellulesActives`, calculé par le même code qui peint
+           la grille 2D — le plateau en relief n'a toujours aucune règle à
+           connaître, il ne fait qu'afficher ce qu'on lui donne.
+
+           Posé au-dessus de la dalle, et au-dessus d'un bâtiment quand il y en
+           a un : une traînée passe par-dessus la ville, pas dedans. Le sprite
+           regarde toujours la caméra, il reste donc lisible sous toutes les
+           rotations. */
+        if (reste > 0) {
+          const etiquette = makeNumberSprite(reste, {
+            couleur: `#${(color >>> 0).toString(16).padStart(6, "0")}`,
+            taille: 0.42,
+          });
+          etiquette.position.set(x, boxH + 0.28, z);
+          highlightGroup.add(etiquette);
+        }
       }
 
       // Périmètre du Titan sélectionné, toujours affiché. Un Titan hors du
@@ -571,20 +597,43 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
          plus une seule règle à connaître, et ne peut plus proposer autre
          chose que la 2D. Dessinées APRÈS le périmètre pour rester lisibles
          par-dessus lui. */
-      (cellules || []).forEach(({ key, couleur, opacite }) => {
-        addSlab(key, couleur, opacite ?? 0.55);
+      (cellules || []).forEach(({ key, couleur, opacite, reste }) => {
+        addSlab(key, couleur, opacite ?? 0.55, reste ?? 0);
       });
     }
 
-    function rebuildAll() {
-      const { board: b, looseBlocks: lb, titans: ts, selectedTitanId: sel, cellulesActives: ca } = dataRef.current;
+    /* ── DEUX RECONSTRUCTIONS, PAS UNE ──
+       Audit de performance du 2026-09-07. Tout passait par `rebuildAll`, donc
+       sélectionner un autre Titan — ou simplement ouvrir un mode de
+       déplacement, ce qui change `cellulesActives` — jetait et recréait CHAQUE
+       géométrie de socle, de bloc, de contour et d'ombre du plateau 9×9. Le
+       plateau, lui, n'avait pas bougé d'un pixel.
+
+       La VILLE (bâtiments, débris au sol) ne dépend que de `boardVersion` : on
+       ne la reconstruit que quand le plateau change vraiment. Ce qui BOUGE
+       souvent — les jetons de Titan et les dalles de surbrillance — reste
+       reconstruit à chaque fois, et c'est peu de chose : quelques sprites et
+       une poignée de dalles.
+
+       `viderPick` accompagne la ville : c'est la liste des cibles cliquables du
+       lancer de rayon, remplie par `rebuildBuildings` et `rebuildLoose`. */
+    function rebuildVille() {
+      const { board: b, looseBlocks: lb } = dataRef.current;
       viderPick();
       rebuildBuildings(b);
       rebuildLoose(lb, b);
+    }
+    function rebuildMobiles() {
+      const { board: b, titans: ts, selectedTitanId: sel, cellulesActives: ca } = dataRef.current;
       rebuildTitans(ts, b);
       rebuildHighlight(ts, sel, b, ca);
     }
+    function rebuildAll() {
+      rebuildVille();
+      rebuildMobiles();
+    }
     rebuildRef.current = rebuildAll;
+    rebuildMobilesRef.current = rebuildMobiles;
     rebuildAll();
 
     // --- Interactions : orbite (glisser), zoom (molette/boutons),
@@ -801,10 +850,20 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
   // mode, et leur tableau est reconstruit à chaque rendu. Comparer leur
   // contenu plutôt que leur référence évite de reconstruire toute la scène
   // à chaque frappe de clavier ailleurs dans la page.
-  const signatureCellules = cellulesActives.map((c) => `${c.key}:${c.couleur}`).join("|");
+  // `reste` fait partie de la signature depuis le 2026-09-07 : sans lui, une
+  // traînée qui s'allonge d'une case garderait les chiffres de l'étape
+  // précédente, puisque ni la case ni sa couleur n'auraient changé.
+  const signatureCellules = cellulesActives.map((c) => `${c.key}:${c.couleur}:${c.reste ?? 0}`).join("|");
+  /* La ville ne se rebâtit que quand le plateau a changé. */
   useEffect(() => {
     if (rebuildRef.current) rebuildRef.current();
-  }, [boardVersion, selectedTitanId, signatureCellules]);
+  }, [boardVersion]);
+  /* Les Titans et la surbrillance suivent la sélection et les cases actives —
+     sans jeter la ville au passage. `boardVersion` n'est PAS dans ces
+     dépendances : l'effet ci-dessus reconstruit déjà tout dans ce cas-là. */
+  useEffect(() => {
+    if (rebuildMobilesRef.current) rebuildMobilesRef.current();
+  }, [selectedTitanId, signatureCellules]);
 
   return (
     <div>

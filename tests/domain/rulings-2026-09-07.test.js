@@ -143,6 +143,39 @@ describe("« Un Titan coincé garde son choix de case »", () => {
   });
 });
 
+describe("Le rebond d'un DÉBRIS reste entre sa case de départ et sa case visée", () => {
+  /* Nikola, 2026-09-07, en garde-fou du correctif ci-dessus : « attention, le
+     point du débris qui rebondit automatiquement, ça doit bien rester entre
+     case de départ et case visée ».
+
+     C'est le ruling du 2026-08-17, reprécisé le 28 août sur un cas concret :
+     « je viens de D7, je tape C7, rebond = D6 D7 D8, pas C6 ou C8 ». La
+     charnière, et rien d'autre : un élément arrêté par un obstacle ne peut pas
+     se retrouver DERRIÈRE lui.
+
+     Ce test existe parce que le correctif du Titan coincé, lui, ouvre
+     volontairement TOUTES les cases libres adjacentes — et il ne doit jamais
+     déborder sur le débris. Les deux règles vivent côte à côte dans la même
+     fonction ; celle-ci les empêche de se contaminer. */
+
+  it("un débris arrêté par un mur ne se pose jamais derrière lui", () => {
+    const board = { C7: mur() };
+    const looseBlocks = {};
+    const replis = [];
+    // Un débris part de D7 vers le nord (D → C) avec 1 d'énergie : sous le
+    // Seuil 4, le bâtiment fait mur.
+    projectInDirection("D", 7, -1, 0, 1, {
+      board, titans: [t(1, "A1")], looseBlocks, replis,
+      movingTitanId: null, initiatorId: 1,
+    });
+
+    expect(replis).toHaveLength(1);
+    expect([...replis[0].cases].sort()).toEqual(["D6", "D7", "D8"]);
+    // Et surtout : rien de la rangée C, qui est de l'autre côté du mur.
+    expect(replis[0].cases.some((k) => k[0] === "C")).toBe(false);
+  });
+});
+
 describe("« C'est une action d'une attaque qui l'a fait se déplacer »", () => {
   /* Un Titan qu'une attaque a mis en mouvement bouscule ce qu'il rencontre,
      sans aucune condition d'énergie — débris isolé comme tas. Le détail des

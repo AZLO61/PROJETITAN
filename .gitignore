@@ -81,6 +81,8 @@ out
 # Nuxt.js build / generate output
 .nuxt
 dist
+# Variantes de build (dist-sm et consorts) : meme statut que dist.
+dist-*/
 .output
 
 # Gatsby files

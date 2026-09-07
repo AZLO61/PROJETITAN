@@ -803,6 +803,32 @@ export function useBoardGeneratorController() {
       const activePhases = getActivePhases(eventsEnabled);
       const idx = activePhases.indexOf(phase);
       const nextPhase = activePhases[idx + 1];
+
+      /* ── PAS DE PHASE REPOS QUAND IL N'Y A PLUS DE MANCHE APRÈS ──
+         Nikola, 2026-09-07 : « le Manche suivant de Manche 4 à 4 Titans est
+         inutile ». Il a raison, et le mot « inutile » est exact au sens
+         propre : la Phase Repos ne sert qu'à PRÉPARER la Manche suivante —
+         chacun vole une carte à son voisin pour la Manche d'après. Quand il
+         n'y a pas de Manche d'après, elle déplace des cartes que personne ne
+         jouera jamais, ne touche à aucun score, et fait attendre la table
+         entre le dernier coup de la partie et son décompte.
+
+         La condition est celle du moteur, pas une règle de plus :
+         `checkEndGameTriggers` est exactement ce que `advanceManche`
+         interroge pour décider si la partie s'arrête. Les deux ne peuvent donc
+         pas diverger, et la Phase saute aussi bien sur la dernière Manche que
+         sur une Apocalypse, une Pénurie ou un Vide Spatial — dans les quatre
+         cas, elle n'aurait rien préparé. */
+      if (nextPhase === "repos"
+        && checkEndGameTriggers(state.board, looseBlocks, apocalypseThreshold, mancheNumber, nbJoueurs).length > 0) {
+        setActionLog((prev) => [...prev,
+          "⏭️ Phase Repos sautée : la partie s'arrête à la fin de cette Manche, il n'y a plus de main à préparer.",
+        ]);
+        advanceManche();
+        setPhaseValidated({});
+        return;
+      }
+
       if (nextPhase === "action") {
         cardsPlayedCountRef.current = {};   // reset compteur de rounds
         setWaitingNextTitan(false);
@@ -819,7 +845,10 @@ export function useBoardGeneratorController() {
     }
     setPhaseValidated({});
   }, [phaseValidated, titanState.ordreJeu, titanState.detonateur, titanState.players, phase, advanceManche,
-      eventsEnabled, gameOver, currentDecision, currentRepli, ecroulement, placementEnCours]);
+      eventsEnabled, gameOver, currentDecision, currentRepli, ecroulement, placementEnCours,
+      // Lus depuis le 2026-09-07 pour décider si la Phase Repos a encore
+      // quelque chose à préparer (cf. le saut de la dernière Manche).
+      state.board, looseBlocks, apocalypseThreshold, mancheNumber, nbJoueurs]);
 
   /* ── MAIN TROP CIBLÉE : SECOURS À L'ENTRÉE EN PROGRAMMATION ──
      Retour de Nikola (test à la table, 2026-08-18) : « j'ai été extrêmement
@@ -3667,8 +3696,21 @@ export function useBoardGeneratorController() {
     if (attaquant) attaquant.adrenaline = (attaquant.adrenaline || 0) + 1;
     setActionLog((prevLog) => [...prevLog, `DIL annulé par Titan ${cur.defenderId} : 1 Adrénaline donnée à Titan ${cur.attackerId}.`]);
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-    if (cur.graouhhh) advanceGraouhhhLoop(cur.graouhhh);
+    /* ── DÉPILER D'ABORD, ENCHAÎNER ENSUITE ──
+       Cette fonction faisait l'inverse des trois autres résolveurs de décision
+       (`dilValidateAttackerPick`, `resolveDilDefenderPick`, `resolveRagePick`),
+       qui dépilent avant de relancer la chaîne. Ça ne se voyait pas, parce que
+       les deux mises à jour sont fonctionnelles et se composent dans l'ordre
+       d'appel : la décision suivante était ajoutée, puis `slice(1)` retirait
+       bien l'ancienne tête.
+
+       Ça tenait par accident. Le jour où l'un des deux chemins cesse d'être
+       fonctionnel — ou où `advanceGraouhhhLoop` dépile lui-même — le `slice(1)`
+       emporterait la décision QUI VIENT D'ARRIVER, et la cible suivante
+       partirait sans jamais subir son Dilemme. On remet donc l'ordre commun aux
+       quatre : la décision tranchée quitte la file, puis la chaîne reprend. */
     setDecisionQueue((prev) => prev.slice(1));
+    if (cur.graouhhh) advanceGraouhhhLoop(cur.graouhhh);
   }, [decisionQueue, titanState.players, captureSnapshot, advanceGraouhhhLoop]);
 
   const resolveRagePick = useCallback(

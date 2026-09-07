@@ -25,10 +25,19 @@ function Harnais() {
   return <div data-testid="partie-en-cours" />;
 }
 
-async function partieAvecTroisTitansEnLigne() {
+/* `ciblesIA` : les Titans à confier à l'IA AVANT le lancement. Il faut que ce
+   soit avant — changer `titanModes` en cours de partie relance une partie
+   neuve (l'effet de `regenerate` en dépend), ce qui efface silencieusement
+   tout ce que le test vient de poser. On passe donc par les interrupteurs de
+   l'écran d'accueil, comme un joueur. */
+async function partieAvecTroisTitansEnLigne(ciblesIA = []) {
   vmCourant = null;
   const user = userEvent.setup();
   render(<Harnais />);
+  if (ciblesIA.length > 0) {
+    const commutateurs = screen.getAllByRole("switch");
+    for (const id of ciblesIA) await user.click(commutateurs[id - 1]);
+  }
   await user.click(screen.getByRole("button", { name: /Lancer la partie/ }));
   /* Mise en place dépassée (ruling du 2026-08-28) : à 4 humains, la partie
      s'ouvre désormais sur le placement des Titans, un clic par joueur. Ce
@@ -103,4 +112,44 @@ describe("Graouhhh : DIL tranché puis déplacement, Titan par Titan", () => {
     expect(attaquant.bagarre).toBe(bagarreAvant + 2);
     expect(attaquant.adrenaline).toBe(adrenalineAvant + 1);
   });
+
+  /* ── LE BLOC PERDU TOMBE SUR LA CASE D'IMPACT, POUR LES DEUX CIBLES ──
+     Nikola, 2026-09-07 : « j'ai fait un Graouhhh sur 2 Titans ; le 2e, donc le
+     plus proche, n'a pas laissé de débris du DIL sur sa case avant de partir ».
+
+     Le ruling du 2026-08-17 est explicite : « quand un Titan doit perdre un
+     bloc sans qu'il soit pris par le Titan initiateur, il le perd sur la case
+     où il est, et ensuite il est déplacé si besoin ». Le bloc tombe donc sur la
+     case occupée À L'INSTANT DE L'IMPACT, jamais sur celle d'arrivée — c'est
+     toute la raison d'être de `cellAtImpact`.
+
+     Le premier Titan traité était déjà couvert par le test ci-dessus ; le
+     SECOND ne l'était pas, et c'est justement lui que Nikola a vu partir les
+     mains vides. Ce test suit les deux. */
+  it("chaque cible laisse son bloc de DIL sur SA case d'impact, la seconde comme la première", async () => {
+    const { t2, t3 } = await partieAvecTroisTitansEnLigne();
+    // Le plateau de départ ne porte aucun débris sur les deux cases d'impact :
+    // ce qu'on y trouvera à la fin ne peut venir que du Dilemme.
+    expect(vmCourant.looseBlocks.B6).toBeUndefined();
+    expect(vmCourant.looseBlocks.B4).toBeUndefined();
+
+    act(() => { vmCourant.jouerGraouhhh(); });
+
+    // T3, le plus loin, est traité en premier.
+    expect(vmCourant.decisionQueue[0].defenderId).toBe(t3.id);
+    expect(vmCourant.decisionQueue[0].cellAtImpact).toBe("B6");
+    act(() => { vmCourant.resolveDilDefenderPick("bleu"); });
+    expect(vmCourant.looseBlocks.B6).toEqual(["bleu"]);
+
+    // Puis T2, le plus proche. C'est celui-ci qui partait sans rien laisser.
+    expect(vmCourant.decisionQueue[0].defenderId).toBe(t2.id);
+    expect(vmCourant.decisionQueue[0].cellAtImpact).toBe("B4");
+    act(() => { vmCourant.resolveDilDefenderPick("rose"); });
+    expect(vmCourant.looseBlocks.B4).toEqual(["rose"]);
+
+    // Et les deux ont bien quitté leur case : le bloc reste derrière eux.
+    expect(vmCourant.titanState.players.find((p) => p.id === t2.id).cell).not.toBe("B4");
+    expect(vmCourant.titanState.players.find((p) => p.id === t3.id).cell).not.toBe("B6");
+  });
+
 });

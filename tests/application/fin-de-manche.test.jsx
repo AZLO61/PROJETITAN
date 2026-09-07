@@ -79,4 +79,67 @@ describe("transition de fin de Manche", () => {
       expect(vmCourant.titanState.detonateur).not.toBe(avant);
     }
   });
+
+  /* ── LA PHASE REPOS SAUTE QUAND IL N'Y A PLUS DE MANCHE APRÈS ──
+     Nikola, 2026-09-07 : « le Manche suivant de Manche 4 à 4 Titans est
+     inutile ». La Phase Repos ne sert qu'à PRÉPARER la Manche suivante — vol
+     en chaîne d'une carte à son voisin. Sans Manche suivante, elle déplace des
+     cartes que personne ne jouera, ne touche aucun score, et fait attendre la
+     table entre le dernier coup et le décompte.
+
+     On vérifie ici les DEUX sens : elle saute quand la partie s'arrête, elle
+     ne saute pas quand il reste une Manche. Sinon le correctif pourrait
+     supprimer le vol de toute la partie sans que rien ne le dise. */
+  it("saute la Phase Repos quand la partie s'arrête à la fin de cette Manche", async () => {
+    const vm = await lancerUnePartie();
+    act(() => {
+      vmCourant.terminerPlacement();
+      // Dernière Manche à 4 Titans : `checkEndGameTriggers` le dit déjà.
+      vmCourant.setMancheNumber(4);
+      vmCourant.setPhase("action");
+    });
+    act(() => {
+      const valide = {};
+      vmCourant.titanState.ordreJeu.forEach((id) => {
+        const t = vmCourant.titanState.players.find((p) => p.id === id);
+        if (t) t.programmed = [];
+        valide[id] = true;
+      });
+      vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
+      vmCourant.setPhaseValidated(valide);
+    });
+
+    expect(vmCourant.phase).not.toBe("repos");
+    expect(vmCourant.gameOver).toBe(true);
+    expect(vmCourant.actionLog.join(" | ")).toMatch(/Phase Repos sautée/);
+    void vm;
+  });
+
+  it("garde la Phase Repos tant qu'il reste une Manche à préparer", async () => {
+    await lancerUnePartie();
+    act(() => {
+      vmCourant.terminerPlacement();
+      vmCourant.setMancheNumber(1);
+      vmCourant.setPhase("action");
+    });
+    act(() => {
+      const valide = {};
+      vmCourant.titanState.ordreJeu.forEach((id) => {
+        const t = vmCourant.titanState.players.find((p) => p.id === id);
+        if (t) t.programmed = [];
+        valide[id] = true;
+      });
+      vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
+      vmCourant.setPhaseValidated(valide);
+    });
+
+    /* La partie peut tout de même s'arrêter sur un autre déclencheur du
+       livret (Apocalypse, Pénurie, Vide Spatial) selon le plateau tiré : dans
+       ce cas le saut est JUSTE, et le journal le dit. On n'exige la Phase
+       Repos que lorsque la partie continue vraiment. */
+    if (!vmCourant.gameOver) {
+      expect(vmCourant.phase).toBe("repos");
+      expect(vmCourant.actionLog.join(" | ")).not.toMatch(/Phase Repos sautée/);
+    }
+  });
 });
