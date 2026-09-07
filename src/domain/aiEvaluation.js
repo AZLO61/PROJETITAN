@@ -73,6 +73,7 @@ import {
   countColorOnBoard,
   countStandingBuildings,
   isSocleMarker,
+  manchesMax,
   scoreBareme,
   socleValue,
 } from "./gameRules.js";
@@ -943,7 +944,24 @@ function gestesAvantLaFin(gameState) {
     penurie = Math.min(penurie, countColorOnBoard(c, board, looseBlocks));
   });
 
-  return Math.min(apocalypse, vide, penurie);
+  /* ── LA DERNIÈRE MANCHE EST UN DÉCLENCHEUR CERTAIN, PAS UNE SUPPOSITION ──
+     Audit du 2026-09-07. Ce calcul ne lisait que le seuil d'apocalypse, alors
+     que `finDePartie` transporte AUSSI `mancheNumber` et `nbJoueurs` — et que
+     `manchesMax` fait de la dernière Manche une fin garantie
+     (cf. `checkEndGameTriggers`). Conséquence mesurée : en dernière Manche,
+     l'IA jouait exactement comme en Manche 1, et 16,7 % de sa note venait
+     encore de blocs au sol qu'elle n'aurait jamais le temps de ramasser.
+
+     Un « geste » est ici un tour de joueur : trois rounds par Manche, tous
+     joueurs confondus. Sans les deux champs, on rend `Infinity` — donc le
+     comportement d'avant, à l'identique, pour tout appelant qui ne les
+     fournit pas (tests et scripts écrits avant ce jour). */
+  const { mancheNumber, nbJoueurs } = finDePartie ?? {};
+  const manches = (mancheNumber != null && nbJoueurs != null)
+    ? Math.max(0, (manchesMax(nbJoueurs) - mancheNumber + 1) * 3 - 1)
+    : Infinity;
+
+  return Math.min(apocalypse, vide, penurie, manches);
 }
 
 function valeurFinDePartie(titanId, gameState, scores) {
@@ -1050,11 +1068,25 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
   if (moi.horsPlateau) note -= VALEUR_TOUR_PERDU;
 
   if (reglages.voitPortee) {
+    /* ── UN BLOC AU SOL NE VAUT QUE S'IL RESTE UN TOUR POUR LE RAMASSER ──
+       Audit du 2026-09-07. `valeurAPortee` est un PARI : elle chiffre ce qui
+       traîne autour du Titan, en supposant qu'il aura le loisir d'aller le
+       chercher. C'est juste en début de partie et faux au dernier round, où
+       ce pari représentait encore un sixième de la note — donc où les coups
+       qui marquent VRAIMENT (compléter une paire d'Orange, une RAGE sur le
+       meneur, un Socle) passaient derrière une marche vers un tas.
+
+       L'horizon vaut 1 tant qu'il reste au moins trois gestes, et fond à
+       mesure que la fin approche. Il ne remplace pas `valeurFinDePartie`, qui
+       dit s'il faut PRESSER ou RETARDER la fin : celui-ci dit seulement de
+       cesser de compter ce qu'on n'aura pas le temps de prendre. */
+    const gestes = gestesAvantLaFin(gameState);
+    const horizon = Number.isFinite(gestes) ? Math.min(1, (gestes + 1) / 4) : 1;
     note += valeurAPortee(moi, gameState, reglages.rayonPortee ?? 2, {
       auScoreComplet: reglages.voitPorteeAuScore ?? false,
       voitConcurrence: reglages.voitConcurrence ?? false,
       decotePortee: reglages.decotePortee,
-    }) * poids.portee;
+    }) * poids.portee * horizon;
   }
 
   /* Ce que ce coup met à portée de ceux qui n'ont pas encore joué. Voir le
@@ -1098,6 +1130,25 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
   if (reglages.voitAdversaires) {
     const ejectes = titans.filter((t) => t.id !== titanId && t.horsPlateau).length;
     if (ejectes > 0) note += ejectes * VALEUR_TOUR_PERDU * PART_DU_TOUR_ADVERSE * poids.adn;
+
+    /* ── UNE CARTE EN ZONE REPOS EST UN TOUR AMPUTÉ ──
+       Audit du 2026-09-07. L'évaluation ne lisait ni `hand`, ni `programmed`,
+       ni `repos` : infliger une Fatigue — l'effet propre de Graouhhh et de
+       Boing Boing sur case occupée — valait donc exactement ZÉRO. Le moteur,
+       lui, immobilise la carte deux Manches, et un Titan tombé sous trois
+       cartes saute la Manche entière.
+
+       Même raisonnement et même demi-coefficient que l'éjection juste
+       au-dessus : c'est du temps de jeu retiré à quelqu'un, pas des points.
+       Compté aussi POUR SOI, pour que l'IA se défende — jusqu'ici elle ne
+       payait jamais l'Adrénaline qui refuse une Fatigue. */
+    const PART_DE_MANCHE = 0.5; // une carte gelée n'est pas un tour entier
+    for (const t of titans) {
+      const gelees = (t.repos || []).length;
+      if (gelees === 0) continue;
+      if (t.id === titanId) note -= gelees * VALEUR_TOUR_PERDU * PART_DE_MANCHE;
+      else note += gelees * VALEUR_TOUR_PERDU * PART_DU_TOUR_ADVERSE * PART_DE_MANCHE * poids.adn;
+    }
   }
 
   /* Rapprocher ou repousser la fin de partie, selon qu'on mène ou qu'on suit

@@ -1736,11 +1736,44 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
       if (ctx.bagarreSet) ctx.bagarreSet.add(occupantTitanId);
 
       if (caseApres === caseAvant) {
+        /* ── UN TITAN COINCÉ GARDE SON CHOIX DE CASE ──
+           Nikola, 2026-09-07, deux fois dans la même session : « un débris
+           aurait dû pousser mon Titan, il ne l'a pas fait ; juste après il a
+           tapé un bâtiment, le débris a rebondi sur ma case et moi je n'ai pas
+           bougé » et « il a rebondi automatiquement sur la case d'où il venait
+           alors que j'aurais dû avoir le choix comme d'habitude ».
+
+           La géométrie du repli (`getCasesRepliDebris`) n'offre que la
+           CHARNIÈRE entre la case de départ et la case visée : trois cases au
+           mieux, et aucune dès que ces voisines-là portent un bâtiment. Un
+           Titan plaqué contre un mur se retrouvait donc régulièrement sans la
+           moindre option, et le moteur le laissait sur place en silence.
+
+           Boing Boing traite déjà exactement ce cas — occupant coincé, rebond
+           avant ET arrière bloqués — en lui offrant TOUTES ses cases libres
+           adjacentes, au choix de l'attaquant (cf. `resolveBoingBoing`). C'est
+           le « comme d'habitude » de Nikola. La réaction en chaîne s'aligne
+           dessus : même geste, même choix, quel que soit ce qui percute.
+
+           Le point de chute par défaut reste sa propre case : un appelant qui
+           ignore le repli garde exactement le comportement précédent. */
+        if (Array.isArray(ctx.replis)) {
+          const libresAutour = getFreeAdjacentCells(caseAvant, board, indexerTitans(titans), looseBlocks);
+          if (libresAutour.length > 0) {
+            ctx.replis.push({
+              titanId: occupantTitanId,
+              defaut: caseAvant,
+              cases: [caseAvant, ...libresAutour],
+              cible: caseAvant,
+              initiatorId: ctx.initiatorId ?? null,
+            });
+          }
+        }
         // Occupant réellement coincé : personne n'a bougé. Le Titan en vol
         // s'arrête avant, le débris se pose quand même par-dessus.
         if (elementEstUnDebris) {
           log.push(
-            `${nextKey} : Titan ${occupantTitanId} coincé, il ne bouge pas — le débris se pose sur sa case.`
+            `${nextKey} : Titan ${occupantTitanId} coincé, il ne bouge pas — le débris se pose sur sa case, et l'attaquant choisit où le Titan se dégage.`
           );
           avancerVers(nr, nc);
           remaining = 0;
@@ -1804,15 +1837,26 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
        le Titan percuté se contentait de monter dessus. Le tas devait partir,
        et même ressortir par la faille au-delà du bord.
 
-       Il faut de l'ÉNERGIE pour renverser un tas, comme il en fallait déjà
-       pour pousser un débris isolé quelques lignes plus bas : un projectile
-       en bout de course s'arrête dessus. Ce n'est pas le Seuil 4 qui revient
-       déguisé — c'est le même test `remainingAfterArrival > 1` que le reste
-       de la trajectoire applique déjà partout.
+       ── PLUS AUCUNE CONDITION D'ÉNERGIE (Nikola, 2026-09-07) ──
+       « Il est arrivé sur une case avec un débris, il aurait dû le déplacer,
+       car c'est une action d'une "attaque" qui l'a fait se déplacer » — et,
+       sur le tas : « il le renverse aussi, toujours ».
+
+       Le test `remainingAfterArrival > 1` faisait dépendre la nature du
+       résultat de ce qu'il restait d'énergie au dernier pas : le même Titan
+       lancé sur le même tas le renversait ou grimpait dessus selon qu'il
+       arrivait avec 2 ou avec 1. C'est précisément le genre de seuil invisible
+       qui ne se retient pas à la table, et le livret ne le mentionne nulle
+       part — il dit au contraire, pour l'Amas percuté, « sans condition
+       d'énergie, le Seuil 4 ne commande plus rien ici ».
+
+       Un Titan qu'une attaque a mis en mouvement bouscule donc ce qu'il
+       rencontre, toujours, exactement comme il bouscule déjà un autre Titan
+       avec une énergie transmise minimale de 1.
 
        Un DÉBRIS en vol, lui, garde la règle du 2026-08-18 : béton sur béton,
        ça s'empile. « Le béton s'empile, le Titan bouscule ». */
-    if (stack && estAmas(stack) && !elementEstUnDebris && remainingAfterArrival > 1) {
+    if (stack && estAmas(stack) && !elementEstUnDebris) {
       basculerAmasDansLAxe(nextKey, curDr, curDc, { ...ctx, log, enChaine });
 
       /* La bascule a pu ramener un débris sur la case (rebond), ou déplacer
@@ -1826,24 +1870,29 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
       break;
     }
 
-    if (stack && stack.length > 0 && (elementEstUnDebris || estAmas(stack) || remainingAfterArrival <= 1)) {
-      // Formation d'Amas : l'élément se pose sur ce qui est déjà là.
+    if (stack && stack.length > 0 && elementEstUnDebris) {
+      // Formation d'Amas : le béton se pose sur ce qui est déjà là.
       avancerVers(nr, nc);
       remaining = 0;
       break;
     }
 
-    // Seul cas restant : un TITAN en vol, un seul débris sur la case, et
-    // assez d'énergie pour le pousser. Tout le reste s'est empilé au-dessus.
+    // Seul cas restant : un TITAN en vol et un seul débris sur la case.
+    // L'Amas est parti plus haut, le béton s'est empilé juste au-dessus.
     if (stack && stack.length === 1) {
       const pushedColor = stack.pop();
       retirerPileVide(looseBlocks, nextKey);
+      /* Même minimum que pour la poussée d'un Titan (`energieTransmise`
+         ci-dessus) : un Titan lancé par une attaque pousse d'au moins une
+         case ce qu'il rencontre. Il ne peut plus s'empiler dessus faute
+         d'énergie — c'est le ruling du 2026-09-07. */
+      const energieDebris = Math.max(1, remainingAfterArrival);
       // Un bloc est transmis, pas un Titan : même raison qu'au ricochet.
-      const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remainingAfterArrival, { ...ctx, movingTitanId: null, enChaine });
+      const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, energieDebris, { ...ctx, movingTitanId: null, enChaine });
       const pushedKey = pushed.row + pushed.col;
       poserDebrisAuSol(looseBlocks, pushedKey, pushedColor);
       log.push(
-        `${nextKey} : réaction en chaîne — bloc ${pushedColor} transmis vers ${pushedKey} (énergie ${remainingAfterArrival}).`
+        `${nextKey} : réaction en chaîne — bloc ${pushedColor} transmis vers ${pushedKey} (énergie ${energieDebris}).`
       );
 
       // La récursion ci-dessus a pu DÉPLACER UN TITAN sur la case que
@@ -3408,10 +3457,29 @@ function boingBoingStepCost(fromKey, toKey, fromIsOrigin, { board, looseBlocks =
 }
 
 function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameState) {
-  const { board, titans, looseBlocks, replis, trajectoires } = gameState;
+  const { board, titans, looseBlocks, replis, trajectoires, chemin } = gameState;
   const titan = titans.find((t) => t.id === titanId);
-  const originRowIdx = rowIndex(titan.cell[0]);
-  const originCol = Number(titan.cell.slice(1));
+  /* ── LA DIRECTION DU CHOC EST CELLE DU DERNIER BOND ──
+     Nikola, 2026-09-07 : « Chemin : F6 → E5 · 2/3, Titan en E5 déplacé en C4
+     […], mais panneau qui me demande de bouger aussi celui de F4 alors que je
+     ne le touche pas. »
+
+     Depuis le 2026-08-18, le joueur TRACE son saut case par case ; la
+     direction était pourtant toujours calculée du point de DÉPART jusqu'à la
+     destination. Un chemin coudé — deux bonds qui ne sont pas alignés — donnait
+     donc une direction de percussion qui n'est celle d'aucun des deux bonds :
+     la cible partait en biais, sur un axe où elle pouvait croiser des Titans
+     que le joueur n'avait jamais approchés.
+
+     C'est le dernier bond qui percute, donc c'est lui qui donne l'axe.
+     `chemin` est facultatif : un appelant qui ne le fournit pas (IA, simulateur,
+     tests écrits avant ce jour) retombe sur la case de départ, c'est-à-dire sur
+     le comportement précédent — et il est exact tant que le saut est droit. */
+  const avantDest = Array.isArray(chemin) && chemin.length >= 2 && chemin[chemin.length - 1] === destKey
+    ? chemin[chemin.length - 2]
+    : titan.cell;
+  const originRowIdx = rowIndex(avantDest[0]);
+  const originCol = Number(avantDest.slice(1));
   const destRow = destKey[0];
   const destRowIdx = rowIndex(destRow);
   const destCol = Number(destKey.slice(1));
@@ -3441,6 +3509,27 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
   const titansByCell = indexerTitans(titans);
   const energie = computeEnergieParDistance(PORTEE_BOING_BOING, useAdrenaline, distance);
   const seuil4 = energie >= 4;
+  /* ── LA PROJECTION VAUT LE SAUT QU'IL RESTE, PAS L'ÉNERGIE ──
+     Livret V36.2, encart de la carte 04, mot pour mot : « La projection du
+     Titan sur lequel tu atterris est égale à la DISTANCE RESTANTE de ton
+     saut. » Le résolveur projetait avec `energie`, qui vaut
+     `3 + Adrénaline − (distance − 1)` : les deux nombres ne coïncident jamais.
+
+     Cas remonté par Nikola le 2026-09-07 : « il était à 2 cases, quand je suis
+     arrivé dessus c'était la 2e case, donc il aurait dû être déplacé de 1 case
+     en plus sans Adrénaline ; pourtant il a été déplacé de 2 cases. » Portée 3,
+     distance 2 → il reste 1 case de saut, et l'énergie valait 2.
+
+     Les deux nombres gardent chacun leur rôle, et c'est pour ça qu'on ne peut
+     pas n'en garder qu'un : l'ÉNERGIE décide du Seuil 4, donc de DIL ou RAGE
+     (elle rend la RAGE inaccessible sans Adrénaline, cf. le commentaire plus
+     bas) ; le SAUT RESTANT décide de combien la cible recule. La branche Amas,
+     juste en dessous, calculait déjà son écroulement sur `maxRange - distance`
+     — c'est le même nombre, il n'était simplement pas appliqué au Titan.
+
+     Minimum 1 : deux Titans ne partagent jamais une case, donc une cible
+     atteinte en bout de portée recule quand même d'une case. */
+  const sautRestant = Math.max(1, maxRange - distance);
 
   const stack = looseBlocks[destKey];
   const occupantId = titansByCell[destKey];
@@ -3465,7 +3554,7 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
     const dirC = Math.sign(destCol - originCol);
     const bagarreSet = new Set([occupantId]); // FAQ #12 : Titans distincts déplacés (direct + chaîne)
     // movingTitanId : c'est l'occupant qu'on projette (cf. projectInDirection).
-    const landing = projectInDirection(destRow, destCol, dirR, dirC, energie, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId, movingTitanId: occupantId });
+    const landing = projectInDirection(destRow, destCol, dirR, dirC, sautRestant, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId, movingTitanId: occupantId });
     let landingKey = landing.row + landing.col;
     // Ruling confirmée Nikola (session) : si l'occupant est coincé (rebond
     // avant ET arrière tous deux bloqués par un mur/bord — projectInDirection
@@ -3546,7 +3635,7 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
       ? (rageOk ? "RAGE en attente" : "RAGE sans effet (aucune ressource à prendre)")
       : (dilOk ? "DIL en attente" : "DIL impossible (< 2 couleurs différentes en Repaire)");
     log.push(
-      `${destKey} : Titan ${occupantId} percuté (énergie ${energie}${seuil4 ? ", Seuil 4" : ""}) → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${verdict} · +${bagarreSet.size} Bagarre (Titan ${titanId} → ${titan.bagarre}, FAQ #12) · projeté vers ${target.cell}` +
+      `${destKey} : Titan ${occupantId} percuté (énergie ${energie}${seuil4 ? ", Seuil 4" : ""}) → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${verdict} · +${bagarreSet.size} Bagarre (Titan ${titanId} → ${titan.bagarre}, FAQ #12) · projeté de ${sautRestant} case(s), le saut restant, vers ${target.cell}` +
         (landing.hasBounced ? " (après rebond)" : "")
     );
     titan.cell = destKey;
@@ -3896,27 +3985,18 @@ function canRage(defenderId, gameState) {
 ============================================================ */
 
 const SOCLE_OPTION = "socle";
-/* ── L'ADRÉNALINE EST UNE OPTION DE DILEMME ──
-   Tranché par Nikola le 2026-09-03, après un Graouhhh sur trois Titans où
-   deux cibles n'avaient rien perdu : « on garde comme actuellement, mais si
-   la cible dispose à minima de 1 bloc et une Adrénaline, un Dilemme est
-   possible. »
+/* ── L'ADRÉNALINE, RESSOURCE CIBLABLE PAR UNE RAGE ──
+   FAQ #5 du livret : « une RAGE peut prendre une Adrénaline plutôt qu'un
+   bloc ». C'est la seule chose que cette clé sentinelle désigne, et aucune
+   couleur ne porte ce nom, la confusion est impossible.
 
-   Le Dilemme reste donc un CHOIX entre deux options — la règle ne bouge pas.
-   Ce qui change, c'est ce qui compte comme option : l'Adrénaline en est une,
-   exactement comme le Socle. Une cible « 1 bloc + 1 Adrénaline » a désormais
-   deux choses à perdre, et n'est plus immunisée pour avoir tout misé sur une
-   seule couleur.
+   Elle a été brièvement une option de DILEMME (ruling du 2026-09-03), et
+   Nikola est revenu dessus le 2026-09-07 : perdre une Adrénaline et payer une
+   Adrénaline pour annuler le Dilemme reviennent au même, l'option ne créait
+   donc aucun choix. Voir `getDilOptions`, qui porte le raisonnement complet.
 
-   Elle ne compte qu'UNE FOIS quel que soit le stock : on ne perd qu'une
-   ressource par Dilemme, et proposer « 2 Adrénalines » n'aurait aucun sens
-   comme second choix. Une cible à 0 bloc et 2 Adrénalines reste donc
-   immunisée, ce qui est bien ce que dit la phrase de Nikola.
-
-   La FAQ #5 disait déjà la même chose côté RAGE (« une RAGE peut prendre une
-   Adrénaline plutôt qu'un bloc ») : les deux effets voient maintenant la même
-   réserve. Une Adrénaline perdue rejoint TOUJOURS l'attaquant, jamais le sol
-   — il n'existe pas de pile d'Adrénaline sur le plateau. */
+   Une Adrénaline perdue rejoint TOUJOURS l'attaquant, jamais le sol — il
+   n'existe pas de pile d'Adrénaline sur le plateau. */
 const ADRENALINE_OPTION = "adrenaline";
 
 function getDilOptions(defenderId, gameState) {
@@ -3937,7 +4017,30 @@ function getDilOptions(defenderId, gameState) {
   const options = sansVert.length > 0 ? sansVert : couleurs;
 
   if ((t.socles || []).length > 0) options.push(SOCLE_OPTION);
-  if ((t.adrenaline || 0) >= 1) options.push(ADRENALINE_OPTION);
+  /* ── L'ADRÉNALINE N'EST PLUS UNE OPTION DE DILEMME ──
+     Revirement de Nikola du 2026-09-07, dit deux fois dans les mêmes retours :
+     « pendant un DIL où je suis victime, perdre une Adrénaline ou payer une
+     Adrénaline, c'est pareil » et « on ne peut pas DEMANDER une Adrénaline :
+     c'est juste que si la cible veut se défendre, elle peut donner une
+     Adrénaline si elle en dispose ».
+
+     Il a raison, et la raison est structurelle plutôt que d'équilibrage. Le
+     Dilemme se résout en deux temps : l'attaquant pose deux options, puis la
+     cible choisit laquelle elle lâche — OU paie 1 Adrénaline pour tout
+     annuler. Mettre « 1 Adrénaline » parmi les deux options ne crée donc
+     aucun choix : les deux branches coûtent à la cible exactement la même
+     chose, une Adrénaline. L'option ne pouvait qu'être ignorée, et elle
+     faisait croire à un arbitrage qui n'en était pas un.
+
+     Ce que la règle du 2026-09-03 cherchait à corriger — une cible à
+     1 couleur qui ne perdait jamais rien — reste ouvert et se referme par
+     l'autre bout : l'Adrénaline sert de DÉFENSE, une cible qui en a une s'en
+     sort en la payant, une cible qui n'en a pas subit le Dilemme.
+
+     La RAGE, elle, garde l'Adrénaline pour cible : FAQ #5, « une RAGE peut
+     prendre une Adrénaline plutôt qu'un bloc ». C'est justement l'écart qui la
+     distingue du Dilemme, comme le Vert et le Socle. `ADRENALINE_OPTION` reste
+     donc exporté, et toute la plomberie qui l'accompagne avec. */
   return options;
 }
 

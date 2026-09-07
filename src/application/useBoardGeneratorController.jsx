@@ -351,6 +351,16 @@ export function useBoardGeneratorController() {
   const [distantJoueurs, setDistantJoueurs] = useState([]);
   const [distantSieges, setDistantSieges] = useState({});   // { titanId: refInvite }
   const [distantAvis, setDistantAvis] = useState(null);     // message d'état de la liaison
+  /* Garde-fou du F5 de l'hôte : quand cette page rejoint une table qui a déjà
+     une partie alors qu'elle-même n'en a pas, elle ne publie RIEN — sans quoi
+     son plateau neuf écraserait celui de toute la table (cf. `brancherSession`).
+     La ref sert à l'effet de diffusion, l'état à l'interface : les deux disent
+     la même chose, mais l'effet ne doit pas attendre un rendu pour se taire. */
+  const diffusionBloqueeRef = useRef(false);
+  const [distantDiffusionBloquee, setDistantDiffusionBloquee] = useState(false);
+  /* `setupDone` lu depuis un callback réseau : la version d'état y serait
+     figée au rendu qui a créé le callback. */
+  const setupDoneRef = useRef(false);
   const [distantFin, setDistantFin] = useState(null);       // partie terminée côté réseau
   const [distantChat, setDistantChat] = useState([]);
   /* ── QUI VIENT D'ARRIVER, QUI VIENT DE PARTIR ──
@@ -386,6 +396,19 @@ export function useBoardGeneratorController() {
 
   const distantInvite = session?.siege === "invite";
   const distantHote = session?.siege === "hote";
+  useEffect(() => { setupDoneRef.current = setupDone; }, [setupDone]);
+
+  /* Reprendre la main malgré tout : l'hôte assume d'écraser la partie de la
+     table par celle de cette page. Un seul cas légitime — l'onglet d'origine
+     est perdu pour de bon et tout le monde accepte de repartir. Le geste est
+     donc EXPLICITE, jamais automatique. */
+  const reprendreDiffusion = useCallback(() => {
+    diffusionBloqueeRef.current = false;
+    dernierEnvoiRef.current = "";
+    dernieresMainsRef.current = {};
+    setDistantDiffusionBloquee(false);
+    setDistantAvis("Diffusion reprise — le plateau de cette page remplace celui de la table.");
+  }, []);
   /* La table des sièges lue au moment où une intention s'exécute, jamais celle
      capturée par la fermeture de l'effet : deux invités qui réclament un Titan
      coup sur coup arrivent dans le même rendu, et le second lirait sinon une
@@ -1038,6 +1061,10 @@ export function useBoardGeneratorController() {
      (Nikola, 2026-08-28) : le récapitulatif tient en quatre lignes, dix
      secondes à le regarder devenaient une attente. */
   const DUREE_LECTURE_VOL_MS = 5000;
+  /* Sa propre référence, séparée des minuteurs de trace : ce délai-ci fait
+     avancer la partie, il ne doit pas tomber avec une animation annulée.
+     Voir `chooseVolDirection` pour le bug que ce mélange a produit. */
+  const volTimerRef = useRef(null);
   const [volDirection, setVolDirection] = useState(null);
   // Qui a pris quoi à qui à la dernière Phase Repos, pour l'afficher au lieu
   // de le laisser au fond du journal (cf. `resolveVolPhaseRepos`).
@@ -1111,6 +1138,7 @@ export function useBoardGeneratorController() {
     if (partieId === 0) return;
     annulerTimersIA();
     arreterTrace();
+    if (volTimerRef.current) { clearTimeout(volTimerRef.current); volTimerRef.current = null; }
   }, [partieId, annulerTimersIA, arreterTrace]);
 
   /* ── EN PARALLÈLE, OU UN ÉLÉMENT À LA FOIS ──
@@ -1136,8 +1164,22 @@ export function useBoardGeneratorController() {
     if (!trajectoires || trajectoires.length === 0) return;
     // La case de depart n'est pas une case traversee : on l'ecarte. Chaque
     // case garde l'identifiant de ce qui l'a franchie, pour sa couleur.
+    /* ── UN DÉCOMPTE PAR CASE PARCOURUE ──
+       Nikola, 2026-09-07 : « pour le côté chemin des éléments tracé, il faut
+       faire 1 décompte par case parcourue, exemple 4 3 2 1 ».
+
+       La traînée disait OÙ l'élément est passé, jamais dans quel ORDRE ni
+       combien de cases il lui restait — donc, sur une trajectoire qui rebondit
+       ou traverse la faille, on ne pouvait pas reconstituer le sens du vol une
+       fois la trace complète. Chaque case porte donc ce qu'il RESTAIT à
+       parcourir en y arrivant : la première du vol porte le total, celle
+       d'arrivée porte 1. Le chiffre se lit de gauche à droite comme le vol
+       s'est déroulé, et il dit du même coup la longueur du déplacement. */
     const vols = trajectoires
-      .map((t) => (t.cases || []).slice(1).map((key) => ({ key, titanId: t.titanId ?? null })))
+      .map((t) => {
+        const cases = (t.cases || []).slice(1);
+        return cases.map((key, i) => ({ key, titanId: t.titanId ?? null, reste: cases.length - i }));
+      })
       .filter((cases) => cases.length > 0);
     if (vols.length === 0) return;
 
@@ -1444,6 +1486,10 @@ export function useBoardGeneratorController() {
     setActionLog([...snap.actionLog]);
     if (reinitialiserInterface) {
       arreterTrace(); // la trace decrirait un vol que l'annulation vient d'effacer
+      /* Le compte à rebours du Vol de Phase Repos décrit lui aussi une action
+         qu'on vient de défaire : le laisser courir validerait les phases d'une
+         Manche qui n'a plus eu lieu. */
+      if (volTimerRef.current) { clearTimeout(volTimerRef.current); volTimerRef.current = null; }
       setMoveMode(false); setRecupMode(false); setBbMode(false); setBbPath([]); setBbSurvol([]);
       setJnpMode(false); setJnpSelected([]); setGraouMode(false);
     }
@@ -1545,7 +1591,12 @@ export function useBoardGeneratorController() {
      porte la sécurité côté hôte :
 
        "soi"        le Titan du siège de l'invité, à tout moment (programmer
-                    ses cartes, valider sa phase — chacun le fait chez lui) ;
+                    ses cartes — chacun le fait chez lui). L'action ne PREND
+                    PAS le Titan en argument : elle lit la sélection, que
+                    l'hôte a déjà basculée sur le siège de l'expéditeur ;
+       "soi-arg0"   pareil, mais l'action reçoit le Titan en PREMIER ARGUMENT.
+                    Il faut alors vérifier cet argument-là, sans quoi le siège
+                    ne protège plus rien (cf. `titanAutorise`) ;
        "actif"      le Titan du siège doit être celui à qui c'est le tour ;
        "placement"  il doit être celui que la file de mise en place attend ;
        "decision"   il doit être celui que la décision bloquante interroge.
@@ -1578,7 +1629,7 @@ export function useBoardGeneratorController() {
        La sélection reste donc chez celui qui la compose, et ne traverse le
        réseau qu'une fois, jointe au `confirmProgrammation` qui l'engage. */
     confirmProgrammation: "soi",
-    validatePhase: "soi",
+    validatePhase: "soi-arg0",
     /* ANNULER EST UN GESTE DE TOUR, PAS UN PRIVILÈGE D'HÔTE (Nikola,
        2026-08-30 : « en tant qu'invité je ne peux pas annuler mon déplacement,
        il n'y a que le maître de la table qui peut faire ça, alors que ce
@@ -1622,8 +1673,8 @@ export function useBoardGeneratorController() {
     chooseVolDirection: "decision",
 
     // Décompte final : le placement secret des Verts
-    updateVertAssignment: "soi",
-    validerVerts: "soi",
+    updateVertAssignment: "soi-arg0",
+    validerVerts: "soi-arg0",
   }), []);
 
   /* Réglages d'interface que l'hôte doit adopter AVANT d'exécuter l'action
@@ -1688,9 +1739,30 @@ export function useBoardGeneratorController() {
      l'effet de deux cents fonctions. */
   const actionsRef = useRef({});
 
-  const titanAutorise = useCallback((portee, titanDuSiege) => {
+  const titanAutorise = useCallback((portee, titanDuSiege, args = []) => {
     if (titanDuSiege == null) return false;
     if (portee === "soi") return true;
+    /* ── « SOI » NE PROTÈGE RIEN QUAND LE TITAN EST UN ARGUMENT ──
+       Trouvé à la revue de sécurité du 2026-09-07. La portée « soi » rendait
+       `true` dès que l'expéditeur avait un siège, quel qu'il soit — ce qui est
+       juste pour une action qui lit la SÉLECTION (l'hôte l'a déjà basculée sur
+       le siège de l'expéditeur, il ne peut donc pas jouer ailleurs). Ça ne
+       l'est pas du tout pour une action qui reçoit le Titan en argument :
+       l'argument, lui, vient du réseau tel quel.
+
+       Trois actions étaient dans ce cas, et ce sont les trois qui touchent au
+       geste le plus secret de la partie :
+         · `updateVertAssignment(titanId, i, valeur)` — un invité assis sur le
+           Titan 2 pouvait réécrire le placement secret des Verts du Titan 3 ;
+         · `validerVerts(titanId)` — et le figer définitivement ;
+         · `validatePhase(titanId)` — valider la phase à la place d'un autre,
+           `canValidatePhase` étant un contrôle d'ÉTAT DE JEU, pas de
+           propriété.
+
+       On compare donc l'argument au siège, et on refuse dès qu'ils diffèrent.
+       `Number()` des deux côtés : le siège est un nombre, l'argument arrive du
+       JSON et peut être une chaîne. */
+    if (portee === "soi-arg0") return Number(args?.[0]) === Number(titanDuSiege);
     if (portee === "actif") return titanDuSiege === activePlayerId;
     if (portee === "placement") {
       /* Même règle que `prochainAPlacer`, recopiée en une ligne plutôt
@@ -1833,7 +1905,7 @@ export function useBoardGeneratorController() {
       : null;
     if (typeof portee !== "string") { rejeter(`action « ${intention.fn} » non autorisée à distance.`); return; }
     const titanDuSiege = intention.titanId;
-    if (!titanAutorise(portee, titanDuSiege)) {
+    if (!titanAutorise(portee, titanDuSiege, intention.args)) {
       rejeter("ce n'est pas à toi de jouer.");
       return;
     }
@@ -1972,6 +2044,36 @@ export function useBoardGeneratorController() {
     if (nouvelle.siege === "hote") {
       dernierEnvoiRef.current = "";
       dernieresMainsRef.current = {};
+      /* ── UN F5 DE L'HÔTE NE DOIT PAS ÉCRASER LA TABLE ──
+         Revue de sécurité du 2026-09-07, classée critique, et c'est le seul
+         défaut du lot qui DÉTRUIT une partie.
+
+         Le commentaire ci-dessus dit bien qu'un rechargement perd le moteur.
+         Il ne disait pas ce qui se passait ensuite, et c'est le vrai problème :
+         la page rechargée génère un plateau neuf au montage, et l'effet de
+         diffusion — qui n'attend rien d'autre que « je suis hôte et j'ai une
+         session » — le publiait 120 ms plus tard. `salle.etat` était écrasé, et
+         tous les invités adoptaient la ville neuve. La partie de la table
+         entière disparaissait à cause du F5 d'une seule personne.
+
+         Deux faits suffisent à reconnaître ce cas, et ils sont tous les deux
+         disponibles ici : le relais nous rend un état (`etatInitial`), donc une
+         partie tournait ; et cette page-ci n'en a pas (`setupDone` faux), donc
+         ce n'est pas la même. On coupe alors la diffusion, et on le DIT — le
+         plateau des autres reste intact, et l'hôte peut encore récupérer son
+         onglet d'origine s'il est ouvert quelque part.
+
+         Ce n'est pas une reprise : c'est un garde-fou. La vraie reprise après
+         F5 demanderait de persister la session ET les mains, ce que le relais
+         ne stocke pas — c'est noté comme tel dans JOUER-A-DISTANCE.md. */
+      if (nouvelle.etatInitial && !setupDoneRef.current) {
+        diffusionBloqueeRef.current = true;
+        setDistantDiffusionBloquee(true);
+        setDistantAvis(
+          "Cette table a déjà une partie en cours, et cette page n'en a plus le moteur (elle a été rechargée). "
+          + "Rien n'est envoyé : le plateau des autres joueurs est intact. Reprends l'onglet d'origine s'il est encore ouvert."
+        );
+      }
     }
     return nouvelle;
   }, [signalerMouvement]);
@@ -2098,13 +2200,24 @@ export function useBoardGeneratorController() {
   const dernieresMainsRef = useRef({});
   useEffect(() => {
     if (!distantHote || !session) return undefined;
+    // Garde-fou du F5 (cf. `brancherSession`) : tant qu'il est levé, cette
+    // page ne publie RIEN — ni plateau, ni courrier privé.
+    if (diffusionBloqueeRef.current) return undefined;
     const minuteur = setTimeout(() => {
       const complet = instantaneCourant();
       const public_ = plateauPublic(complet);
       const signature = JSON.stringify(public_);
+      /* ── L'EMPREINTE SE POSE QUAND L'ENVOI A RÉUSSI ──
+         Revue du 2026-09-07. Elle était écrite AVANT la promesse : une
+         diffusion tombée n'était donc jamais rejouée, et le plateau des
+         invités restait figé jusqu'au prochain changement d'état chez l'hôte.
+         En fin de tour, ça peut durer une minute entière sans que rien ne
+         l'explique à l'écran. On note ce qu'on a réellement envoyé, et un
+         échec laisse l'empreinte précédente, donc la prochaine passe réessaie. */
       if (signature !== dernierEnvoiRef.current) {
-        dernierEnvoiRef.current = signature;
-        session.diffuserEtat(public_).catch(() => setDistantAvis("Diffusion impossible, reprise…"));
+        session.diffuserEtat(public_)
+          .then(() => { dernierEnvoiRef.current = signature; })
+          .catch(() => setDistantAvis("Diffusion impossible, reprise…"));
       }
       /* ── LE COURRIER PRIVÉ A SON PROPRE COMPTEUR ──
          Nikola, 2026-08-30 : « si l'hôte prend la main pas de soucis, sauf que
@@ -2124,16 +2237,27 @@ export function useBoardGeneratorController() {
          a changé, et on n'oublie plus ce qui a changé sans que le plateau
          bouge. Le nettoyage des sièges libérés évite que la table d'empreintes
          garde éternellement les mains de joueurs partis. */
-      const vues = {};
+      /* Même correction que pour la diffusion, et elle mord plus fort ici : un
+         courrier privé perdu, et l'invité n'a JAMAIS sa main tant qu'elle ne
+         change pas — en Phase Programmation, ça veut dire qu'il ne peut plus
+         jouer du tout, sans qu'aucun message ne le dise. Le `catch` était
+         totalement muet.
+
+         On repart d'une table VIDE des sièges disparus (c'était l'objet de
+         `vues`), puis chaque envoi réussi pose sa propre empreinte. */
+      const encore = new Set(Object.keys(distantSieges));
+      Object.keys(dernieresMainsRef.current).forEach((id) => {
+        if (!encore.has(id)) delete dernieresMainsRef.current[id];
+      });
       Object.entries(distantSieges).forEach(([titanId, ref]) => {
         const main = mainPrivee(complet, titanId);
         if (!main) return;
         const empreinte = `${ref}|${JSON.stringify(main)}`;
-        vues[titanId] = empreinte;
         if (dernieresMainsRef.current[titanId] === empreinte) return;
-        session.envoyerPrive(ref, main).catch(() => {});
+        session.envoyerPrive(ref, main)
+          .then(() => { dernieresMainsRef.current[titanId] = empreinte; })
+          .catch(() => setDistantAvis("Envoi d'une main impossible, nouvelle tentative…"));
       });
-      dernieresMainsRef.current = vues;
     }, 120);
     return () => clearTimeout(minuteur);
   }, [distantHote, session, distantSieges, instantaneCourant]);
@@ -2218,7 +2342,29 @@ export function useBoardGeneratorController() {
     if (distantInviteRef.current) return; // la rentrée est arbitrée par l'hôte
     if (phase !== "action" || activePlayerId == null) { setCoutRentree(null); setCornerChoice(null); return; }
     const joueur = aiTitanStateRef.current.players.find((t) => t.id === activePlayerId);
-    if (!joueur?.horsPlateau) { setCoutRentree(null); setCornerChoice(null); return; }
+    if (!joueur?.horsPlateau) {
+      setCornerChoice(null);
+      /* ── NE PAS EFFACER LE COÛT DE CELUI QUI VIENT DE RENTRER ──
+         Nikola, 2026-09-07 : « j'ai été poussé en dehors du plateau, j'aurais
+         dû n'avoir qu'1 de déplacement, j'en ai eu 2 […] j'aurais dû n'avoir
+         que 3 cases, car je n'avais qu'1 de déplacement après le warp. »
+
+         Cet effet remet le coût à null dès que le Titan actif n'est plus hors
+         de BIG CITY. C'est juste quand le tour a CHANGÉ — le coût appartenait
+         à quelqu'un d'autre. Ça ne l'est pas quand il rejoue pour le Titan qui
+         VIENT de rentrer : `assurerRentree` a reposé le Titan sur le plateau
+         dans le rendu précédent, donc `horsPlateau` est déjà faux, et le
+         moindre nouveau passage ici lui rendait sa deuxième case de Mouvement
+         gratuit. Le plateau proposait alors une portée de 2 — huit cases au
+         lieu des trois d'un coin.
+
+         On ne nettoie donc que ce qui concerne un AUTRE Titan. La remise à
+         zéro pour de bon se fait au changement de tour, par la branche
+         ci-dessus quand la Phase Action se referme, et par le `null` que pose
+         `assurerRentree` quand personne ne rentre. */
+      setCoutRentree((prev) => (prev && prev.titanId === activePlayerId ? prev : null));
+      return;
+    }
     assurerRentree(activePlayerId);
   }, [activePlayerId, phase, titanModes, assurerRentree]);
 
@@ -2812,10 +2958,28 @@ export function useBoardGeneratorController() {
                La référence programme en SÉQUENCE : elle choisit la
                deuxième en sachant ce que la première aura fait du plateau
                (cf. `planProgrammationSequentielle`). */
+            /* ── LA PROGRAMMATION VOIT CE QUE LA PHASE ACTION VOIT ──
+               Audit de l'IA, 2026-09-07. Les deux états passés aux résolveurs
+               d'IA en Phase Action (`jeu` et `jeu2`) transportent `finDePartie`
+               et `aJouerEncore` ; celui de la PROGRAMMATION, non. Or c'est la
+               décision qui engage toute la Manche.
+
+               Sans `finDePartie`, `gestesAvantLaFin` retombe silencieusement
+               sur un seuil d'apocalypse de 5, même quand la table est réglée
+               autrement, et le poids de fin de partie ne peut jamais
+               s'appliquer : l'IA programmait sa dernière Manche exactement
+               comme la première. Sans `aJouerEncore`, l'Expert ne sait pas à
+               qui il offre ce qu'il laisse au sol.
+
+               Ajouter les champs suffit : les deux consommateurs les lisent
+               déjà, ils ne recevaient rien. */
             const jeuProg = {
               titans: curTitanState.players,
               board: aiStateRef.current.board,
               looseBlocks: aiLooseBlocksRef.current,
+              finDePartie: { apocalypseThreshold, mancheNumber, nbJoueurs },
+              aJouerEncore: new Set(),
+              egalitesLanterneRouge,
             };
             const profilProg = profilDe(id);
             const chosen = reglagesDe(profilProg).programmationSequentielle
@@ -3710,19 +3874,49 @@ export function useBoardGeneratorController() {
          qui touche directement la main de chacun, et il n'y a rien à y décider
          — donc rien qui justifie de le presser.
 
-         La validation de phase est donc différée. Le délai est rangé avec les
-         minuteurs de trace pour être annulé comme eux si la partie est relancée
-         ou l'action annulée entre-temps. */
-      traceTimersRef.current.push(setTimeout(() => {
-        setPhaseValidated((prev) => {
-          const updated = { ...prev };
-          titanState.ordreJeu.forEach((id) => { updated[id] = true; });
-          return updated;
-        });
-      }, DUREE_LECTURE_VOL_MS));
+         ── CE MINUTEUR N'EST PAS UNE ANIMATION ──
+         Nikola, 2026-09-07 : « la phase de vol en chaîne de la fin de manche
+         est bien plus longue que 5 secondes, je dois appuyer sur Annuler et là
+         ça passe à la Manche suivante ».
+
+         Il vivait dans `traceTimersRef`, le seau des traînées de vol — un seau
+         que `arreterTrace()` VIDE ENTIÈREMENT, et qu'appellent aussi bien
+         `animerTrajectoires` que le nettoyage d'une partie relancée et la
+         restauration d'un instantané. Un seul de ces appels dans la fenêtre de
+         cinq secondes et la Manche ne s'enchaînait plus JAMAIS : rien ne
+         reposait `phaseValidated`, et le seul moyen d'en sortir était
+         d'annuler, ce qui restaure la file depuis l'instantané.
+
+         Ce minuteur-ci ne montre rien : il fait AVANCER la partie. Il a donc
+         sa propre référence, que seule la fin de partie ou une nouvelle partie
+         peut couper, et le bandeau porte un bouton pour ne pas l'attendre. */
+      if (volTimerRef.current) clearTimeout(volTimerRef.current);
+      volTimerRef.current = setTimeout(() => {
+        volTimerRef.current = null;
+        validerVolRef.current();
+      }, DUREE_LECTURE_VOL_MS);
     },
     [volDirection, mancheNumber, titanState.ordreJeu, titanState.players, titanState.detonateur, captureSnapshot, modeVolRepos]
   );
+
+  /* Clôt la lecture du récapitulatif et laisse la Manche suivante démarrer.
+     Appelée par le minuteur ci-dessus, et par le bouton « Manche suivante »
+     du bandeau pour qui a déjà tout lu. Idempotente : valider deux fois pose
+     les mêmes drapeaux. */
+  const validerVolMaintenant = useCallback(() => {
+    if (volTimerRef.current) { clearTimeout(volTimerRef.current); volTimerRef.current = null; }
+    setPhaseValidated((prev) => {
+      const updated = { ...prev };
+      (aiTitanStateRef.current?.ordreJeu || titanState.ordreJeu).forEach((id) => { updated[id] = true; });
+      return updated;
+    });
+  }, [titanState.ordreJeu]);
+  /* Le minuteur est posé AVANT que `validerVolMaintenant` n'existe (il est
+     déclaré au-dessus) : la ref fait le pont, et garde toujours la dernière
+     version du callback. */
+  const validerVolRef = useRef(validerVolMaintenant);
+  useEffect(() => { validerVolRef.current = validerVolMaintenant; }, [validerVolMaintenant]);
+  useEffect(() => () => { if (volTimerRef.current) clearTimeout(volTimerRef.current); }, []);
 
   /* PHASE REPOS : LE SENS APPARTIENT AU DÉTONATEUR, PAS AU PORTEUR DE LA
      TABLETTE. Bug remonté par Nikola le 2026-08-17 : « si c'est une IA qui a
@@ -4320,6 +4514,12 @@ export function useBoardGeneratorController() {
     const trajectoires = [];
     const result = resolveBoingBoing(selectedTitanId, bbDest, actuallyUseAdrenaline, mancheNumber, {
       board: state.board, titans: titanState.players, looseBlocks, replis, trajectoires,
+      /* Le chemin CLIQUÉ, pour que la percussion parte dans l'axe du DERNIER
+         bond et non du point de départ (bug remonté le 2026-09-07 : un saut
+         coudé envoyait la cible sur un axe que le joueur n'avait pas tracé).
+         Voir `resolveBoingBoing`, qui retombe sur la case de départ quand ce
+         champ manque — c'est ce que font l'IA et le simulateur. */
+      chemin: bbPath,
     });
     if (result.applied && actuallyUseAdrenaline) attacker.adrenaline -= actuallyUseAdrenaline;
     setActionLog((prev) => [...prev, ...result.log]);
@@ -4360,7 +4560,7 @@ export function useBoardGeneratorController() {
     setState((prev) => ({ ...prev }));
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-  }, [selectedTitanId, bbDest, bbDestIsBuilding, bbAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, enqueueFatigues, animerTrajectoires, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, bbDest, bbPath, bbDestIsBuilding, bbAdrenaline, state.board, titanState.players, looseBlocks, enqueueDecisions, enqueueReplis, enqueueFatigues, animerTrajectoires, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
 
   // Le Mouvement gratuit vaut 2 cases, +1 par Adrénaline dépensée, MOINS ce
   // qu'a coûté une éventuelle rentrée sur le plateau ce tour-ci. C'est ce
@@ -4670,17 +4870,39 @@ export function useBoardGeneratorController() {
       : new Set()),
     [selectedTitanId, titanState.players, looseBlocks]
   );
+  /* ── ROUVRIR LA CARTE NE REMET PAS LE COMPTEUR À ZÉRO ──
+     Triche remontée par Nikola le 2026-09-07 : « si je sélectionne "Je ne
+     partage pas", que je clique un débris puis que je reclique sur "Je ne
+     partage pas" au lieu de faire Annuler, ça me garde le premier débris
+     récupéré — donc je triche, je peux tout récupérer. »
+
+     Il a raison, et c'est structurel. Depuis le ruling du 2026-08-19 le
+     ramassage se résout ÉLÉMENT PAR ÉLÉMENT : chaque clic prend le bloc pour
+     de bon, immédiatement, dans le Repaire. `jnpSelected` n'est donc pas une
+     sélection en attente de validation, c'est un COMPTEUR de ce qui a déjà
+     été encaissé — et ce compteur était remis à zéro par un simple aller-retour
+     sur le bouton de la carte. Deux clics et le quota repartait à 2 ou 3, sur
+     un Repaire qui gardait tout.
+
+     Refermer la carte en cours de ramassage n'est donc pas un « annuler » :
+     c'est une CLÔTURE ANTICIPÉE, exactement ce que fait déjà le bouton de
+     sortie de secours (`jouerJeNePartagePas`). Le Titan se pose sur sa
+     dernière case, la carte est marquée jouée, et il n'y a plus rien à
+     rouvrir. Pour vraiment revenir en arrière, il reste « Annuler », dont
+     c'est le métier — l'instantané a été pris avant le premier bloc. */
+  const clotureJnpRef = useRef(null);
   const toggleJnpMode = useCallback(() => {
-    setJnpMode((m) => {
-      const next = !m;
-      if (next) {
-        setTeaMode(false); setGraouMode(false); setBbMode(false); setBbPath([]); setBbSurvol([]);
-        setJnpNbToPickFrozen(jnpNbToPickLive);
-      }
-      return next;
-    });
+    if (jnpMode) {
+      if (jnpSelected.length > 0) { clotureJnpRef.current?.(); return; }
+      setJnpMode(false);
+      setJnpSelected([]);
+      return;
+    }
+    setTeaMode(false); setGraouMode(false); setBbMode(false); setBbPath([]); setBbSurvol([]);
+    setJnpNbToPickFrozen(jnpNbToPickLive);
+    setJnpMode(true);
     setJnpSelected([]);
-  }, [jnpNbToPickLive]);
+  }, [jnpMode, jnpSelected, jnpNbToPickLive]);
   /* Ruling Nikola du 2026-08-19 (WIP) : le ramassage se resout ELEMENT PAR
      ELEMENT. Le clic ne coche donc plus une case en attendant une validation
      globale, il ramasse pour de bon, et le Titan se deplace aussitot si la
@@ -4785,6 +5007,10 @@ export function useBoardGeneratorController() {
     setJnpSelected([]);
   }, [selectedTitanId, jnpSelected, jnpNbToPick, canPlayCard, markCardPlayed,
       titanState.players, looseBlocks, state.board]);
+  /* Le pont pour `toggleJnpMode`, déclaré plus haut : refermer la carte en
+     cours de ramassage doit la CLÔTURER, jamais remettre le compteur à zéro
+     (cf. la triche du 2026-09-07). */
+  useEffect(() => { clotureJnpRef.current = jouerJeNePartagePas; }, [jouerJeNePartagePas]);
 
   const jouerFautPasMeChauffer = useCallback(() => {
     /* ── CETTE CARTE APPARTIENT-ELLE ENCORE À LA PARTIE EN COURS ? ──
@@ -5535,6 +5761,8 @@ export function useBoardGeneratorController() {
     distantJoueurs,
     distantSieges,
     distantAvis,
+    distantDiffusionBloquee,
+    reprendreDiffusion,
     distantFin,
     distantChat,
     brancherSession,
@@ -5760,6 +5988,7 @@ export function useBoardGeneratorController() {
     toggleProgCard,
     confirmProgrammation,
     chooseVolDirection,
+    validerVolMaintenant,
     canPlayCard,
     canDiscardCard,
     getPlayBlockReason,

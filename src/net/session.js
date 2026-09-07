@@ -60,6 +60,19 @@ export function urlPropre(brut) {
   let url = String(brut || "").trim();
   if (!url) throw new Error("Adresse du relais manquante.");
   if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  /* ── UN `http://` TAPÉ À LA MAIN EST UNE ERREUR, PAS UN CHOIX ──
+     Revue de sécurité du 2026-09-07. Le protocole n'était ajouté que s'il
+     manquait : une adresse collée en `http://` restait telle quelle, et le
+     mot de passe de table comme le jeton partaient alors en clair. Le
+     navigateur bloque déjà ce contenu mixte depuis GitHub Pages, donc en
+     pratique on n'y gagnait qu'un échec incompréhensible.
+
+     `localhost` garde son droit au `http://` : c'est le mode documenté par
+     JOUER-A-DISTANCE.bat pour jouer sans tunnel, rien ne sort de la machine,
+     et les navigateurs traitent cette origine comme sûre. */
+  const enClair = /^http:\/\//i.test(url);
+  const local = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(url);
+  if (enClair && !local) url = url.replace(/^http:\/\//i, "https://");
   return url.replace(/\/+$/, "");
 }
 
@@ -106,6 +119,12 @@ function construireSession({
     if (!vivante) return null;
     return appeler(`${base}/api/envoyer`, {
       method: "POST",
+      /* Le relais lit ces deux en-têtes AVANT le corps, pour savoir quel
+         plafond de taille appliquer : seul l'hôte a le droit d'envoyer un
+         instantané complet (cf. la revue du 2026-09-07 côté relais). Ce sont
+         les mêmes valeurs que dans le corps — l'en-tête n'ajoute aucun droit,
+         il ne fait qu'arriver plus tôt. */
+      headers: { "X-Jeton": jeton, "X-Table": id },
       body: JSON.stringify({ id, jeton, message }),
     });
   }
@@ -114,9 +133,21 @@ function construireSession({
     while (vivante) {
       controleur = new AbortController();
       try {
+        /* ── LE JETON VOYAGE EN EN-TÊTE, PLUS DANS L'ADRESSE ──
+           Revue de sécurité du 2026-09-07. Le relais le dit lui-même : le
+           jeton « vaut mot de passe, le connaître c'est pouvoir jouer à la
+           place de son propriétaire ». Or une ligne de requête est journalisée
+           par l'edge Cloudflare et par tout proxy sur la route, alors qu'un
+           en-tête ne l'est pas.
+
+           On l'envoie donc dans `X-Jeton`. Il reste AUSSI dans l'adresse : un
+           relais plus ancien que ce correctif ne lit que là, et la première
+           chose à ne pas casser, c'est une table déjà ouverte. Le jour où le
+           relais déployé lit l'en-tête partout, la moitié « adresse » de cette
+           ligne pourra disparaître. */
         const reponse = await fetch(
           `${base}/api/flux?id=${encodeURIComponent(id)}&jeton=${encodeURIComponent(jeton)}&versionEtat=${version}`,
-          { signal: controleur.signal }
+          { signal: controleur.signal, headers: { "X-Jeton": jeton } }
         );
         if (!vivante) return;
         if (reponse.status === 403) {
@@ -130,6 +161,23 @@ function construireSession({
           });
           vivante = false;
           return;
+        }
+        /* ── UNE ERREUR QUI RÉPOND EN JSON RESTE UNE ERREUR ──
+           Revue de sécurité du 2026-09-07. Seul le 403 était traité. Un 429
+           (plafond de débit atteint) ou un 400 renvoie pourtant un corps JSON
+           parfaitement valide : `reponse.json()` réussissait, `echecsDeSuite`
+           repartait à zéro, `corps.messages` valait `undefined`, et la boucle
+           rebouclait AUSSITÔT, sans la moindre attente.
+
+           Résultat : un client qui touche le plafond se met à marteler le
+           relais à la cadence du réseau, et chaque requête rafraîchit son
+           propre compteur — le bannissement de quinze minutes ne s'éteint
+           alors plus jamais. Le client se punissait tout seul, indéfiniment.
+
+           Le repli exponentiel existait déjà, dans le `catch` juste en
+           dessous : il suffisait de tomber dedans. */
+        if (!reponse.ok) {
+          throw new Error(`Le relais a répondu ${reponse.status}.`);
         }
         const corps = await reponse.json();
         echecsDeSuite = 0;
@@ -343,19 +391,88 @@ export function plateauPublic(instantane) {
     /* La défausse cachée porte bien son nom : elle reste cachée jusqu'au
        décompte, exactement comme à la table. */
     discardedHidden: (t.discardedHidden || []).map(() => "?"),
+    /* ── LA ZONE REPOS FACE CACHÉE L'EST AUSSI SUR LE FIL ──
+       Revue de sécurité du 2026-09-07. `TitanResourceBand` filtre déjà ces
+       entrées à l'affichage (`e.faceUp || estMoi`) — mais le filtre vit dans
+       le RENDU, et la donnée, elle, partait entière : le nom de la carte volée
+       par une Fatigue se lisait dans l'onglet Réseau. Un masquage qui ne vit
+       que dans un composant ne masque rien.
+
+       Le champ garde sa forme — l'interface compte les entrées, lit `faceUp`
+       et `revientALaManche` — seul `cardId` devient « ? ». La victime, elle,
+       reçoit sa Zone Repos réelle par le courrier privé. */
+    repos: (t.repos || []).map((e) => (e && e.faceUp ? e : { ...e, cardId: "?" })),
+    /* Une carte empruntée est dans la MAIN du voleur, qu'on vient de vider :
+       la nommer ici rendait par la bande une carte de la main masquée. */
+    empruntees: (t.empruntees || []).map((e) => ({ ...e, cardId: "?" })),
   }));
+
+  /* ── LE PLACEMENT DES VERTS EST UN PARAVENT, PAS UN AFFICHAGE ──
+     Même revue. Le décompte final se joue paravent levé — chacun place ses
+     Verts en secret, tout est révélé d'un coup — et `DecisionPanels` respecte
+     scrupuleusement cette règle à l'écran. `vertAssignments` traversait
+     pourtant l'instantané intact : il suffisait d'ouvrir l'onglet Réseau pour
+     lire les destinations des autres avant de choisir les siennes,
+     c'est-à-dire pour gagner la partie.
+
+     On ne diffuse donc que des jetons ANONYMES tant que la table n'a pas fini
+     de valider — même nombre, aucune destination, ce qui est exactement ce que
+     l'écran montre déjà (« placés, secret »). Une fois tout le monde validé,
+     le détail n'est plus un secret : c'est le décompte, et les invités en ont
+     besoin pour lire leur score. */
+  const valides = copie.vertsValides || {};
+  const assignations = copie.vertAssignments || {};
+  const tousValides = copie.titanState.players.every((t) => {
+    const aDesVerts = (t.repaire || []).some((c) => c === "vert");
+    return !aDesVerts || valides[t.id];
+  });
+  if (!tousValides) {
+    copie.vertAssignments = Object.fromEntries(
+      Object.entries(assignations).map(([id, liste]) => [
+        id,
+        (liste || []).map((a) => (a ? { type: "?", target: "?" } : a)),
+      ])
+    );
+  }
+
+  /* ── LA GRAINE ET LES TEMPÉRAMENTS D'IA NE SORTENT PAS ──
+     Même revue. `gameSeed` sème un générateur DÉTERMINISTE (mulberry32) qui
+     alimente tous les tirages aveugles : quelle carte le Vol de Phase Repos
+     prend, laquelle la Fatigue arrache, quel Socle un Dilemme désigne. Un
+     invité qui la connaît rejoue la suite et anticipe tout ce que le jeu tire
+     « au hasard ». `titanProfiles` donne le tempérament exact de chaque IA.
+
+     Ni l'un ni l'autre ne sert à un invité : il n'exécute aucun moteur, il
+     affiche l'état que l'hôte lui envoie. La graine reste lisible chez l'hôte,
+     qui est celui qui rejoue une partie. */
+  if (copie.table) {
+    delete copie.table.gameSeed;
+    delete copie.table.titanProfiles;
+  }
   return copie;
 }
 
-/** Ce qui n'appartient qu'à un joueur : sa main et ses cartes programmées. */
+/** Ce qui n'appartient qu'à un joueur : sa main, ses cartes programmées, sa
+    Zone Repos réelle et le placement de SES Verts. */
 export function mainPrivee(instantane, titanId) {
-  const t = instantane?.titanState?.players?.find((p) => p.id === Number(titanId));
+  const id = Number(titanId);
+  const t = instantane?.titanState?.players?.find((p) => p.id === id);
   if (!t) return null;
   return {
-    titanId: Number(titanId),
+    titanId: id,
     hand: [...(t.hand || [])],
     programmed: [...(t.programmed || [])],
     discardedHidden: [...(t.discardedHidden || [])],
+    /* Ces deux-là sont MASQUÉS dans le plateau public depuis la revue du
+       2026-09-07, et ils doivent bien revenir à leur propriétaire : le livret
+       est explicite, « la cible peut la consulter — pas les autres ». */
+    repos: structuredClone(t.repos || []),
+    empruntees: structuredClone(t.empruntees || []),
+    /* Le placement de ses propres Verts. Il vit chez l'hôte — c'est lui qui
+       fait tourner le moteur — donc sans ce renvoi, un invité verrait ses
+       propres choix remplacés par les jetons anonymes du plateau public, et
+       ne pourrait plus ni les relire ni les valider. */
+    vertAssignments: structuredClone(instantane?.vertAssignments?.[id] || []),
   };
 }
 
@@ -370,8 +487,18 @@ export function fusionnerMain(instantanePublic, main) {
         hand: [...main.hand],
         programmed: [...main.programmed],
         discardedHidden: [...main.discardedHidden],
+        // Champs ajoutés le 2026-09-07 : absents d'un hôte plus ancien, on
+        // garde alors ce que le plateau public portait.
+        repos: main.repos ? structuredClone(main.repos) : t.repos,
+        empruntees: main.empruntees ? structuredClone(main.empruntees) : t.empruntees,
       }
       : t
   ));
+  if (main.vertAssignments) {
+    copie.vertAssignments = {
+      ...(copie.vertAssignments || {}),
+      [main.titanId]: structuredClone(main.vertAssignments),
+    };
+  }
   return copie;
 }

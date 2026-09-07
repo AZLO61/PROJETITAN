@@ -20,7 +20,9 @@ import DecisionPanels from "./panels/DecisionPanels.jsx";
 import TitanBandPanel from "./panels/TitanBandPanel.jsx";
 import Superposition from "./panels/Superposition.jsx";
 import PodiumFinal from "./panels/PodiumFinal.jsx";
+import RainbowCelebration from "./panels/RainbowCelebration.jsx";
 import { T, marquee, readout, label } from "./theme.js";
+import { cancelBtn } from "./styles.js";
 import Icon from "./icons.jsx";
 
 /* ── LA LIAISON, ET COMMENT LA RATTRAPER ───────────────────
@@ -73,6 +75,21 @@ function BandeauDistant({ vm }) {
           « reconnexion en cours », « diffusion impossible ». */}
       {vm.distantAvis && (
         <span style={{ ...label(T.warn, T.micro), flex: "1 1 180px" }}>{vm.distantAvis}</span>
+      )}
+      {/* ── LA SEULE SORTIE DU GARDE-FOU DE RECHARGEMENT ──
+          Quand cette page a rejoint une table qui a déjà une partie sans en
+          avoir le moteur (un F5 de l'hôte), plus rien n'est diffusé : le
+          plateau des autres reste intact. Ce bouton est le geste qui assume
+          l'inverse — repartir de zéro pour toute la table — et c'est
+          exactement pour ça qu'il est explicite et nommé. */}
+      {vm.distantDiffusionBloquee && vm.reprendreDiffusion && (
+        <button
+          onClick={vm.reprendreDiffusion}
+          title="Écrase la partie en cours de la table par celle de cette page. Irréversible."
+          style={{ ...cancelBtn(), borderColor: T.stop, color: T.stop }}
+        >
+          Écraser et repartir de cette page
+        </button>
       )}
       {sansSiege && (
         <span style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", flex: "1 1 100%" }}>
@@ -544,6 +561,12 @@ export default function GameView(vm) {
           />
         </Suspense>
       )}
+
+      {/* Le Trophée Arc-en-ciel, en dernier : c'est une célébration qui passe
+          par-dessus TOUT, y compris les Règles et le tutoriel s'ils sont
+          ouverts. Elle n'intercepte aucun clic et s'efface d'elle-même au bout
+          de trois secondes. */}
+      <RainbowCelebration vm={vm} />
     </div>
   );
 }

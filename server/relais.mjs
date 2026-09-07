@@ -110,6 +110,10 @@ const MAX_SALLES = Number(process.env.MAX_SALLES || 50);
 const MAX_PARTICIPANTS = 8;            // 4 joueurs + spectateurs éventuels
 const MAX_CORPS = 2 * 1024 * 1024;     // 2 Mo : un instantané complet pèse ~60 ko
 const MAX_CORPS_AUTH = 4 * 1024;       // « créer » et « rejoindre » : un pseudo et un mot de passe
+/* Ce qu'un INVITÉ peut envoyer sur /api/envoyer : une intention, un chat, une
+   demande de siège. Aucun de ces messages ne pèse plus de quelques kilo-octets.
+   Seul l'hôte diffuse l'état complet, et lui seul obtient MAX_CORPS. */
+const MAX_CORPS_INVITE = 64 * 1024;
 const ATTENTE_FLUX_MS = 25_000;        // durée d'un long-poll avant réponse vide
 const TTL_SALLE_MS = 4 * 60 * 60 * 1000;   // salle oubliée après 4 h sans vie
 const TTL_PARTICIPANT_MS = 90_000;     // participant considéré parti après 90 s
@@ -357,6 +361,21 @@ async function rejoindreSalle({ id, motDePasse, pseudo, ip, cleRelais }) {
   const hoteVacant = !salle.participants.has(salle.hote);
   const veutReprendre = typeof cleRelais === "string" && cleRelais.length > 0;
   if (hoteVacant && veutReprendre) {
+    /* ── SANS CLÉ CONFIGURÉE, PERSONNE NE REPREND LE MOTEUR ──
+       Revue de sécurité du 2026-09-07. `cleRelaisValide` rend `true` quand
+       aucune clé n'est configurée — c'est voulu pour la CRÉATION, qui est le
+       mode local assumé. Appliqué à la REPRISE, ça donnait tout autre chose :
+       un relais lancé par un simple `node server/relais.mjs`, un invité qui
+       connaît le mot de passe de table, et les deux minutes de grâce pendant
+       lesquelles l'hôte se tait (téléphone en veille, wifi qui saute)
+       suffisaient à lui prendre le moteur. Il diffusait alors l'état de son
+       choix et adressait de fausses mains à chacun.
+
+       Créer une table sans clé n'engage rien ; reprendre celle d'un autre
+       engage sa partie. On exige donc une clé RÉELLEMENT posée. */
+    if (!cleAttendue()) {
+      return { erreur: "Ce relais n'a pas de clé configurée : la reprise d'une table n'y est pas possible." };
+    }
     if (!cleRelaisValide(cleRelais)) {
       noterEchec(ip);
       return { erreur: "Clé du relais incorrecte." };
@@ -424,6 +443,25 @@ function presence(salle) {
   }));
 }
 
+/* Plafond d'octets retenus par participant. Quatre mégaoctets : de quoi garder
+   plusieurs instantanés complets (~60 ko) et toute une salve d'intentions, sans
+   jamais qu'un seul client puisse remplir la mémoire du relais. */
+const MAX_FILE_OCTETS = 4 * 1024 * 1024;
+
+/* La taille est CALCULÉE UNE FOIS et rangée sur le message, jamais recalculée à
+   chaque dépôt : sérialiser toute la file à chaque message ferait de cette
+   borne le coût qu'elle est censée éviter. */
+function tailleMessage(m) {
+  if (m && typeof m === "object") {
+    if (typeof m.__octets === "number") return m.__octets;
+    let n = 0;
+    try { n = JSON.stringify(m).length; } catch { n = 1024; }
+    Object.defineProperty(m, "__octets", { value: n, enumerable: false });
+    return n;
+  }
+  return 64;
+}
+
 /** Dépose un message dans la file de chaque destinataire, puis réveille les long-polls. */
 function deposer(salle, destinataires, message) {
   destinataires.forEach((j) => {
@@ -435,6 +473,24 @@ function deposer(salle, destinataires, message) {
        d'aplomb — c'est l'avantage d'un état complet plutôt qu'incrémental. */
     if (file.length >= 200) file.splice(0, file.length - 100);
     file.push(message);
+    /* ── ET BORNÉE EN OCTETS, PAS SEULEMENT EN NOMBRE ──
+       Revue de sécurité du 2026-09-07. Deux cents entrées ne veulent rien dire
+       tant qu'une entrée n'a pas de taille : une `intention` transporte `args`
+       et `contexte`, deux champs non bornés qui montent jusqu'au plafond de
+       corps. Un invité qui pousse des intentions de 2 Mo pendant que l'hôte
+       est absent — la salle vit jusqu'à quatre heures — retenait ainsi des
+       centaines de mégaoctets par salle, sans personne pour vider la file.
+
+       On écarte donc les PLUS ANCIENS jusqu'à repasser sous le plafond, la
+       même politique que la borne en nombre juste au-dessus, et pour la même
+       raison : à la prochaine relève, le client reçoit l'instantané complet,
+       qui le remet d'aplomb quoi qu'il ait manqué. */
+    let octets = 0;
+    for (const m of file) octets += tailleMessage(m);
+    while (file.length > 1 && octets > MAX_FILE_OCTETS) {
+      octets -= tailleMessage(file[0]);
+      file.shift();
+    }
   });
   reveiller(salle);
 }
@@ -606,10 +662,27 @@ function lireCorps(requete, plafond = MAX_CORPS) {
 
    `x-forwarded-for` n'est plus lu du tout : derrière Cloudflare il n'apporte
    rien de plus, et ailleurs il n'apporte que du mensonge. */
+/* ── ON NE CROIT UN EN-TÊTE QUE DERRIÈRE CELUI QUI L'ÉCRASE ──
+   Revue de sécurité du 2026-09-07. `cf-connecting-ip` était lu dès qu'il était
+   présent. Il n'est infalsifiable que derrière Cloudflare, qui l'écrase ; or
+   rien ici ne vérifiait qu'on y était, et JOUER-A-DISTANCE.bat documente
+   explicitement le mode SANS tunnel (« tu peux jouer en local en donnant
+   l'adresse http://localhost:8787 »). Depuis le réseau local, ou par n'importe
+   quel autre tunnel, il suffisait de faire varier cet en-tête à chaque requête
+   pour repartir d'un compteur neuf : c'est très exactement la faille
+   `x-forwarded-for` corrigée le 2026-08-30, revenue sous un autre nom.
+
+   Le drapeau est donc explicite et posé par le lanceur du tunnel, jamais
+   déduit de la requête elle-même : une valeur qui vient du client ne peut pas
+   décider si on doit croire le client. */
+const DERRIERE_CLOUDFLARE = process.env.DERRIERE_CLOUDFLARE === "1";
+
 function adresse(requete) {
-  const cloudflare = requete.headers["cf-connecting-ip"];
-  if (typeof cloudflare === "string" && cloudflare.length > 0 && cloudflare.length < 64) {
-    return cloudflare.trim();
+  if (DERRIERE_CLOUDFLARE) {
+    const cloudflare = requete.headers["cf-connecting-ip"];
+    if (typeof cloudflare === "string" && cloudflare.length > 0 && cloudflare.length < 64) {
+      return cloudflare.trim();
+    }
   }
   return requete.socket.remoteAddress || "inconnue";
 }
@@ -624,18 +697,11 @@ const serveur = createServer(async (requete, reponse) => {
     reponse.writeHead(autorisee ? 204 : 403, autorisee ? {
       "Access-Control-Allow-Origin": autorisee,
       "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type,X-Jeton,X-Table",
       "Access-Control-Max-Age": "600",
       Vary: "Origin",
     } : {});
     reponse.end();
-    return;
-  }
-
-  if (url.pathname === "/api/sante") {
-    // Volontairement muet sur le contenu : ni identifiants de salles, ni
-    // pseudos. Juste de quoi vérifier que le relais respire.
-    repondre(reponse, 200, { ok: true, salles: salles.size }, origine);
     return;
   }
 
@@ -645,6 +711,15 @@ const serveur = createServer(async (requete, reponse) => {
   }
   if (tropDeRequetes(ip)) {
     repondre(reponse, 429, { erreur: "Trop de requêtes." }, origine);
+    return;
+  }
+
+  /* Après les deux gardes, et pas avant (revue du 2026-09-07) : une adresse
+     bannie gardait ici un canal ouvert, non compté, qui lui disait combien de
+     salles tournent. Volontairement muet sur le contenu : ni identifiants de
+     salles, ni pseudos. Juste de quoi vérifier que le relais respire. */
+  if (url.pathname === "/api/sante") {
+    repondre(reponse, 200, { ok: true, salles: salles.size }, origine);
     return;
   }
 
@@ -686,7 +761,23 @@ const serveur = createServer(async (requete, reponse) => {
     }
 
     if (requete.method === "POST" && url.pathname === "/api/envoyer") {
-      const corps = await lireCorps(requete);
+      /* ── ON NE LIT 2 Mo QUE POUR CELUI QUI EN A LE DROIT ──
+         Revue de sécurité du 2026-09-07. Le corps était lu et analysé au
+         plafond complet AVANT de savoir qui écrivait : un invité assis pouvait
+         faire analyser 12 Mo de JSON par seconde à un relais mono-thread, qui
+         refusait ensuite chaque message en 403. C'est exactement la correction
+         déjà appliquée à « créer » et « rejoindre » (MAX_CORPS_AUTH), qui
+         n'avait pas été propagée ici.
+
+         Seul l'ÉTAT est gros, et seul l'hôte en envoie. On lit donc au plafond
+         complet uniquement quand l'expéditeur présente le jeton d'hôte d'une
+         salle connue — une comparaison de chaînes, sans allocation — et au
+         plafond réduit pour tout le monde d'autre. Un invité qui dépasse
+         reçoit le 413 habituel de `lireCorps`. */
+      const jetonAnnonce = String(requete.headers["x-jeton"] || "");
+      const salleAnnoncee = salles.get(String(requete.headers["x-table"] || "").toUpperCase());
+      const estHote = Boolean(salleAnnoncee && jetonAnnonce && salleAnnoncee.hote === jetonAnnonce);
+      const corps = await lireCorps(requete, estHote ? MAX_CORPS : MAX_CORPS_INVITE);
       const salle = salles.get(String(corps.id || "").toUpperCase());
       const p = participant(salle, corps.jeton);
       if (!salle || !p) { repondre(reponse, 403, { erreur: "Session inconnue." }, origine); return; }
@@ -799,7 +890,11 @@ const serveur = createServer(async (requete, reponse) => {
 
     if (requete.method === "GET" && url.pathname === "/api/flux") {
       const id = String(url.searchParams.get("id") || "").toUpperCase();
-      const j = String(url.searchParams.get("jeton") || "");
+      /* En-tête d'abord, ligne de requête ensuite (revue du 2026-09-07) : le
+         jeton vaut mot de passe, et une URL complète est journalisée par
+         l'edge et par les proxys, un en-tête non. Le repli sur `?jeton=`
+         garde les clients plus anciens en service. */
+      const j = String(requete.headers["x-jeton"] || url.searchParams.get("jeton") || "");
       const versionVue = Number(url.searchParams.get("versionEtat") || 0);
       const salle = salles.get(id);
       const p = participant(salle, j);
@@ -903,7 +998,12 @@ const lanceDirectement = process.argv[1] && import.meta.url.endsWith(
   process.argv[1].replace(/\\/g, "/").split("/").pop()
 );
 if (lanceDirectement) {
-  serveur.listen(PORT, () => {
+  /* ── ON N'ÉCOUTE PAS TOUTE LA MAISON PAR DÉFAUT ──
+     Revue de sécurité du 2026-09-07. `listen(PORT)` seul lie 0.0.0.0 : tout le
+     réseau local pouvait parler au relais, alors que le seul client légitime
+     — `cloudflared` — tourne sur la même machine. Le lanceur pose
+     `HOTE_ECOUTE=0.0.0.0` quand on veut délibérément jouer en LAN sans tunnel. */
+  serveur.listen(PORT, process.env.HOTE_ECOUTE || "127.0.0.1", () => {
     console.log(`Relais Projet Titan à l'écoute sur http://localhost:${PORT}`);
     if (cleAttendue()) {
       /* ── LA CLÉ S'AFFICHE ICI, ET C'EST UN REVIREMENT ASSUMÉ ──

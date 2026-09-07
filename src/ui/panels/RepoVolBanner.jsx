@@ -38,7 +38,7 @@ const SENS = [
 ];
 
 export default function RepoVolBanner({ vm }) {
-  const { phase, mancheNumber, titanState, titanModes, volDirection, volResume, modeVolRepos, chooseVolDirection, titanDisplayName } = vm;
+  const { phase, mancheNumber, titanState, titanModes, volDirection, volResume, modeVolRepos, chooseVolDirection, validerVolMaintenant, titanDisplayName } = vm;
   if (phase !== "repos") return null;
 
   const mainColor = "#e32347";
@@ -176,9 +176,30 @@ export default function RepoVolBanner({ vm }) {
               ça plus lentement, qu'on voie qui vole quoi à qui »). On le DIT :
               une pause qu'on n'a pas demandée et qu'on ne comprend pas se lit
               comme un blocage. */}
-          <div style={{ fontSize: ".72rem", color: "rgba(255,255,255,.55)", marginBottom: 7 }}>
-            ⏳ La Manche suivante démarre dans quelques secondes — le temps de lire
-            ce que chacun a perdu.
+          {/* ── ET UN BOUTON POUR NE PAS ATTENDRE ──
+              Nikola, 2026-09-07 : « la phase de vol en chaîne est bien plus
+              longue que 5 secondes, je dois appuyer sur Annuler ». La cause
+              vivait dans le contrôleur (le minuteur partageait le seau des
+              animations, qui se vide tout seul) et elle est corrigée là-bas.
+
+              Reste qu'une pause imposée sans porte de sortie est un blocage dès
+              qu'elle rate, et qu'à la table on a souvent fini de lire avant la
+              fin du délai. Le bouton n'accélère rien d'autre : il pose les
+              mêmes drapeaux que le minuteur, une seconde plus tôt. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 7 }}>
+            <span style={{ fontSize: ".72rem", color: "rgba(255,255,255,.55)" }}>
+              ⏳ La Manche suivante démarre dans quelques secondes — le temps de lire
+              ce que chacun a perdu.
+            </span>
+            {validerVolMaintenant && (
+              <button
+                onClick={validerVolMaintenant}
+                title="Ne pas attendre la fin du compte à rebours"
+                style={smallBtn(true, "#16E08C", "#00C97A")}
+              >
+                ▶ Manche suivante
+              </button>
+            )}
           </div>
           {/* QUI T'A PRIS QUOI — Nikola, 2026-08-28 : « je dois avoir une
               information claire de quelle carte quel Titan m'a pris à la phase

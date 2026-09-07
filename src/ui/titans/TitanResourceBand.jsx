@@ -63,10 +63,45 @@ const COULEURS_REPAIRE = ["bleu", "rose", "orange", "rouge", "vert"];
    qu'une file de carrés d'un pixel qu'on ne peut plus compter. */
 const MAX_CARRES = 8;
 
+/* ── LE GAIN SE VOIT AU MOMENT OÙ IL TOMBE ──
+   Nikola, 2026-09-07 : « pour les pistes ADN, indique +(insérer valeur) au
+   moment de l'application de l'action ».
+
+   Une piste n'affichait que son TOTAL. Un Graouhhh qui touche trois Titans
+   rapporte +3 Bagarre d'un coup, un ricochet +1 Destruction sans qu'on ait
+   rien cliqué : le nombre changeait pendant qu'on regardait le plateau, et il
+   fallait ouvrir le journal pour savoir de combien — donc, à la table, on ne
+   le savait pas. La progression sur ces deux pistes vaut jusqu'à 7 points au
+   décompte, c'est trop cher pour se lire après coup.
+
+   On montre donc l'ÉCART, pas la valeur : la pastille dit ce que l'action
+   vient de rapporter, puis s'efface. Une baisse (« Annuler », ou une
+   restauration d'instantané) ne clignote pas — seul un gain est un évènement
+   à signaler. */
+const DUREE_GAIN_MS = 2200;
+
+function usePisteGain(valeur) {
+  const [gain, setGain] = React.useState(0);
+  // Initialisé sur la valeur d'arrivée : monter le composant n'est pas un gain.
+  const precedentRef = React.useRef(valeur);
+
+  React.useEffect(() => {
+    const avant = precedentRef.current;
+    precedentRef.current = valeur;
+    if (valeur <= avant) { setGain(0); return; }
+    setGain(valeur - avant);
+    const minuteur = setTimeout(() => setGain(0), DUREE_GAIN_MS);
+    return () => clearTimeout(minuteur);
+  }, [valeur]);
+
+  return gain;
+}
+
 function Piste({ icone, nom, valeur, meilleur, couleur }) {
   const montres = Math.min(valeur, MAX_CARRES);
   const reste = valeur - montres;
   const estMeilleur = meilleur > 0 && valeur === meilleur;
+  const gain = usePisteGain(valeur);
   return (
     <div
       title={`Piste ADN ${nom} : ${valeur} point${valeur > 1 ? "s" : ""}${
@@ -100,6 +135,22 @@ function Piste({ icone, nom, valeur, meilleur, couleur }) {
           <span style={{ ...readout("0.56rem", couleur), marginLeft: 3 }}>+{reste}</span>
         )}
       </span>
+      {/* Ce que l'action VIENT de rapporter, à côté du total. Fond plein pour
+          qu'on ne le confonde pas avec le « +6 » de dépassement de file, qui
+          vit à gauche, sans fond, et ne bouge jamais. */}
+      {gain > 0 && (
+        <span
+          role="status"
+          aria-label={`plus ${gain} en ${nom}`}
+          style={{
+            ...readout("0.6rem", "#0b0b0b"),
+            background: couleur, borderRadius: 3, padding: "0 3px",
+            animation: "pisteGain 2.2s ease-out forwards",
+          }}
+        >
+          +{gain}
+        </span>
+      )}
       {/* Le compte, et le rang : le meneur de la table prend la couleur de sa
           piste, les autres l'encre ordinaire. */}
       <span
@@ -110,6 +161,18 @@ function Piste({ icone, nom, valeur, meilleur, couleur }) {
       >
         {valeur}
       </span>
+      <style>{`
+        @keyframes pisteGain {
+          0%   { opacity: 0; transform: translateY(5px) scale(.85); }
+          14%  { opacity: 1; transform: translateY(0) scale(1.12); }
+          24%  { transform: scale(1); }
+          78%  { opacity: 1; }
+          100% { opacity: 0; transform: translateY(-4px); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          @keyframes pisteGain { from { opacity: 1; } to { opacity: 1; } }
+        }
+      `}</style>
     </div>
   );
 }

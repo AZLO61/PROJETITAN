@@ -237,4 +237,26 @@ Réglages par variables d'environnement : `CLE_RELAIS` (vide par défaut),
 `PORT` (8787), `MAX_SALLES` (50), `ORIGINES` (`*` par défaut ; une liste séparée
 par des virgules pour resserrer si le jeu est hébergé à une adresse fixe).
 
+Deux réglages ajoutés par la revue de sécurité du 7 septembre 2026, tous deux
+posés par `JOUER-A-DISTANCE.bat` :
+
+- `HOTE_ECOUTE` (`127.0.0.1` par défaut) — l'interface réseau sur laquelle le
+  relais écoute. Seul `cloudflared`, qui tourne sur la même machine, a besoin de
+  le joindre ; le défaut ferme donc la porte au reste du réseau local. Mets
+  `0.0.0.0` uniquement si tu veux délibérément jouer en wifi local SANS tunnel,
+  en donnant l'adresse IP de ce PC aux autres.
+- `DERRIERE_CLOUDFLARE` (`0` par défaut) — à mettre à `1` **uniquement** quand
+  le relais est réellement derrière un tunnel Cloudflare. Il autorise alors le
+  relais à croire l'en-tête `cf-connecting-ip` pour identifier ses clients.
+  Cet en-tête n'est infalsifiable que derrière Cloudflare, qui l'écrase : le
+  croire ailleurs rouvre exactement la faille corrigée le 30 août, un client
+  pouvant repartir d'un compteur anti-inondation neuf à chaque requête. À
+  l'inverse, l'oublier derrière un tunnel fait partager UN SEUL compteur à toute
+  la table, puisque toutes les requêtes arrivent alors de 127.0.0.1.
+
+Une conséquence à connaître : **sur un relais sans `CLE_RELAIS`, la REPRISE
+d'une table par un nouvel hôte est refusée.** Créer une table sans clé n'engage
+rien ; reprendre celle de quelqu'un d'autre engage sa partie, et le mot de passe
+de table — que toute la tablée connaît — ne suffit pas à l'autoriser.
+
 Aucune dépendance à installer : le relais n'utilise que Node.

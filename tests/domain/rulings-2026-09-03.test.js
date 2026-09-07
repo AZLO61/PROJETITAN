@@ -134,41 +134,53 @@ describe("« Graouhhh sur 3 Titans : seul le plus proche a perdu un élément »
   });
 });
 
-describe("« Si la cible a au moins 1 bloc et 1 Adrénaline, un Dilemme est possible »", () => {
-  /* Tranché par Nikola le 2026-09-03, en réponse au Graouhhh ci-dessus. Le
-     Dilemme reste un CHOIX entre deux options ; ce qui change, c'est que
-     l'Adrénaline en est une, comme le Socle depuis le 2026-08-17. */
+describe("« On ne peut pas DEMANDER une Adrénaline » — revirement du 2026-09-07", () => {
+  /* Le 2026-09-03, l'Adrénaline était devenue une option de Dilemme, pour que
+     la cible « 1 couleur + 1 Adrénaline » ne soit plus immunisée. Nikola est
+     revenu dessus quatre jours plus tard, en deux phrases qui disent la même
+     chose : « pendant un DIL où je suis victime, perdre une Adrénaline ou
+     payer une Adrénaline, c'est pareil » et « on ne peut pas demander une
+     Adrénaline, c'est juste que si la cible veut se défendre elle peut donner
+     une Adrénaline si elle en dispose ».
 
-  it("« 1 bloc + 1 Adrénaline » ouvre le Dilemme", () => {
+     C'est un argument de structure, pas d'équilibrage : la défense du Dilemme
+     est déjà « payer 1 Adrénaline pour tout annuler ». Mettre « 1 Adrénaline »
+     parmi les deux options offrait donc à la cible deux branches au même prix
+     — aucun choix, et l'illusion d'un arbitrage. La RAGE, elle, garde
+     l'Adrénaline pour cible (FAQ #5) : c'est un des écarts qui la distinguent
+     du Dilemme, avec le Vert et le Socle. */
+
+  it("« 1 bloc + 1 Adrénaline » ne suffit plus à ouvrir un Dilemme", () => {
     const jeu = { titans: [t(2, "A2", { repaire: ["bleu"], adrenaline: 1 })] };
-    expect(getDilOptions(2, jeu)).toEqual(["bleu", ADRENALINE_OPTION]);
-    expect(canDil(2, jeu)).toBe(true);
+    expect(getDilOptions(2, jeu)).toEqual(["bleu"]);
+    expect(canDil(2, jeu)).toBe(false);
   });
 
-  it("l'Adrénaline ne compte qu'une fois, quel que soit le stock", () => {
-    // On ne perd qu'UNE ressource par Dilemme : proposer « 2 Adrénalines »
-    // comme second choix n'aurait aucun sens.
+  it("l'Adrénaline n'apparaît jamais dans les options, quel que soit le stock", () => {
     const jeu = { titans: [t(2, "A2", { repaire: ["bleu"], adrenaline: 4 })] };
-    expect(getDilOptions(2, jeu).filter((o) => o === ADRENALINE_OPTION)).toHaveLength(1);
+    expect(getDilOptions(2, jeu)).not.toContain(ADRENALINE_OPTION);
   });
 
   it("0 bloc et de l'Adrénaline reste immunisé", () => {
-    // La phrase du ruling dit « à minima 1 bloc ET une Adrénaline ». Une seule
-    // option ne fait pas un dilemme.
     const jeu = { titans: [t(2, "A2", { repaire: [], adrenaline: 3 })] };
-    expect(getDilOptions(2, jeu)).toEqual([ADRENALINE_OPTION]);
+    expect(getDilOptions(2, jeu)).toEqual([]);
     expect(canDil(2, jeu)).toBe(false);
   });
 
   it("sans Adrénaline, rien ne change", () => {
-    // Non-régression : c'est le cas de la partie qui a déclenché le ruling.
     const jeu = { titans: [t(2, "A2", { repaire: ["bleu"], adrenaline: 0 })] };
     expect(canDil(2, jeu)).toBe(false);
   });
 
-  it("elle s'ajoute aux options existantes sans les remplacer", () => {
+  it("le Socle, lui, reste une option — c'est le ruling du 2026-08-17", () => {
     const jeu = { titans: [t(2, "A2", { repaire: ["bleu", "rose"], socles: [3], adrenaline: 2 })] };
-    expect(getDilOptions(2, jeu)).toEqual(["bleu", "rose", SOCLE_OPTION, ADRENALINE_OPTION]);
+    expect(getDilOptions(2, jeu)).toEqual(["bleu", "rose", SOCLE_OPTION]);
+  });
+
+  it("une seule couleur plus un Socle ouvre toujours le Dilemme", () => {
+    const jeu = { titans: [t(2, "A2", { repaire: ["bleu"], socles: [2], adrenaline: 5 })] };
+    expect(getDilOptions(2, jeu)).toEqual(["bleu", SOCLE_OPTION]);
+    expect(canDil(2, jeu)).toBe(true);
   });
 });
 

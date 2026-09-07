@@ -135,6 +135,16 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
      qui servait deja au code couleur : une seule regle, donc la couleur d'une
      ligne et le filtre ne peuvent pas diverger. */
   const [filtreTitan, setFiltreTitan] = React.useState(null);
+  /* Filtre par MANCHE (Nikola, 2026-09-07 : « il faut un bouton filtre par
+     manche en plus de ceux par Titans »). `null` = toutes.
+
+     Les deux filtres se CROISENT au lieu de s'exclure : « ce que le Titan 3 a
+     fait en Manche 2 » est exactement la question qu'on se pose quand on
+     conteste un coup à la table, et aucun des deux filtres seul n'y répond.
+     Le journal était déjà segmenté par Manche depuis le 2026-08-28, mais une
+     segmentation se parcourt, elle ne se cherche pas : sur quatre Manches à
+     trois rounds, il faut encore faire défiler. */
+  const [filtreManche, setFiltreManche] = React.useState(null);
   const {
     titanState,
     titanModes,
@@ -164,8 +174,23 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
      différence, ce qui reviendrait à jouer paravent baissé. Hors fin de
      partie, le panneau n'est qu'un aperçu consultable et rien n'est secret :
      personne n'a encore placé quoi que ce soit. */
+  /* ── C'EST « VALIDÉ », PAS « REMPLI », QUI LÈVE LE PARAVENT ──
+     Nikola, 2026-09-07 : « si j'ai placé un Vert sur un barème mais sans
+     valider, ça ne doit pas m'afficher le barème validé des autres Titans ».
+
+     Le compte se faisait sur `vertAssignments`, c'est-à-dire sur les menus
+     REMPLIS. Or remplir un menu n'engage à rien : le placement ne devient
+     définitif qu'au bouton « Valider — définitif », qui pose `vertsValides`
+     (ruling du 2026-08-28 : « fini ne veut plus dire les menus sont remplis,
+     mais c'est validé, on n'y revient pas »). Entre les deux, un joueur qui
+     essayait une destination pour voir ce qu'elle rapporte faisait tomber le
+     paravent de TOUTE LA TABLE — y compris pour lui, qui découvrait alors les
+     barèmes définitifs des autres avant d'avoir arrêté le sien.
+
+     On lit donc le même drapeau que le reste du panneau. Un Titan sans aucun
+     Vert n'a rien à valider et ne retient personne. */
   const vertsRestants = titanState.players.reduce(
-    (n, t) => n + Math.max(0, getVertCount(t) - (vertAssignments[t.id] || []).filter(Boolean).length),
+    (n, t) => n + (getVertCount(t) > 0 && !vertsValides?.[t.id] ? 1 : 0),
     0
   );
   const scoresReveles = !gameOver || vertsRestants === 0;
@@ -782,9 +807,16 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
            la montrer : c'est chez lui qu'elle fait le plus mal. L'ancienne
            lecture ne gardait que le premier identifiant trouvé. */
         const lignes = journal.filter((e) => !e.separateur);
-        const visibles = filtreTitan === null
-          ? lignes
-          : lignes.filter((l) => l.acteurs.includes(filtreTitan));
+        // Les deux filtres se croisent : Titan ET Manche, chacun neutre à null.
+        const visibles = lignes.filter(
+          (l) => (filtreTitan === null || l.acteurs.includes(filtreTitan))
+            && (filtreManche === null || l.manche === filtreManche)
+        );
+        // Les Manches réellement présentes dans le journal, plus anciennes
+        // d'abord. Lues sur les lignes plutôt que sur `mancheNumber` : un
+        // journal vidé puis rempli à nouveau ne doit proposer que ce qu'il
+        // contient vraiment.
+        const manches = [...new Set(lignes.map((l) => l.manche))].sort((a, b) => a - b);
         // Du plus récent au plus ancien : c'est le sens dans lequel on
         // consulte un journal de partie.
         const recentesDabord = [...visibles].reverse();
@@ -805,7 +837,17 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
             .sort((a, b) => b[0] - a[0])
             .map(([manche, lgs]) => ({ manche, lignes: [...lgs].reverse() }));
         })();
-        const compte = (id) => lignes.filter((l) => l.acteurs.includes(id)).length;
+        /* Chaque compteur annonce ce qu'on obtiendrait EN CLIQUANT, donc en
+           tenant compte de l'AUTRE filtre : le badge d'un Titan compte ses
+           lignes dans la Manche sélectionnée, et inversement. Un compteur qui
+           annoncerait 12 pour un clic qui en montre 3 serait pire que pas de
+           compteur du tout. */
+        const compte = (id) => lignes.filter(
+          (l) => l.acteurs.includes(id) && (filtreManche === null || l.manche === filtreManche)
+        ).length;
+        const compteManche = (m) => lignes.filter(
+          (l) => l.manche === m && (filtreTitan === null || l.acteurs.includes(filtreTitan))
+        ).length;
 
         return (
           <div style={{
@@ -895,9 +937,53 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
               </div>
             )}
 
+            {/* Filtre par MANCHE (Nikola, 2026-09-07). Même gabarit de boutons
+                que la rangée des Titans juste au-dessus, pour qu'on comprenne
+                sans explication que les deux se combinent. La rangée
+                disparaît tant qu'il n'y a qu'une Manche au journal : proposer
+                un filtre à une seule valeur n'apprend rien. */}
+            {showLog && manches.length > 1 && (
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", margin: "5px 0 2px", alignItems: "center" }}>
+                <span style={{ ...label(T.faint, T.micro), marginRight: 2 }}>Manche</span>
+                <button
+                  onClick={() => setFiltreManche(null)}
+                  style={{
+                    ...cancelBtn(),
+                    borderColor: filtreManche === null ? T.text : T.rule,
+                    color: filtreManche === null ? T.text : T.faint,
+                  }}
+                >
+                  Toutes
+                </button>
+                {manches.map((m) => {
+                  const actif = filtreManche === m;
+                  return (
+                    <button
+                      key={m}
+                      onClick={() => setFiltreManche((prev) => (prev === m ? null : m))}
+                      title={`Ne montrer que la Manche ${m}`}
+                      style={{
+                        ...cancelBtn(),
+                        gap: 5,
+                        borderColor: actif ? T.you : T.rule,
+                        color: actif ? T.you : T.faint,
+                      }}
+                    >
+                      M{m}
+                      <span style={readout("0.6rem", T.faint)}>{compteManche(m)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {visibles.length === 0 && (
               <div style={{ ...prose(T.faint, T.micro), padding: "8px 0" }}>
-                Aucune ligne pour ce Titan.
+                {filtreTitan !== null && filtreManche !== null
+                  ? `Aucune ligne pour ce Titan en Manche ${filtreManche}.`
+                  : filtreManche !== null
+                  ? `Aucune ligne en Manche ${filtreManche}.`
+                  : "Aucune ligne pour ce Titan."}
               </div>
             )}
 

@@ -14,6 +14,7 @@
     "ecarts": "node scripts/mesure-ecarts.mjs",
     "composition": "node scripts/composition-score.mjs",
     "forces": "node scripts/mesure-forces.mjs",
+    "duel": "node scripts/duel-reglages.mjs",
     "check": "npm run audit && npm run lint && npm test"
   },
   "dependencies": {

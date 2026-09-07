@@ -73,7 +73,7 @@ import {
   resolveTeteEnAvant,
   resolveToutCasser,
 } from "./gameRules.js";
-import { chooseAmongBest, evaluatePosition, gagnantArcEnCiel, makeProfile, reglagesDe } from "./aiEvaluation.js";
+import { bestVertAssignments, chooseAmongBest, evaluatePosition, gagnantArcEnCiel, makeProfile, reglagesDe } from "./aiEvaluation.js";
 
 const DIRS = Object.freeze([
   { dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 },
@@ -328,6 +328,11 @@ export function planTour(titanId, gameState, profile = makeProfile(), mancheNumb
 // cartes.
 
 const COULEURS_SCORABLES = ["bleu", "rose", "orange", "rouge"];
+/* Le Socle, comme option de Dilemme, dans le modèle simplifié de l'IA. Une
+   clé sentinelle qu'aucune couleur ne porte, sur le modèle de `SOCLE_OPTION`
+   côté moteur — les deux ne se croisent jamais, celle-ci ne sort pas de ce
+   fichier. */
+const OPTION_SOCLE = "__socle";
 
 function compteCouleur(repaire, couleur) {
   return (repaire || []).filter((c) => c === couleur).length;
@@ -382,13 +387,24 @@ const gainAdrenalinePour = (titan) => valeurMarginaleAdrenaline(titan?.adrenalin
    que sur les cartes offensives. */
 function faiseurDeDelta(etat) {
   const memo = new Map();
-  const base = computeFinalScore(etat.titans, {}, gagnantArcEnCiel(etat.titans)).totals;
+  /* ── LE VERT SE PLACE, SINON IL NE VAUT RIEN ──
+     Audit du 2026-09-07. Ces deux appels passaient des assignations de Vert
+     VIDES : un Vert ajouté au Repaire ne rejoignait donc aucun barème et
+     rapportait exactement 0. En RAGE, l'IA ne volait par conséquent JAMAIS un
+     Vert — alors que `evaluatePosition`, elle, le valorise à hauteur du
+     meilleur gain marginal × 1,3 (`ATTRAIT_VERT`).
+
+     Deux calculs du même projet en désaccord, et c'est le trou exact que
+     Nikola a signalé le 2026-08-28 : « personne n'a voulu prendre un bloc vert
+     alors que c'est fort ». `bestVertAssignments` est le placement glouton que
+     l'évaluation utilise déjà — on lui donne le même. */
+  const base = computeFinalScore(etat.titans, bestVertAssignments(etat.titans), gagnantArcEnCiel(etat.titans)).totals;
 
   return (titanId, mutation, cle) => {
     const cleComplete = `${titanId}|${cle}`;
     if (memo.has(cleComplete)) return memo.get(cleComplete);
     const liste = etat.titans.map((t) => (t.id === titanId ? mutation(t) : t));
-    const apres = computeFinalScore(liste, {}, gagnantArcEnCiel(liste)).totals;
+    const apres = computeFinalScore(liste, bestVertAssignments(liste), gagnantArcEnCiel(liste)).totals;
     const delta = (apres[titanId]?.total ?? 0) - (base[titanId]?.total ?? 0);
     memo.set(cleComplete, delta);
     return delta;
@@ -417,10 +433,19 @@ export function appliquerDecisions(decisions, etat, profile = makeProfile()) {
     // Ce que me rapporte un bloc de cette couleur, et ce qu'il coûte à
     // celui qui le perd. Au barème pour les niveaux du bas, au total réel
     // pour la référence.
-    const monGain = (couleur) => (delta
-      ? delta(attaquant.id, (t) => ({ ...t, repaire: [...t.repaire, couleur] }), `+${couleur}`)
-      : gainSiAjoute(attaquant.repaire, couleur));
+    /* Le Socle vaut ses points de face, et l'IA parie sur le PLUS PETIT de la
+       cible : le livret le tire au sort, l'attaquant ne choisit pas lequel
+       part, et miser sur le meilleur surestimerait le coup. Un Socle gagné ne
+       rejoint jamais l'attaquant en Dilemme (il tombe au sol), d'où le 0. */
+    const petitSocle = () => Math.min(...((defenseur.socles || []).length ? defenseur.socles : [0]));
+    const monGain = (couleur) => {
+      if (couleur === OPTION_SOCLE) return 0;
+      return delta
+        ? delta(attaquant.id, (t) => ({ ...t, repaire: [...t.repaire, couleur] }), `+${couleur}`)
+        : gainSiAjoute(attaquant.repaire, couleur);
+    };
     const saPerte = (couleur) => {
+      if (couleur === OPTION_SOCLE) return petitSocle();
       if (!delta) return perteSiRetire(defenseur.repaire, couleur);
       if (defenseur.repaire.indexOf(couleur) === -1) return 0;
       return -delta(defenseur.id, (t) => {
@@ -478,13 +503,21 @@ export function appliquerDecisions(decisions, etat, profile = makeProfile()) {
       // au Repaire de l'attaquant (cf. DESTINATION_BLOC_PERDU), un DIL qui
       // coûte moins cher à la cible mais lui rapporte davantage peut valoir
       // mieux qu'un DIL qui coûte plus cher à la cible sans rien lui donner.
-      /* ÉCART ASSUMÉ AVEC LE MOTEUR, à documenter plutôt qu'à corriger ici :
-         ce modèle ne compte que les COULEURS. Le vrai `getDilOptions` compte
-         aussi le Socle (2026-08-17) et l'Adrénaline (2026-09-03), donc une
-         cible « 1 couleur + 1 jeton » y subit un Dilemme que l'IA, elle, ne
-         voit pas venir. L'IA sous-estime ces coups ; elle n'en joue jamais
-         d'illégal, et c'est le sens de la marge. */
+      /* ── ALIGNÉ SUR `getDilOptions`, SOCLE COMPRIS ──
+         Audit du 2026-09-07. Ce modèle ne comptait que les COULEURS, là où le
+         moteur compte aussi le Socle depuis le 2026-08-17 : contre une cible
+         « 1 couleur + 1 Socle », l'IA chiffrait le Dilemme à zéro et écartait
+         la carte offensive, alors que le coup était bel et bien jouable.
+
+         L'Adrénaline, elle, n'est plus une option depuis le revirement du
+         2026-09-07 (cf. `getDilOptions`) : il n'y a donc rien à en dire ici.
+
+         Le Socle entre sous une clé sentinelle qui ne peut se confondre avec
+         aucune couleur, et sa valeur est celle du plus petit Socle de la
+         cible : c'est un tirage au sort, l'attaquant ne choisit pas lequel
+         part, et une IA qui parie sur le meilleur surestimerait le coup. */
       const presentes = COULEURS_SCORABLES.filter((c) => compteCouleur(defenseur.repaire, c) > 0);
+      if ((defenseur.socles || []).length > 0) presentes.push(OPTION_SOCLE);
       if (presentes.length < 2) continue; // DIL structurellement impossible
 
       const gagneAttaquant = d.destination === "repaire";
@@ -518,6 +551,14 @@ export function appliquerDecisions(decisions, etat, profile = makeProfile()) {
       if (meilleurMinimum > valeurAdrenalinePour(defenseur) && (defenseur.adrenaline || 0) >= 1) {
         defenseur.adrenaline -= 1;
         continue;
+      }
+      if (couleurPerdue === OPTION_SOCLE) {
+        // Le plus petit part : c'est le pari sur lequel la décision a été
+        // prise, et le modèle doit rester cohérent avec lui-même.
+        const socles = defenseur.socles || [];
+        const min = socles.indexOf(Math.min(...socles));
+        if (min !== -1) socles.splice(min, 1);
+        continue; // un Socle perdu en Dilemme tombe au sol, jamais chez l'attaquant
       }
       const idx = defenseur.repaire.indexOf(couleurPerdue);
       if (idx !== -1) defenseur.repaire.splice(idx, 1);
@@ -686,6 +727,11 @@ function simulerCarte(coup, titanId, etat, mancheNumber, profile = makeProfile()
   if (mise > 0 && moi && cardId !== "faut_pas_me_chauffer") {
     moi.adrenaline = Math.max(0, (moi.adrenaline || 0) - mise);
   }
+  /* Le `return` manquait (audit du 2026-09-07). Aucun bug visible : le seul
+     appelant, `simulation.js`, ignore la valeur. Mais la fonction est
+     EXPORTÉE, son contrat annonce le résultat du résolveur, et elle rendait
+     `undefined` — le prochain appelant se serait fait piéger en silence. */
+  return res;
 }
 
 /** Tous les coups légaux offerts par une carte, paramètres compris. */

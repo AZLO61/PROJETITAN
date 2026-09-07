@@ -25,7 +25,26 @@ const titan = (id, extra = {}) => ({
   programmed: ["tete_en_avant", "je_ne_partage_pas"],
   playedThisManche: [],
   discardedHidden: ["faut_pas_me_chauffer"],
-  repos: [],
+  /* ── LE GABARIT DOIT PORTER CE QU'ON PRÉTEND MASQUER ──
+     Revue du 2026-09-07. L'assertion « aucun nom de carte » ci-dessous est la
+     bonne forme de test — elle relit TOUT ce qui part sur le fil — mais elle
+     mordait dans le vide : le gabarit n'avait ni Zone Repos, ni cartes
+     empruntées, ni journal, ni récapitulatif de vol. Trois fuites réelles
+     passaient donc sous un test vert.
+
+     Une carte de Zone Repos FACE CACHÉE est celle que la Fatigue vient
+     d'arracher : l'interface la masque déjà aux adversaires, la donnée doit en
+     faire autant. Une carte face visible, elle, est publique par définition. */
+  repos: [
+    { cardId: "graouhhh", faceUp: false, revientALaManche: 3 },
+    /* Face VISIBLE : publique par définition, elle doit survivre au masquage.
+       Son nom est une sentinelle et non une vraie carte, pour que l'assertion
+       « aucun nom de carte » d'en dessous garde toute sa portée — les six
+       vraies cartes servent déjà toutes ailleurs dans ce gabarit. */
+    { cardId: "__carte_visible__", faceUp: true, revientALaManche: 3 },
+  ],
+  // Une carte empruntée vit dans la MAIN du voleur, qu'on vient de masquer.
+  empruntees: [{ cardId: "boing_boing", proprietaire: 2, rendueALaManche: 3 }],
   ...extra,
 });
 
@@ -39,6 +58,12 @@ const instantane = () => ({
   },
   state: { board: { A1: { blocks: ["bleu"] } } },
   looseBlocks: {},
+  /* Le placement secret des Verts, et de quoi savoir s'il est encore secret.
+     Tant que tout le monde n'a pas validé, il ne doit pas franchir le fil :
+     il suffirait de le lire pour choisir le sien à coup sûr. */
+  vertAssignments: { 1: [{ type: "color", target: "rouge" }], 2: [{ type: "adn", target: "bagarre" }] },
+  vertsValides: {},
+  table: { gameSeed: 1234567, titanProfiles: { 1: { temperament: "agressif" } } },
 });
 
 describe("Le plateau public ne porte aucune main", () => {
@@ -60,6 +85,51 @@ describe("Le plateau public ne porte aucune main", () => {
       "je_ne_partage_pas", "faut_pas_me_chauffer"].forEach((carte) => {
       expect(surLeFil).not.toContain(carte);
     });
+  });
+
+  it("anonymise le placement des Verts tant que tout le monde n'a pas validé", () => {
+    const avecVerts = instantane();
+    avecVerts.titanState.players[0].repaire = ["vert"];
+    const pub = plateauPublic(avecVerts);
+    // Même nombre de jetons — l'écran doit pouvoir dire « 1 Vert placé » —
+    // mais aucune destination lisible.
+    expect(pub.vertAssignments[1]).toHaveLength(1);
+    expect(JSON.stringify(pub.vertAssignments)).not.toContain("rouge");
+    expect(JSON.stringify(pub.vertAssignments)).not.toContain("bagarre");
+  });
+
+  it("rend le détail des Verts une fois la table entièrement validée", () => {
+    const fini = instantane();
+    fini.titanState.players[0].repaire = ["vert"];
+    fini.vertsValides = { 1: true };
+    const pub = plateauPublic(fini);
+    expect(pub.vertAssignments[1][0].target).toBe("rouge");
+  });
+
+  it("ne diffuse ni la graine ni les tempéraments d'IA", () => {
+    /* La graine sème un générateur DÉTERMINISTE : la connaître, c'est
+       anticiper quelle carte le Vol de Phase Repos prendra et laquelle la
+       Fatigue arrachera. Un invité n'exécute aucun moteur, il n'en a aucun
+       usage légitime. */
+    const pub = plateauPublic(instantane());
+    expect(pub.table?.gameSeed).toBeUndefined();
+    expect(pub.table?.titanProfiles).toBeUndefined();
+  });
+
+  it("rend au propriétaire sa Zone Repos réelle et ses Verts", () => {
+    const complet = instantane();
+    const main = mainPrivee(complet, 2);
+    expect(main.repos.map((e) => e.cardId)).toContain("graouhhh");
+    expect(main.vertAssignments).toEqual([{ type: "adn", target: "bagarre" }]);
+    const recolle = fusionnerMain(plateauPublic(complet), main);
+    const sien = recolle.titanState.players.find((t) => t.id === 2);
+    expect(sien.repos.map((e) => e.cardId)).toContain("graouhhh");
+    expect(recolle.vertAssignments[2]).toEqual([{ type: "adn", target: "bagarre" }]);
+    // Et le voisin, lui, reste masqué.
+    const autre = recolle.titanState.players.find((t) => t.id === 3);
+    expect(autre.repos.find((e) => !e.faceUp).cardId).toBe("?");
+    // Et ce qui était face visible l'est resté, pour tout le monde.
+    expect(autre.repos.find((e) => e.faceUp).cardId).toBe("__carte_visible__");
   });
 
   it("dit COMBIEN de cartes chacun tient, jamais lesquelles", () => {

@@ -54,12 +54,24 @@ const PARAM_TABLE = "table";
 const PARAM_MDP = "mdp";
 const PARAM_RELAIS = "relais";
 
+/* ── LE SECRET VOYAGE DANS LE FRAGMENT, PAS DANS LA LIGNE DE REQUÊTE ──
+   Revue de sécurité du 2026-09-07. Le compromis décrit ci-dessus est assumé,
+   mais il lui manquait un fait : le jeu est servi par GitHub Pages, et une
+   LIGNE DE REQUÊTE part chez l'hébergeur, qui la journalise — mot de passe de
+   table et adresse du tunnel compris — bien avant que `effacerInvitation` n'ait
+   la moindre chance de s'exécuter. Le fragment (`#...`), lui, n'est JAMAIS
+   transmis au serveur : il ne quitte pas le navigateur.
+
+   On lit donc les deux, et on n'écrit plus que le fragment : les liens déjà
+   envoyés à des joueurs continuent de fonctionner. */
 function lireInvitation() {
   try {
+    const fragment = new URLSearchParams(String(window.location.hash || "").replace(/^#/, ""));
     const q = new URLSearchParams(window.location.search);
-    const table = (q.get(PARAM_TABLE) || "").toUpperCase().trim();
-    const mdp = (q.get(PARAM_MDP) || "").trim();
-    const relais = (q.get(PARAM_RELAIS) || "").trim();
+    const lire = (cle) => (fragment.get(cle) ?? q.get(cle) ?? "").trim();
+    const table = lire(PARAM_TABLE).toUpperCase();
+    const mdp = lire(PARAM_MDP);
+    const relais = lire(PARAM_RELAIS);
     if (!table || !mdp || !relais) return null;
     return { table, mdp, relais };
   } catch { return null; }
@@ -69,6 +81,7 @@ function lireInvitation() {
    la session tient, et le mot de passe quitte la barre d'adresse. */
 function effacerInvitation() {
   try {
+    // Ligne de requête ET fragment : le lien peut porter l'un ou l'autre.
     window.history.replaceState({}, "", window.location.pathname);
   } catch { /* navigateur qui refuse l'historique : tant pis, on continue */ }
 }
@@ -80,7 +93,8 @@ function fabriquerLien({ base, id, motDePasse }) {
     [PARAM_MDP]: motDePasse || "",
     [PARAM_RELAIS]: base,
   });
-  return `${racine}?${q.toString()}`;
+  // Après le `#` : le fragment ne part pas chez l'hébergeur (cf. lireInvitation).
+  return `${racine}#${q.toString()}`;
 }
 
 function lireMemoire(cle, defaut = "") {

@@ -385,6 +385,15 @@ export default function RoundPanels({ vm }) {
     if (entree?.teleporteur) return "rgba(184,140,255,.45)";
     return "rgba(255,217,61,.45)";
   };
+  /* La même couleur, mais OPAQUE : le fond de case est volontairement
+     translucide pour laisser voir ce qu'il y a dessous, un chiffre à 9 px ne
+     le peut pas. */
+  const teinteTraceVive = (entree) => {
+    const accent = entree?.titanId ? TITAN_COLORS[entree.titanId]?.accent : null;
+    if (accent) return accent;
+    if (entree?.teleporteur) return "#b88cff";
+    return "#FFD93D";
+  };
   const teinteTrace3D = (entree) => {
     const accent = entree?.titanId ? TITAN_COLORS[entree.titanId]?.accent : null;
     if (accent) return Number(`0x${accent.slice(1)}`);
@@ -1042,6 +1051,34 @@ export default function RoundPanels({ vm }) {
                       }}
                     >
                       {bbNumeroSaut}
+                    </span>
+                  )}
+                  {/* ── LE DÉCOMPTE DE LA TRAÎNÉE ──
+                      Nikola, 2026-09-07 : « pour le côté chemin des éléments
+                      tracé, il faut faire 1 décompte par case parcourue,
+                      exemple 4 3 2 1 ».
+
+                      La traînée disait où l'élément était passé, jamais dans
+                      quel SENS : sur une trajectoire qui rebondit ou traverse
+                      la faille, la trace complète est un nuage de cases sans
+                      début ni fin. Le chiffre est ce qu'il RESTAIT à parcourir
+                      en arrivant sur la case — il décroît donc le long du vol
+                      et vaut 1 à l'arrivée. Même gabarit que la pastille de
+                      saut ci-dessus, dans la couleur de la traînée. */}
+                  {entreeTrace?.reste > 0 && (
+                    <span
+                      title={`${entreeTrace.reste} case(s) restante(s) à cet instant du vol`}
+                      style={{
+                        position: "absolute", top: 1, right: 2,
+                        minWidth: 13, height: 13, borderRadius: "50%",
+                        background: "rgba(0,0,0,.66)",
+                        border: `1px solid ${teinteTraceVive(entreeTrace)}`,
+                        color: teinteTraceVive(entreeTrace),
+                        fontSize: "9px", fontWeight: 900, lineHeight: "11px",
+                        textAlign: "center", padding: "0 2px",
+                      }}
+                    >
+                      {entreeTrace.reste}
                     </span>
                   )}
                   {looseBlocks[key] && looseBlocks[key].length > 0 && (() => {

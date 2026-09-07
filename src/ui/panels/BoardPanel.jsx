@@ -4,7 +4,7 @@ import { CARD_EFFECT } from "../cards/cardEffects.js";
 import TitanResourceBand from "../titans/TitanResourceBand.jsx";
 import { TitanIcon } from "../titans/TitanVisuals.jsx";
 import { TITAN_COLORS, accentDeplacement } from "../titans/constants.js";
-import { CARD_LABEL, PHASE_LABELS } from "../../domain/index.js";
+import { CARD_LABEL, CARD_FORCE, PHASE_LABELS } from "../../domain/index.js";
 import { smallBtn, cancelBtn } from "../styles.js";
 import { T, marquee, readout, label, prose } from "../theme.js";
 import Icon, { AdrenalineIcon } from "../icons.jsx";
@@ -442,14 +442,38 @@ export default function BoardPanel({ vm }) {
                 Il n'apparaît que sur une main qu'on a le droit de voir : à
                 distance, la Force d'un autre Titan est exactement le secret
                 que FPMC met en jeu. */}
-            {cartesVisibles && vm.getProgrammedSum && (
-              <div title="Somme des Forces des 3 cartes de la Manche (programmées, jouées ou défaussées). C'est elle que Faut Pas Me Chauffer compare.">
-                <div style={label(T.faint)}>Force</div>
-                <div style={{ marginTop: 5 }}>
-                  <span style={readout("1.15rem", T.text)}>{vm.getProgrammedSum(selectedTitan)}</span>
+            {cartesVisibles && vm.getProgrammedSum && (() => {
+              /* ── ELLE SUIT LA PRÉSÉLECTION, PAS SEULEMENT LA VALIDATION ──
+                 Nikola, 2026-09-07 : « quand je présélectionne mes cartes, ma
+                 Force s'actualise en fonction ».
+
+                 `getProgrammedSum` lit `programmed`, qui reste VIDE tant que
+                 « Confirmer » n'a pas été cliqué : pendant toute la Phase
+                 Programmation — c'est-à-dire au seul moment où l'on peut encore
+                 CHOISIR sa Force — le compteur affichait 0. Or c'est
+                 exactement ce nombre que Faut Pas Me Chauffer comparera, et la
+                 seule décision qui le fixe est celle qu'on est en train de
+                 prendre.
+
+                 La somme provisoire est donc calculée sur `progSelection`, et
+                 signalée comme telle : un chiffre qui va encore bouger ne doit
+                 pas se lire comme un chiffre acquis. Dès la validation, on
+                 repasse sur le moteur, qui reste la seule référence. */
+              const provisoire = phase === "programmation" && (vm.progSelection || []).length > 0;
+              const valeur = provisoire
+                ? vm.progSelection.reduce((n, s) => n + (CARD_FORCE[s.cardId] || 0), 0)
+                : vm.getProgrammedSum(selectedTitan);
+              return (
+                <div title={provisoire
+                  ? `Force provisoire des ${vm.progSelection.length} carte(s) présélectionnée(s). Elle se fige à la confirmation.`
+                  : "Somme des Forces des 3 cartes de la Manche (programmées, jouées ou défaussées). C'est elle que Faut Pas Me Chauffer compare."}>
+                  <div style={label(T.faint)}>Force{provisoire ? " (en cours)" : ""}</div>
+                  <div style={{ marginTop: 5 }}>
+                    <span style={readout("1.15rem", provisoire ? T.you : T.text)}>{valeur}</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* ANNULER VIT ICI DEPUIS LE 2026-08-28 (Nikola : « le bouton
                 Annuler devrait plutôt être à côté de Périmètre / Énergie, sur

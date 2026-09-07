@@ -91,17 +91,39 @@ describe("Un Titan projeté sur un tas le renverse, il ne grimpe plus dessus", (
     expect(looseBlocks.E5).toBeUndefined();
   });
 
-  it("à bout de course il monte dessus au lieu de le renverser", () => {
-    // Il faut de l'énergie pour renverser un tas, comme pour pousser un
-    // débris isolé. Ce n'est pas le Seuil 4 déguisé : c'est le même test que
-    // le reste de la trajectoire applique déjà partout.
+  it("même à bout de course il le renverse — plus aucune condition d'énergie", () => {
+    /* RÉVISION DU 2026-09-07. Ce test attendait l'inverse : il fallait au
+       moins 2 d'énergie restante pour renverser un tas, en dessous le Titan
+       montait dessus. Nikola a tranché l'autre sens (« il le renverse aussi,
+       toujours »), en cohérence avec sa remarque sur le débris isolé — « c'est
+       une action d'une attaque qui l'a fait se déplacer ».
+
+       Le seuil invisible qui faisait dépendre la NATURE du résultat de ce
+       qu'il restait d'énergie au dernier pas disparaît donc : un Titan qu'une
+       attaque a mis en mouvement bouscule ce qu'il rencontre, point. Le livret
+       le disait déjà de l'Amas percuté — « sans condition d'énergie, le
+       Seuil 4 ne commande plus rien ici ». */
     const projete = t(2, "E4");
     const looseBlocks = { E5: ["bleu", "rose"] };
     const etat = jeu([projete], looseBlocks);
 
     projectInDirection("E", 4, 0, 1, 1, { ...etat, movingTitanId: 2, initiatorId: 1 });
 
-    expect(looseBlocks.E5).toEqual(["bleu", "rose"]);
+    expect(looseBlocks.E5).toBeUndefined();
+  });
+
+  it("un débris isolé aussi est poussé, même sans énergie restante", () => {
+    /* Le cas exact de Nikola le 2026-09-07 : un Titan projeté par un Boing
+       Boing arrive sur une case portant un débris, et s'y empilait au lieu de
+       le chasser. Même minimum que pour la poussée d'un Titan : une case. */
+    const projete = t(2, "E4");
+    const looseBlocks = { E5: ["bleu"] };
+    const etat = jeu([projete], looseBlocks);
+
+    projectInDirection("E", 4, 0, 1, 1, { ...etat, movingTitanId: 2, initiatorId: 1 });
+
+    expect(looseBlocks.E5).toBeUndefined();
+    expect(looseBlocks.E6).toEqual(["bleu"]);
   });
 
   it("un DÉBRIS en vol, lui, s'empile toujours — le béton s'empile, le Titan bouscule", () => {

@@ -1,5 +1,169 @@
 # Changelog
 
+## Non publié — vingt-huitième passe du 2026-09-07 (les retours de table, la revue de sécurité et l'IA)
+
+Quatorze retours après plusieurs parties, une revue de sécurité complète du mode
+à distance, et une passe sur l'IA. Trois chantiers distincts, une seule passe.
+
+### Les règles qui changent
+
+**Boing Boing projette de la distance RESTANTE, pas de l'énergie.** Le livret le
+dit mot pour mot depuis toujours — « la projection du Titan sur lequel tu
+atterris est égale à la distance restante de ton saut » — et le résolveur
+projetait avec l'énergie, qui vaut `3 + Adrénaline − (distance − 1)`. Les deux
+nombres ne coïncident jamais. Cas de Nikola : cible à 2 cases, portée 3, donc
+1 case de recul attendue ; elle en prenait 2. L'énergie garde son rôle, elle
+décide du Seuil 4 donc de DIL ou de RAGE — c'est ce qui rend la RAGE
+inaccessible sans Adrénaline, et ça ne bouge pas.
+
+**Un Titan qu'une attaque a mis en mouvement bouscule TOUJOURS.** Il fallait
+jusqu'ici au moins 2 d'énergie restante pour renverser un tas ou chasser un
+débris isolé ; en dessous, le Titan montait dessus. Un seuil invisible qui
+faisait dépendre la nature du résultat de ce qui restait au dernier pas, et que
+le livret ne mentionne nulle part — il dit même l'inverse de l'Amas percuté,
+« sans condition d'énergie ». Le béton s'empile, le Titan bouscule : la règle
+tient maintenant en cette seule phrase.
+
+**Boing Boing percute dans l'axe du DERNIER bond.** Le joueur trace son saut case
+par case depuis le 18 août ; la direction de la percussion était pourtant
+toujours calculée du point de départ à la destination. Un chemin coudé envoyait
+donc la cible sur un axe qui n'était celui d'aucun des deux bonds, et lui faisait
+croiser des Titans jamais approchés — c'est le panneau de repli inexplicable que
+Nikola a vu apparaître sur un Titan qu'il ne touchait pas.
+
+**On ne peut plus DEMANDER une Adrénaline en Dilemme.** Revirement sur le ruling
+du 3 septembre. La défense du Dilemme est déjà « payer 1 Adrénaline pour tout
+annuler » : mettre « 1 Adrénaline » parmi les deux options offrait à la cible
+deux branches au même prix, donc aucun choix. La RAGE, elle, garde l'Adrénaline
+pour cible (FAQ #5) — c'est un des écarts qui la distinguent, avec le Vert et le
+Socle.
+
+**Un Titan coincé garde son choix de case.** La géométrie du repli n'offrait que
+la charnière entre la case de départ et la case visée : trois cases au mieux,
+aucune dès que ces voisines portaient un bâtiment. Un Titan plaqué contre un mur
+se retrouvait donc régulièrement sans la moindre option, et le moteur le laissait
+sur place en silence. Il reçoit désormais toutes ses cases libres adjacentes, au
+choix de l'attaquant — exactement ce que Boing Boing fait déjà pour un occupant
+coincé.
+
+### Les corrections d'interface
+
+**La fin de Manche ne se bloque plus.** Le compte à rebours de cinq secondes du
+Vol de Phase Repos vivait dans le même seau que les traînées de vol, un seau que
+`arreterTrace()` VIDE entièrement — et qu'appellent aussi bien l'animation d'une
+carte que la restauration d'un instantané. Un seul de ces appels dans la fenêtre,
+et la Manche ne s'enchaînait plus jamais : il fallait annuler pour en sortir. Le
+minuteur a désormais sa propre référence, et le bandeau porte un bouton
+« Manche suivante » pour qui a fini de lire.
+
+**« Je ne partage pas » ne se recharge plus.** Rouvrir la carte en cours de
+ramassage remettait le compteur à zéro alors que les blocs, eux, étaient déjà
+dans le Repaire : deux clics et le quota repartait à trois. Refermer la carte est
+maintenant une CLÔTURE, pas une annulation — « Annuler » reste là pour vraiment
+revenir en arrière.
+
+**Une rentrée coûte bien un déplacement.** Un Titan revenu de hors du plateau
+retrouvait parfois ses deux cases de Mouvement gratuit : l'effet d'ouverture de
+tour remettait le coût à zéro dès que le Titan n'était plus dehors, c'est-à-dire
+dès le rendu qui suivait sa propre rentrée. On ne nettoie plus que ce qui
+concerne un autre Titan.
+
+**Le paravent des Verts tient jusqu'à la validation.** Le décompte se dévoilait
+dès que les menus étaient REMPLIS, pas quand ils étaient VALIDÉS : essayer une
+destination pour voir ce qu'elle rapporte faisait tomber le paravent de toute la
+table.
+
+**Le Trophée Arc-en-ciel se voit et s'entend.** Un arc-en-ciel plein écran et un
+arpège de trois secondes, pour tout le monde en même temps — hôte comme invités.
+Jusqu'ici, le seul évènement de la partie qui se déclenche tout seul ne
+produisait qu'une ligne de journal.
+
+**Trois lectures de plus.** Un décompte par case sur la traînée de vol (4, 3, 2,
+1), pour qu'on lise le SENS d'une trajectoire qui rebondit ; un « +N » sur la
+piste ADN au moment où le gain tombe ; la Force qui suit la présélection des
+cartes, au lieu d'afficher 0 pendant toute la Programmation. Et un filtre par
+Manche dans le journal, qui se croise avec celui par Titan.
+
+### La revue de sécurité du mode à distance
+
+Dix-sept constats, dont un classé critique et cinq élevés. Les voici, corrigés.
+
+**Un F5 de l'hôte détruisait la partie de toute la table.** Le plus grave. La
+page rechargée génère un plateau neuf au montage, et l'effet de diffusion le
+publiait 120 ms plus tard, par-dessus la partie en cours. Cette page ne publie
+plus rien quand elle rejoint une table qui a déjà une partie sans en avoir le
+moteur ; un bouton nommé permet d'écraser délibérément, si c'est vraiment ce
+qu'on veut.
+
+**Un invité pouvait écrire chez un autre.** La portée « soi » du protocole
+d'intentions rendait vrai dès que l'expéditeur avait un siège — ce qui est juste
+pour une action qui lit la sélection, et faux pour trois actions qui reçoivent le
+Titan en ARGUMENT. Un invité pouvait réécrire le placement secret des Verts d'un
+adversaire, le figer, ou valider la phase à sa place.
+
+**Quatre fuites d'information sur le fil.** Le placement des Verts partait en
+clair avant la révélation ; la Zone Repos face cachée nommait la carte volée par
+une Fatigue ; les cartes empruntées nommaient une carte de la main masquée ; la
+graine du générateur — déterministe, donc rejouable — et les tempéraments des IA
+étaient diffusés à tout le monde. Le test qui devait fermer cette porte passait à
+vide, son gabarit n'ayant ni Zone Repos ni cartes empruntées ; il les a
+maintenant.
+
+**Le compteur anti-inondation était contournable.** L'en-tête `cf-connecting-ip`
+était cru sans condition, alors qu'il n'est infalsifiable que derrière
+Cloudflare : c'est la faille `x-forwarded-for` du 30 août, revenue sous un autre
+nom. Il n'est plus lu que si le lanceur du tunnel le dit, et le relais n'écoute
+plus toute la maison par défaut.
+
+**Une reprise d'hôte sans clé.** Sur un relais lancé sans clé, un invité qui
+connaît le mot de passe de table pouvait s'emparer du moteur pendant les deux
+minutes de grâce. Créer une table sans clé n'engage rien ; reprendre celle d'un
+autre engage sa partie.
+
+**Une boucle qui se punissait toute seule.** Seul le 403 était traité dans le
+long-poll : un 429 renvoie pourtant un corps JSON valide, la boucle rebouclait
+sans attendre, et chaque requête rafraîchissait son propre bannissement — qui ne
+s'éteignait alors plus jamais.
+
+**Et six corrections plus petites** : les files du relais sont bornées en octets
+et plus seulement en nombre ; un invité ne peut plus faire analyser 2 Mo de JSON
+avant d'être autorisé ; le mot de passe d'invitation voyage dans le fragment de
+l'URL, qui ne part pas chez l'hébergeur ; le jeton voyage en en-tête et plus dans
+la ligne de requête ; `/api/sante` passe après les gardes ; une adresse tapée en
+`http://` est corrigée en `https://`, sauf en local. Enfin, les empreintes de
+« déjà envoyé » ne se posent plus qu'une fois l'envoi réussi : une diffusion
+tombée est désormais rejouée, et un invité ne reste plus sans sa main.
+
+### L'IA
+
+Audit complet, puis les cinq corrections au meilleur rapport gain sur risque.
+
+**La programmation voyait moins que la Phase Action.** L'état passé au planning
+de programmation ne transportait ni la fin de partie ni l'ordre de jeu : la
+décision qui engage toute la Manche se prenait donc sur un seuil d'apocalypse par
+défaut, et sans jamais savoir à qui elle offrait ce qu'elle laissait au sol.
+
+**L'IA ne volait jamais un Vert.** Son arbitrage des vols calculait le score
+final avec des placements de Vert VIDES : un Vert ne rejoignait aucun barème et
+valait donc zéro, alors que son évaluation de position, elle, le survalorise.
+Deux calculs du même projet en désaccord — c'est le « personne n'a voulu prendre
+un bloc vert alors que c'est fort » du 28 août.
+
+**Son modèle du Dilemme ignorait le Socle.** Contre une cible « 1 couleur +
+1 Socle », elle chiffrait le Dilemme à zéro et écartait la carte offensive.
+
+**Elle jouait sa dernière Manche comme la première.** Le compte à rebours des
+Manches n'entrait pas dans son horizon de fin de partie, et un sixième de sa note
+venait encore de blocs au sol qu'elle n'aurait jamais le temps de ramasser.
+
+**La Fatigue valait zéro.** Elle ne lisait ni main, ni Zone Repos : infliger une
+Fatigue — l'effet propre de Graouhhh et de Boing Boing sur case occupée — ne
+rapportait rien à ses yeux, et elle ne se défendait jamais contre.
+
+**Et un piège refermé** : `simulerCarte` calculait son résultat sans jamais le
+rendre. Aucun bug visible — son seul appelant l'ignore — mais la fonction est
+exportée et son contrat mentait.
+
 ## Non publié — vingt-septième passe du 2026-09-03 (l'audit)
 
 Trois points remontés après une partie, puis un audit de fond du moteur et de
