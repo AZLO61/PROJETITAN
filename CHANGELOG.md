@@ -1,5 +1,74 @@
 # Changelog
 
+## Non publié — trentième passe du 2026-09-07 (le gel des parties IA)
+
+Deux rapports de partie envoyés par Nikola, plus cinq retours. Le point central
+est un gel : « sur 5 essais, une seule partie est allée au bout ».
+
+### Les parties IA ne se figent plus
+
+Les deux rapports et une reproduction au navigateur avec la graine de Nikola
+(227542583) se figent au même endroit, sur la même ligne de journal — « il
+reste une carte programmée, la main revient à T4 » — puis plus rien : Phase
+Action, aucune décision en attente, tour au bon Titan, et personne ne joue.
+
+**Deux défauts superposés, et il fallait les deux.** `advanceActionRound`
+fermait la Phase sur son COMPTEUR de rounds, qui peut dériver — et quand il
+dérive, la Phase se ferme alors que douze cartes sont encore programmées. Le
+garde-fou qui rattrapait ça rendait la main « au Titan en retard » par
+`setActivePlayerId`, mais ce Titan est déjà le Titan actif : React ne notifie
+pas une valeur identique, l'effet d'auto-jeu ne se relance jamais. Le
+rattrapage était un point d'arrêt.
+
+Le compteur ne décide donc plus seul — il se recale sur le plateau avant de
+conclure — et le rattrapage relance explicitement la boucle. Un test fige les
+deux sens : la Phase tient quand il reste des cartes, elle se ferme quand il
+n'en reste plus.
+
+**Une garde plus stricte a été essayée et retirée** : refuser toute fermeture
+tant qu'un Titan a une carte programmée gèle la Manche 1, parce qu'une carte
+programmée n'est pas toujours JOUABLE — un Titan hors de BIG CITY, une carte
+sans cible. Le commentaire le dit sur place, pour que personne ne la remette.
+
+**Un troisième défaut, trouvé par l'instrumentation qu'on venait d'ajouter.**
+Une fois le premier gel levé, la partie repartait puis calait plus loin, sans
+rien à l'écran ni au journal. On a donc fait dire au moteur POURQUOI il
+n'avance pas — quatre motifs nommés, écrits une fois chacun — et la réponse est
+tombée au tour suivant : « Tour de Titan 4 (IA) sans carte programmée : il ne
+peut rien jouer. » La recherche du Titan suivant ne regardait que le compteur
+de rounds ; or un Titan qui n'avait que deux cartes en main n'en programme que
+deux, son compteur n'atteint jamais 3, et la boucle le redésignait
+indéfiniment. C'est exactement l'état des deux rapports envoyés, où le Titan
+bloquant a bien deux cartes programmées au lieu de trois. On exige désormais
+les deux : du retard au compteur ET une carte à jouer.
+
+**Et le motif commun aux trois** : `setActivePlayerId` avec la même valeur ne
+notifie rien, React compare. Or le « Titan suivant » peut légitimement être
+celui qui vient de jouer, dès que les autres n'ont plus de carte. Chaque passage
+de main relance donc explicitement la boucle IA, et plus seulement les
+changements de Titan.
+
+**Vérifié de bout en bout** : avec la graine 227542583, qui gelait en Manche 2,
+la partie va maintenant jusqu'à la phase Terminée.
+
+### Les retours
+
+**L'ornithorynque descend de 20 % sur la case 2D.** Il montait plus haut que
+les trois autres portraits et recouvrait le décompte de traînée. Décalage par
+sprite, pas réglage commun : les trois autres vont très bien.
+
+**Les cartes sous-jouées.** Mesuré : Tête en Avant 31,6 % et Boing Boing 28,1 %
+contre 4,6 % pour Faut Pas Me Chauffer. La cause n'est pas la valeur des cartes,
+elle est statistique — on retient le MAXIMUM d'estimations bruitées, et le
+maximum de N tirages croît avec N ; Boing Boing offre 130 coups, Je Ne Partage
+Pas un seul. On retranche donc à chaque carte une prime attendue en √(2·ln N).
+Mesuré au duel à sièges croisés : +0,52 point par partie, 53,1 % de victoires —
+dans le bruit côté force, mais Graouhhh remonte de 12,7 % à 17,6 %. Tout Casser
+et Faut Pas Me Chauffer, eux, ne bougent pas : leur sous-emploi a une autre
+cause, identifiée mais pas encore traitée (le faisceau de `planTour` élague les
+cases à fort Périmètre avant même que Tout Casser puisse les évaluer).
+
+
 ## Non publié — vingt-neuvième passe du 2026-09-07 (seconde salve du même jour)
 
 Neuf retours de plus après la passe précédente, puis une seconde enquête —

@@ -347,6 +347,19 @@ export const FORCE_SETTINGS = Object.freeze({
   [FORCES.EXPERT]: {
     voitScoreComplet: true, voitAdrenaline: true,
     voitAdversaires: true, poidsAdversaires: 0.5, poidsPoursuite: 0.25,
+    /* ── CORRIGE LA PRIME AU NOMBRE DE COUPS (cf. `planCardPlay`) ──
+       Nikola, 2026-09-07 : « j'ai l'impression que des cartes sont
+       sous-jouées ». Mesuré : Tête en Avant 31,6 % et Boing Boing 28,1 %
+       contre 4,6 % pour Faut Pas Me Chauffer, non pas parce qu'elles valent
+       plus, mais parce qu'elles offrent 130 coups là où d'autres en offrent
+       un seul — et qu'on retient le maximum d'estimations bruitées.
+
+       Mesuré au duel à sièges croisés (32 parties, graines 77 et 501) :
+       +0,52 point par partie, 53,1 % de victoires. C'est dans le bruit côté
+       FORCE — mais ça ne coûte rien, et ça corrige un biais qui n'a rien à
+       voir avec la valeur des cartes. Réservé aux deux niveaux du haut : les
+       niveaux du bas ont d'autres raisons, voulues, de mal choisir. */
+    correctionMaxDeN: 0.6,
     voitPortee: true, rayonPortee: 3, voitPorteeAuScore: true, voitConcurrence: true,
     poidsCadeau: 0.15, decisionsAuScoreComplet: true,
     /* Sait qu'il peut ARRÊTER la partie, et à quel prix (cf.
@@ -360,6 +373,7 @@ export const FORCE_SETTINGS = Object.freeze({
   [FORCES.DIFFICILE]: {
     voitScoreComplet: true, voitAdrenaline: true,
     voitAdversaires: true, poidsAdversaires: 0.5, poidsPoursuite: 0.15,
+    correctionMaxDeN: 0.6,
     voitPortee: true, rayonPortee: 3, voitPorteeAuScore: true, voitConcurrence: true,
     poidsCadeau: 0, decisionsAuScoreComplet: false,
     /* Le Difficile la voit à MOITIÉ : il sent que la partie touche à sa fin

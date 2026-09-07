@@ -293,6 +293,11 @@ export function useBoardGeneratorController() {
 
   const [phase, setPhase] = useState("evenement");
   const [phaseValidated, setPhaseValidated] = useState({});
+  /* Le dernier motif de blocage déjà écrit au journal, pour ne l'écrire
+     qu'une fois (cf. « QUAND ON NE PASSE PAS, ON DIT POURQUOI »). */
+  const blocageSignaleRef = useRef(null);
+  /* Le pendant côté tour d'IA : (Titan, motif) déjà signalé. */
+  const blocageIaRef = useRef(null);
   const [currentEvent, setCurrentEvent] = useState(null);
   const [rainbowWinnerId, setRainbowWinnerId] = useState(null);
   const [showScoring, setShowScoring] = useState(false);
@@ -741,11 +746,37 @@ export function useBoardGeneratorController() {
        encore ouvert : le bandeau DIL et celui du Vol de Phase Repos se
        retrouvaient à l'écran en même temps, et le bloc perdu tombait sur un
        plateau que la Manche suivante avait déjà commencé à changer. */
-    if (currentDecision || currentRepli || ecroulement) return;
-    // La mise en place d'ouverture est la première des décisions bloquantes :
-    // aucune phase ne s'enchaîne tant qu'un Titan attend sa case (cf. le
-    // commentaire de `placementEnCours`).
-    if (placementEnCours) return;
+    /* ── QUAND ON NE PASSE PAS, ON DIT POURQUOI ──
+       Nikola, 2026-09-07, sur les gels de parties IA. Le premier gel a été
+       trouvé et corrigé ; il en reste au moins un plus loin, et le chercher a
+       coûté cher pour une seule raison : quand cet effet refuse d'enchaîner,
+       RIEN ne l'écrit. L'écran montre une Phase Action sans Titan actif, sans
+       bandeau, sans bouton — et le journal n'a pas une ligne là-dessus.
+
+       Les quatre motifs de refus sont connus et nommés ici. On les journalise
+       une seule fois par motif (la ref évite d'inonder le journal, l'effet
+       pouvant se rejouer à chaque rendu), et seulement quand la Phase est
+       PRÊTE à s'enchaîner — sinon on écrirait à chaque tour de jeu normal.
+
+       Aucun changement de comportement : c'est de l'instrumentation. Le
+       prochain gel se nommera lui-même dans le rapport de partie. */
+    const blocage = currentDecision ? "un Dilemme ou une RAGE non tranché"
+      : currentRepli ? "un repli d'élément non placé"
+      : ecroulement ? "un Amas non réparti"
+      : placementEnCours ? "un Titan qui attend sa case de départ"
+      : null;
+    if (blocage) {
+      const ids = titanState.ordreJeu;
+      const pret = ids.every((id) => phaseValidated[id]);
+      const signature = `${phase}|${mancheNumber}|${blocage}`;
+      if (pret && blocageSignaleRef.current !== signature) {
+        blocageSignaleRef.current = signature;
+        setActionLog((prev) => [...prev,
+          `⏸️ Phase ${phase} prête à s'enchaîner, mais retenue par ${blocage}.`]);
+      }
+      return;
+    }
+    blocageSignaleRef.current = null;
     const ids = titanState.ordreJeu;
     const allValidated = ids.every((id) => phaseValidated[id]);
     if (!allValidated) return;
@@ -784,6 +815,32 @@ export function useBoardGeneratorController() {
         setPhaseValidated({});
         setWaitingNextTitan(false);
         setActivePlayerId(enRetard[0]);
+        /* ── RENDRE LA MAIN NE SUFFIT PAS À LA REPRENDRE ──
+           Nikola, 2026-09-07 : « les parties en simulation IA plantent ; sur
+           5 essais, une seule est allée au bout ». Deux rapports de partie
+           envoyés, et le mien reproduit avec sa graine : les trois se figent
+           sur CETTE ligne de journal, en Phase Action, sans aucune décision en
+           attente.
+
+           La cause est ici, et elle est bête. Ce garde-fou rend la main au
+           Titan en retard par `setActivePlayerId(enRetard[0])` — mais dans les
+           trois cas observés, `enRetard[0]` est DÉJÀ le Titan actif : c'est
+           lui dont le tour n'a pas pu se jouer. React ne notifie pas une
+           valeur identique, l'effet d'auto-jeu de l'IA ne dépend que de
+           `activePlayerId`, il ne se relance donc jamais. Personne ne joue
+           plus, et rien à l'écran ne dit pourquoi : la file de décisions est
+           vide, la phase est la bonne, le tour est au bon Titan.
+
+           On force donc la relance par le compteur qui existe exactement pour
+           ça (`aiTrigger`, « pour forcer le re-trigger de l'effect IA entre
+           chaque carte »), et on relâche le drapeau `aiPlaying` — s'il était
+           resté levé par un tour interrompu, il bloquerait la reprise tout
+           aussi silencieusement.
+
+           Le garde-fou redevient ce qu'il prétendait être : un rattrapage, et
+           non un point d'arrêt. */
+        setAiPlayingSync(false);
+        setAiTrigger((n) => n + 1);
         setActionLog((prev) => [...prev,
           `⚠️ Phase Action : ${enRetard.map((id) => `T${id}`).join(", ")} a encore une carte programmée — ` +
           `la Programmation ne démarre pas, la main revient à T${enRetard[0]}.`]);
@@ -2627,11 +2684,44 @@ export function useBoardGeneratorController() {
        démarrait alors SON tour (mouvement, carte, récupération) pendant
        que le joueur humain avait encore un DIL en attente. Même garde-fou
        que la Phase suivante (cf. l'effet d'avancement de Phase). */
-    if (currentDecision || currentRepli || ecroulement) return;
+    /* ── ET QUAND L'IA NE JOUE PAS, ON DIT POURQUOI AUSSI ──
+       Même motif que l'effet d'avancement de Phase (cf. « QUAND ON NE PASSE
+       PAS, ON DIT POURQUOI »), et c'est ici que ça manquait le plus : un tour
+       d'IA qui ne démarre pas ne laisse AUCUNE trace. L'écran montre une Phase
+       Action au bon Titan, sans bandeau et sans bouton, et le journal s'arrête
+       net — c'est exactement ce qu'on a passé une heure à chercher le
+       2026-09-07.
+
+       Les quatre refus possibles sont nommés. Journalisés une seule fois par
+       (Titan, motif) : cet effet se rejoue à chaque rendu, il inonderait le
+       journal sinon. Purement de l'instrumentation, aucun comportement ne
+       change — mais le prochain gel arrivera nommé dans le rapport de partie. */
+    const refus = currentDecision ? "un Dilemme ou une RAGE non tranché"
+      : currentRepli ? "un repli d'élément non placé"
+      : ecroulement ? "un Amas non réparti"
+      : null;
+    if (refus) {
+      const signature = `${activePlayerId}|${refus}`;
+      if (blocageIaRef.current !== signature) {
+        blocageIaRef.current = signature;
+        setActionLog((prev) => [...prev,
+          `⏸️ Tour de Titan ${activePlayerId} (IA) en attente : ${refus}.`]);
+      }
+      return;
+    }
 
     const titan = aiTitanStateRef.current.players.find((t) => t.id === activePlayerId);
     if (!titan) return;
-    if (titan.programmed.length === 0) return;
+    if (titan.programmed.length === 0) {
+      const signature = `${activePlayerId}|sans carte`;
+      if (blocageIaRef.current !== signature) {
+        blocageIaRef.current = signature;
+        setActionLog((prev) => [...prev,
+          `⏸️ Tour de Titan ${activePlayerId} (IA) sans carte programmée : il ne peut rien jouer.`]);
+      }
+      return;
+    }
+    blocageIaRef.current = null;
 
     // Capturer l'identité du joueur UNE SEULE FOIS ici — ne jamais relire les refs pour ça
     const playerId = activePlayerId;
@@ -2659,6 +2749,18 @@ export function useBoardGeneratorController() {
       setWaitingNextTitan(false);
       if (aiNextPlayerRef.current != null) {
         setActivePlayerId(aiNextPlayerRef.current);
+        /* ── RENDRE LA MAIN AU MÊME TITAN RESTE UN PASSAGE DE MAIN ──
+           Trouvé le 2026-09-07 en corrigeant les gels de parties IA, et c'est
+           le motif commun à tous : `setActivePlayerId` avec la MÊME valeur ne
+           notifie rien — React compare — donc l'effet d'auto-jeu, qui ne
+           dépend que d'`activePlayerId`, ne se relance pas. Or le Titan
+           suivant PEUT légitimement être celui qui vient de jouer : c'est le
+           cas dès que les autres n'ont plus de carte et qu'il lui en reste.
+
+           `aiTrigger` existe exactement pour ça (« pour forcer le re-trigger
+           de l'effect IA entre chaque carte ») : on le bouge à chaque
+           passage de main, pas seulement quand le Titan change. */
+        setAiTrigger((n) => n + 1);
       }
       // Sinon (null) : fin de Phase Action déjà gérée par advanceActionRound.
     };
@@ -4082,6 +4184,19 @@ export function useBoardGeneratorController() {
      pour un humain (cf. `passerAuTitanSuivant`). */
   const cloturerPhaseAction = useCallback(() => {
     const { ordreJeu } = aiTitanStateRef.current;
+    /* ⚠️ PAS DE GARDE « IL RESTE DES CARTES » ICI, ET C'EST MESURÉ.
+       Essayé le 2026-09-07, en cherchant le gel des parties IA : refuser de
+       fermer la Phase tant qu'un Titan a une carte programmée. Reproduit au
+       navigateur, ça gèle la Manche 1 — parce qu'une carte encore programmée
+       n'est pas toujours JOUABLE (un Titan hors de BIG CITY, une carte sans
+       aucune cible), et qu'on retenait alors la Phase pour quelqu'un qui ne
+       jouerait jamais.
+
+       Le rattrapage vit donc là où il peut choisir un Titan qui a réellement
+       la main : `advanceActionRound`, qui recale son compteur sur le plateau
+       avant de conclure, et le garde-fou de l'effet d'avancement de Phase, qui
+       relance explicitement la boucle IA. Cette fonction-ci ne fait
+       qu'exécuter la décision. */
     aiNextPlayerRef.current = null; // évite une relecture stale par finishAiTurn
     setWaitingNextTitan(false);
     setActivePlayerId(null);
@@ -4092,19 +4207,71 @@ export function useBoardGeneratorController() {
     });
   }, []);
 
+  /* ── LE COMPTEUR DE ROUNDS REPART À CHAQUE PHASE ACTION ──
+     Il était remis à zéro à UN seul endroit : la branche « la phase suivante
+     est Action » de l'effet d'avancement. C'est le chemin normal, et il ne
+     couvre pas tous les autres — une reprise d'instantané, une partie
+     relancée, une Phase Action ouverte par un chemin qui ne passe pas par
+     cette branche. Un compteur qui survit d'une Manche à l'autre fait croire
+     à « 3 rounds joués » dès le premier coup de la suivante, ce qui referme
+     la Phase Action sur douze cartes encore programmées.
+
+     C'est le symptôme reproduit avec la graine de Nikola le 2026-09-07. La
+     cause est traitée à la source dans `advanceActionRound`, qui ne clôt plus
+     sur le compteur mais sur le plateau ; ceci est la ceinture qui va avec les
+     bretelles, et elle coûte une comparaison par changement de Phase. */
+  useEffect(() => {
+    if (phase !== "action") return;
+    cardsPlayedCountRef.current = {};
+  }, [phase, mancheNumber]);
+
   const advanceActionRound = useCallback((titanId) => {
-    const { ordreJeu } = aiTitanStateRef.current;
+    const { ordreJeu, players } = aiTitanStateRef.current;
     const prevCount = cardsPlayedCountRef.current;
     const newCount = { ...prevCount, [titanId]: (prevCount[titanId] || 0) + 1 };
     cardsPlayedCountRef.current = newCount;
     const roundsDone = newCount[titanId]; // tous les Titans jouent en sync, ce compteur = round actuel
 
-    // Cherche le prochain Titan dans l'ordre circulaire qui n'a pas encore joué ce round
+    /* ⚠️ LA CARTE DE CET APPEL-CI EST DÉJÀ CONSOMMÉE, PAS ENCORE RETIRÉE.
+       `markCardPlayed` appelle `setTitanState` — asynchrone — puis nous appelle
+       SYNCHRONEMENT (et c'est voulu : `finishAiTurn` lit `aiNextPlayerRef` dès
+       le retour). Le miroir montre donc encore la carte qui vient d'être
+       jouée. */
+    const resteDe = (id) => {
+      const t = players.find((p) => p.id === id);
+      const n = t?.programmed.length || 0;
+      return id === titanId ? Math.max(0, n - 1) : n;
+    };
+
+    /* ── ON NE DONNE PAS LE TOUR À QUELQU'UN QUI N'A RIEN À JOUER ──
+       Nikola, 2026-09-07 : « les parties IA plantent ». Second gel, trouvé
+       après le premier grâce au journal de blocage ajouté le même jour :
+       « ⏸️ Tour de Titan 4 (IA) sans carte programmée : il ne peut rien
+       jouer. »
+
+       La recherche du Titan suivant ne regardait que le COMPTEUR de rounds.
+       Or un Titan qui n'avait que deux cartes en main n'en programme que deux
+       (cf. `programCards`) : son compteur ne peut jamais atteindre 3, la
+       boucle le redésigne indéfiniment, et il n'a plus rien à jouer. Le tour
+       ne repart plus, et rien à l'écran ne le dit — c'est exactement l'état
+       des deux rapports de partie envoyés, où le Titan bloquant a bien deux
+       cartes programmées au lieu de trois.
+
+       On exige donc les deux : du retard au compteur ET une carte à jouer.
+       Un Titan à court de cartes est simplement sauté, ce qui est le
+       comportement voulu — il a fini sa Manche avant les autres. */
     const curIdx = ordreJeu.indexOf(titanId);
     let next = null;
     for (let i = 1; i <= ordreJeu.length; i++) {
       const candidate = ordreJeu[(curIdx + i) % ordreJeu.length];
-      if ((newCount[candidate] || 0) < roundsDone) { next = candidate; break; }
+      if ((newCount[candidate] || 0) < roundsDone && resteDe(candidate) > 0) { next = candidate; break; }
+    }
+    /* Personne en retard n'a de carte, mais il en reste peut-être à quelqu'un
+       qui a DÉJÀ joué son round : c'est le cas quand les compteurs ont dérivé.
+       On le sert avant de conclure que la Phase est finie. */
+    if (next === null && roundsDone < 3) {
+      const avecCartes = ordreJeu.filter((id) => resteDe(id) > 0);
+      if (avecCartes.length > 0) next = avecCartes[0];
     }
 
     if (next === null) {
@@ -4132,10 +4299,35 @@ export function useBoardGeneratorController() {
            Une IA n'a pas de tour à finir à l'écran : elle se ferme tout de
            suite. Un humain garde la main jusqu'à « Titan suivant », qui
            appellera `cloturerPhaseAction` à sa place. */
-        aiNextPlayerRef.current = null;
-        if (aiTitanModesRef.current[titanId] === "ia") {
-          cloturerPhaseAction();
-          return;
+        /* ── ON NE CLÔT PAS SUR UN COMPTEUR, ON CLÔT SUR LE PLATEAU ──
+           Nikola, 2026-09-07 : « les parties en simulation IA plantent ».
+           Reproduit avec sa graine : en Manche 2, le PREMIER coup joué
+           déclenchait déjà « 3 rounds terminés », donc la fermeture de la
+           Phase Action alors que les quatre Titans avaient encore trois
+           cartes programmées.
+
+           `roundsDone` est un COMPTEUR, et un compteur peut dériver — c'est
+           déjà arrivé deux fois dans ce fichier (cf. le correctif de
+           `markCardPlayed`, et le garde-fou de l'effet d'avancement de Phase).
+           Le plateau, lui, ne ment pas : tant qu'il reste une carte
+           programmée, la Phase Action n'est pas finie.
+
+           On vérifie donc avant de fermer, et on recale le compteur sur la
+           vérité plutôt que de laisser le garde-fou de l'effet le rattraper
+           après coup — il n'a alors plus rien à rattraper, et c'est bien ce
+           qu'on veut d'un filet : qu'il ne serve jamais. */
+        const encoreProgrammees = ordreJeu.filter((id) => resteDe(id) > 0);
+        if (encoreProgrammees.length > 0) {
+          const recale = { ...cardsPlayedCountRef.current };
+          ordreJeu.forEach((id) => { recale[id] = 3 - resteDe(id); });
+          cardsPlayedCountRef.current = recale;
+          next = encoreProgrammees[0];
+        } else {
+          aiNextPlayerRef.current = null;
+          if (aiTitanModesRef.current[titanId] === "ia") {
+            cloturerPhaseAction();
+            return;
+          }
         }
         // Humain : on retombe dans le flux normal ci-dessous, `next` restant
         // null — le tour s'affiche, Ramassage compris, et se termine au clic.
@@ -4162,6 +4354,8 @@ export function useBoardGeneratorController() {
     if (aiNextPlayerRef.current == null) { cloturerPhaseAction(); return; }
     setWaitingNextTitan(false);
     setActivePlayerId(aiNextPlayerRef.current);
+    // Même raison que dans `finishAiTurn` : le suivant peut être soi-même.
+    setAiTrigger((n) => n + 1);
   }, [cloturerPhaseAction]);
 
   const markCardPlayed = useCallback(

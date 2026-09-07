@@ -77,10 +77,28 @@ export function TitanIcon({ titanId, size = 28, variant = "gradient" }) {
   );
 }
 
+/* ── UN SPRITE PEUT AVOIR BESOIN DE DESCENDRE ──
+   Nikola, 2026-09-07 : « l'icône du Titan ornithorynque peut être baissée sur
+   la case 2D de 20 %, il est trop haut, il masque le chiffre de traînée ».
+
+   Les quatre portraits sont calés en haut de la case pour libérer le bas, où
+   se dessinent les débris. Ils ne remplissent pas leur image de la même façon :
+   l'ornithorynque monte plus haut que les trois autres, et depuis que le
+   décompte de traînée occupe le coin supérieur droit, c'est lui seul qui le
+   recouvre.
+
+   Un décalage PAR SPRITE, donc, et pas un réglage commun : baisser les quatre
+   pour un seul déplacerait trois jetons qui vont très bien. Exprimé en
+   pourcentage de la case, il suit sa taille sur tous les écrans. */
+const DESCENTE_SPRITE = {
+  ornithorynque: "20%",
+};
+
 export function TitanBadge({ titanId }) {
   const key = TITAN_SPRITE_KEY[titanId] || "escargot";
   const sprite = useSpriteAvecRepli(key);
   const tc = TITAN_COLORS[titanId];
+  const descente = DESCENTE_SPRITE[key] || 0;
   // Le sprite occupait toute la case et recouvrait les blocs posés au sol :
   // on ne voyait plus ce qu'il y avait sous le Titan. Il est réduit et calé
   // en haut, pour laisser le bas de la case aux débris.
@@ -88,6 +106,9 @@ export function TitanBadge({ titanId }) {
     <div style={{
       position: "absolute", inset: 0, display: "flex",
       alignItems: "flex-start", justifyContent: "center",
+      // Décalage propre au sprite (cf. DESCENTE_SPRITE) : le jeton reste calé
+      // en haut, on ne fait que lui donner de la marge au-dessus.
+      paddingTop: descente,
       borderRadius: 6, overflow: "hidden", pointerEvents: "none",
     }}>
       {sprite.echoue ? (

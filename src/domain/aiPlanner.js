@@ -811,13 +811,45 @@ export function planCardPlay(titanId, gameState, profile = makeProfile(), manche
   const titan = gameState.titans.find((t) => t.id === titanId);
   if (!titan || !titan.programmed || titan.programmed.length === 0) return null;
 
+  /* ── LE CHOIX DE LA CARTE EST BIAISÉ PAR LE NOMBRE DE COUPS QU'ELLE OFFRE ──
+     Nikola, 2026-09-07 : « j'ai l'impression que des cartes sont sous-jouées ».
+     Il a raison, et c'est mesuré (campagne de 20 parties, 4 Experts) :
+
+       Tête en Avant 31,6 %  ·  Boing Boing 28,1 %  ·  Tout Casser 13,8 %
+       Graouhhh 12,7 %       ·  Je Ne Partage Pas 9,3 %  ·  FPMC 4,6 %
+
+     La cause n'est pas dans l'évaluation des cartes, elle est statistique. On
+     retient le MAXIMUM de la note sur tous les coups d'une carte, et cette note
+     contient `valeurAPortee` — un pari, donc une estimation BRUITÉE. Le maximum
+     de N tirages bruités croît avec N. Or les cartes n'offrent pas du tout le
+     même nombre de coups : Boing Boing en propose 130 en moyenne, Je Ne Partage
+     Pas un seul. À valeur réelle égale, la carte qui offre le plus de choix
+     gagne — mesuré, la « prime » vaut 13,0 points pour Boing Boing contre 0,0
+     pour Je Ne Partage Pas.
+
+     On retranche donc à chaque carte une prime attendue qui croît comme
+     √(2·ln N), la forme classique du maximum d'un échantillon. Le coefficient
+     vit dans les réglages de force : à 0 — le défaut — le comportement est
+     EXACTEMENT celui d'avant, ce qui permet de le mesurer au duel avant de
+     l'activer, plutôt que de changer les quatre niveaux à l'aveugle.
+
+     Une correction plus simple avait été essayée et INVALIDÉE à la mesure :
+     réduire globalement le terme bruité (`decotePortee` 0,35 → 0,20) coûte
+     0,97 point par partie. Le diagnostic tient, mais le rabot global ne marche
+     pas — ce terme porte aussi de la vraie valeur. Il faut normaliser PAR
+     CARTE, ce que fait cette correction-ci. */
+  const K = reglagesDe(profile).correctionMaxDeN ?? 0;
   const candidats = [];
   for (const cardId of new Set(titan.programmed)) {
+    const deCetteCarte = [];
     for (const coup of candidatsPourCarte(cardId, titanId, gameState, profile)) {
       const etat = cloneEtat(gameState);
       const note = noterApres(titanId, etat, profile, (e) => simulerCarte(coup, titanId, e, mancheNumber, profile));
-      if (note !== null) candidats.push({ ...coup, note });
+      if (note !== null) deCetteCarte.push({ ...coup, note });
     }
+    if (deCetteCarte.length === 0) continue;
+    const penalite = K > 0 ? K * Math.sqrt(2 * Math.log(Math.max(2, deCetteCarte.length))) : 0;
+    for (const c of deCetteCarte) candidats.push(penalite > 0 ? { ...c, note: c.note - penalite } : c);
   }
 
   if (candidats.length === 0) diagnostics.coupsSansCandidat++;
