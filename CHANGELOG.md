@@ -1,5 +1,161 @@
 # Changelog
 
+## Non publié — trente-et-unième passe du 2026-09-08 (le repli, et les cartes qu'on ne joue pas)
+
+Six retours de table de Nikola. Un décrivait le comportement voulu du moteur et
+a été tranché plutôt que corrigé ; les cinq autres sont traités ici.
+
+### Le repli ne demande plus deux fois la même chose
+
+« J'ai boing boing sur 1 titan qui a tapé un bâtiment, j'ai eu le choix de le
+replacer 2 fois alors que 1 fois suffit. »
+
+Quand l'occupant projeté s'arrête contre un bâtiment faute de puissance,
+`projectInDirection` dépose déjà sa demande de repli — la géométrie de la
+charnière, ruling du 2026-08-17. `resolveBoingBoing` en déposait une seconde,
+calculée autrement, sur les cases libres adjacentes. Deux entrées pour un seul
+arrêt physique, et le dédoublonnage d'`enqueueReplis` ne pouvait pas les
+rapprocher : ni la case par défaut ni la liste des cases ne coïncidaient.
+
+Le résolveur reprend désormais la demande existante quand il y en a une. Une
+seule chose change par rapport à un arrêt ordinaire : le sauteur prend la case
+de destination, donc l'occupant ne peut pas y rester — cette case est retirée de
+ses options, et la charnière fournit le reste.
+
+**Un garde-fou trouvé par la campagne, pas par les tests.** La charnière offre
+volontairement des cases portant un autre Titan : c'est un coup, on l'y chasse
+(ruling du 2026-08-18). Le point de chute PAR DÉFAUT, lui, est appliqué sans
+passer par `appliquerReplElement`, donc il doit être libre. Sans ce filtre, six
+superpositions apparaissaient sur trente parties — aucun test ciblé ne pouvait
+les voir, la situation demandant trois Titans placés d'une façon qu'on ne
+construit pas à la main.
+
+### La file avance quand le repli libère la case
+
+« J'ai chargé un titan en C5, j'étais en E7, un titan était en B4, un bâtiment
+en A3 : le titan B4 a été déplacé mais celui en C5 n'a pas pris la place de B4. »
+
+La chaîne de poussée s'arrête dès qu'un maillon ne peut plus bouger, et le
+moteur écrit alors « personne n'a bougé ». C'est vrai à cet instant, et faux une
+seconde plus tard : le repli qu'il vient de déposer sert précisément à dégager
+ce maillon. La case se vidait donc dans le dos de ceux qui la voulaient, et le
+chargeur restait deux cases en arrière pour rien.
+
+Chaque élément arrêté derrière un maillon bloqué s'inscrit désormais dans la
+file de ce repli, du plus proche au plus lointain — le Titan poussé, puis le
+chargeur qui le poussait. Quand le joueur tranche, tout le monde avance d'un
+cran, chacun sur la case que son prédécesseur vient de quitter.
+
+**Ce que ça ne change pas, et c'est un arbitrage du jour.** Un maillon avance
+d'UNE case et s'arrête là, quelle que soit l'énergie qui lui restait. Le cas
+« j'étais en D5, j'ai sauté sur un titan en D6, celui de D9 est bien passé en
+warp mais les suivants ne sont pas sortis » est donc le comportement voulu :
+seul le dernier Titan d'une file sort du ring, les autres se décalent d'une
+case. Question posée, réponse de Nikola : « il s'arrête, règle actuelle ».
+
+### Un Titan reposé par un repli bouscule le béton qui dort là
+
+« Le débris qui était en A4 aurait dû warp avec le titan B4 qui est allé en A4. »
+
+C'est le ruling du 2026-09-07 — un Titan qu'une attaque a mis en mouvement
+bouscule ce qu'il rencontre, toujours — que la réaction en chaîne applique
+depuis ce jour-là et que le repli n'avait jamais reçu. Le Titan se contentait de
+se poser SUR le débris.
+
+Il le pousse désormais dans l'axe du repli, avec la même énergie de 1 que la
+poussée d'un Titan occupant. Le bord ne change rien : la faille spatio-temporelle
+s'applique comme partout ailleurs, et un débris poussé vers le nord depuis la
+rangée A ressort bien en rangée I.
+
+### Tout Casser et Faut Pas Me Chauffer étaient jugées depuis des cases où elles ne font rien
+
+« Corrige le sous-emploi de Tout Casser et FPMC. »
+
+Le diagnostic du 2026-09-07 tenait la prime au nombre de coups pour seule cause,
+et la correction `correctionMaxDeN` valait ce qu'elle valait. Il en restait une
+seconde, plus grosse : ces deux cartes-là ne frappent QUE le Périmètre. Une case
+au contact de trois bâtiments ne vaut rien en elle-même — on ne ramasse pas un
+bâtiment debout — et c'est pourtant celle qui double l'énergie de Tout Casser.
+Se coller à trois adversaires ne rapporte aucun point tant qu'on n'a pas joué
+FPMC.
+
+Deux endroits jugeaient donc ces cartes depuis une case où elles ne peuvent
+rien. `planTour` développe la carte sur les meilleures cases au tri statique,
+qui élimine exactement celles-là. Et surtout `planProgrammationSequentielle`
+note chaque carte DEPUIS LA CASE OÙ LE TITAN SE TROUVE — or une carte qu'on n'a
+pas programmée ne se rattrape par aucun déplacement.
+
+Les deux les évaluent désormais aussi depuis la meilleure case atteignable au
+sens de la carte elle-même : l'énergie du livret pour Tout Casser, la liste des
+cibles pour FPMC. Ce n'est pas une heuristique de valeur — on ne décide pas
+qu'une case est bonne, on garantit que la recherche voit les cases où la carte a
+un effet, et `evaluatePosition` tranche comme partout ailleurs.
+
+Emploi des cartes, 20 parties de quatre Experts (parité = 16,7 %) :
+
+| carte | avant | après |
+|---|---|---|
+| Tête en Avant | 30,0 % | 28,3 % |
+| Boing Boing | 29,2 % | 24,3 % |
+| Tout Casser | 13,3 % | 20,1 % |
+| Graouhhh | 16,1 % | 11,6 % |
+| Je Ne Partage Pas | 7,3 % | 7,8 % |
+| Faut Pas Me Chauffer | 4,1 % | 7,9 % |
+
+**Une piste mesurée et abandonnée** : pousser `correctionMaxDeN` de 0,6 à 2 puis
+à 4 ne redresse rien — Tout Casser descend à 12,0 % puis 11,1 %. Le rabot du
+maximum-de-N n'était pas le bon levier, et il reste à 0,6.
+
+### L'échelle des IA monte
+
+« J'ai joué 10 fois, j'ai battu 10 fois les Experts, revois à la hausse les
+niveaux globaux des IA. »
+
+Dix victoires sur dix contre la référence : c'est le sommet qui est trop bas.
+Le nouveau regard de placement est d'abord un vrai gain, mesuré au duel à sièges
+croisés (4 graines × 2 séries × 12 parties, Expert opportuniste) : **+1,58 point
+par partie, 52,1 % de victoires**, trois fois le gain de `correctionMaxDeN`.
+
+Il va à l'Expert et au Difficile. Sous eux, chaque barreau gagne ce qui ne
+rouvre aucun arbitrage déjà mesuré :
+
+- **Difficile** — le regard de placement, recherche conjointe de 4 à 6 cases ;
+- **Moyen** — la programmation en séquence (il ne prépare plus trois fois le
+  même tour, ce qui décidait une Manche sur quatre avant le premier coup), la
+  correction du maximum-de-N, recherche conjointe de 2 à 4 cases ;
+- **Facile** — il regarde enfin sa carte AVANT de bouger (recherche conjointe de
+  0 à 2 cases), l'erreur d'ordre la plus courante à la table.
+
+**Ce qui n'a pas bougé, et c'est délibéré.** Le Moyen ne reçoit ni
+`voitPorteeAuScore`, ni `voitConcurrence`, ni `voitAdversaires` : une mesure du
+2026-08-27 dit que la lecture de la concurrence ouverte à ce niveau fait
+repasser le ratio Moyen/Expert de 98,9 % à 100,9 %, c'est-à-dire qu'elle
+INVERSE la hiérarchie. Trois tests verrouillent ces clés, et deux fausses
+corrections de hiérarchie ont déjà été payées dans ce fichier. La signature du
+Facile — il ne lit pas le score complet, il garde sa molette de bruit — reste
+intacte pour la même raison : la lui retirer supprimerait le niveau d'entrée au
+lieu de le rehausser.
+
+**La hiérarchie tient.** Contrôle après coup, 3 graines × 10 parties, une IA de
+la force mesurée contre un Expert — ratio de score, plus bas = plus faible :
+
+| force | ratio / Expert | victoires |
+|---|---|---|
+| Facile | 64,1 % | 6,7 % |
+| Moyen | 75,9 % | 16,7 % |
+| Difficile | 95,6 % | 24,4 % |
+
+Quatre barreaux, dans le bon ordre, sans inversion. C'est un contrôle rapide,
+pas la mesure de référence : trois graines de dix parties restent du bruit à
+cette échelle, et seul le gain de l'Expert a été mesuré proprement. Pour
+verrouiller le décalage : `node scripts/mesure-forces.mjs 60`.
+
+### Déjà réglé
+
+« C'est effectivement réglé pour Graouhhh sur 2 Titans » — confirmation de la
+passe précédente, rien à faire.
+
+
 ## Non publié — trentième passe du 2026-09-07 (le gel des parties IA)
 
 Deux rapports de partie envoyés par Nikola, plus cinq retours. Le point central

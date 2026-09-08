@@ -343,6 +343,44 @@ export const FORCE_LABELS = Object.freeze({
      molette de bruit (`topN`, `biais`) qui lui fait lâcher son meilleur
      coup de temps en temps, toujours au profit d'un coup du haut du
      panier : une IA faible crédible se trompe, elle ne délire pas. */
+/* ---- L'ECHELLE MONTE, SANS ROUVRIR CE QUI A DEJA ETE MESURE (2026-09-08) --
+   Nikola : « j'ai joue 10 fois, j'ai battu 10 fois les Experts, revois a la
+   hausse les niveaux globaux des IA ».
+
+   Dix victoires sur dix contre la reference : c'est le SOMMET qui est trop
+   bas, et le regler par les curseurs du bas n'aurait rien donne. Deux gestes,
+   dans cet ordre.
+
+   1. UN VRAI GAIN AU SOMMET, MESURE. `visePlacementCarte` (cf. `planTour` et
+      `planProgrammationSequentielle`) ferme un angle mort de PLACEMENT : deux
+      cartes sur six ne frappent que le Perimetre, et elles etaient jugees
+      depuis la case ou le Titan se trouve, jamais depuis une case ou elles
+      agissent. Duel a sieges croises, 4 graines x 2 series x 12 parties,
+      Expert opportuniste : +1,58 point par partie, 52,1 % de victoires. Trois
+      fois le gain de `correctionMaxDeN`, retenu a +0,52. Effet sur l'emploi
+      des cartes, 20 parties de 4 Experts : Tout Casser 13,3 % -> 20,1 %,
+      Faut Pas Me Chauffer 4,1 % -> 7,9 % (parite = 16,7 %).
+
+   2. CHAQUE BARREAU GAGNE CE QUI NE REOUVRE AUCUN ARBITRAGE. Le Difficile
+      recoit le nouveau regard et une recherche plus large ; le Moyen recoit la
+      programmation en sequence, la correction du maximum-de-N et une recherche
+      doublee ; le Facile gagne le droit de regarder sa carte AVANT de bouger.
+
+   CE QUI N'A PAS BOUGE, ET C'EST DELIBERE. Le Moyen ne recoit NI
+   `voitPorteeAuScore`, NI `voitConcurrence`, NI `voitAdversaires`. Ce n'est
+   pas un oubli : une mesure du 2026-08-27 (30 parties x 8 graines) dit que la
+   lecture de la concurrence ouverte au Moyen fait repasser le ratio
+   Moyen/Expert de 98,9 % a 100,9 %, c'est-a-dire qu'elle INVERSE la
+   hierarchie. Trois tests verrouillent ces trois cles, et deux fausses
+   corrections de hierarchie ont deja ete payees dans ce fichier. On ne les
+   rouvre pas sans refaire la campagne.
+
+   De meme, la signature du Facile — `voitScoreComplet: false`, sa molette de
+   bruit — reste intacte : c'est ce qui en fait un debutant credible, et la lui
+   retirer supprimerait le niveau d'entree au lieu de le rehausser.
+
+   A REMESURER. Seul le point 1 est mesure. Le point 2 ne l'est pas : relancer
+   `node scripts/mesure-forces.mjs 60` pour verifier que la hierarchie tient. */
 export const FORCE_SETTINGS = Object.freeze({
   [FORCES.EXPERT]: {
     voitScoreComplet: true, voitAdrenaline: true,
@@ -367,6 +405,10 @@ export const FORCE_SETTINGS = Object.freeze({
        appartient au haut de l'échelle, comme la lecture des adversaires dont
        elle dépend. L'Expert la porte pleine. */
     poidsFinDePartie: 1,
+    /* Le regard de PLACEMENT : une carte qui ne frappe que son Perimetre est
+       aussi jugee depuis la meilleure case atteignable, et pas seulement
+       depuis celle ou le Titan se tient. Mesure ci-dessus. */
+    visePlacementCarte: true,
     miseAdrenalineMax: 3, largeurJointe: 10, programmationSequentielle: true,
     topN: 1, biais: 1,
   },
@@ -381,15 +423,28 @@ export const FORCE_SETTINGS = Object.freeze({
        laisse à l'Expert un barreau au-dessus sur exactement cette lecture,
        plutôt que de leur donner à tous les deux le même réflexe. */
     poidsFinDePartie: 0.5,
-    miseAdrenalineMax: 2, largeurJointe: 4, programmationSequentielle: true,
+    // Il recoit le regard de placement en meme temps que l'Expert : c'est un
+    // gain de position, pas une lecture des autres joueurs, donc il n'entre
+    // pas dans ce qui separe les deux barreaux du haut.
+    visePlacementCarte: true,
+    miseAdrenalineMax: 2, largeurJointe: 6, programmationSequentielle: true,
     topN: 1, biais: 1,
   },
+  /* Le Moyen ne PROGRAMME PLUS TROIS FOIS LE MEME TOUR (2026-09-08). C'etait
+     son plus gros handicap structurel et le moins interessant : ses trois
+     cartes visaient souvent la meme chose, et deux mouraient des que la
+     premiere etait jouee. Une Manche sur quatre decidee avant le premier coup.
+     Il garde en revanche ses vrais angles morts, qui sont des REGARDS et non
+     des maladresses : il ne chiffre pas au score complet ce qui traine autour
+     de lui, il ne regarde pas qui est plus pres du butin, il ne lit pas la
+     table. */
   [FORCES.MOYEN]: {
     voitScoreComplet: true, voitAdrenaline: true,
     voitAdversaires: false, poidsAdversaires: 0,
+    correctionMaxDeN: 0.6,
     voitPortee: true, rayonPortee: 3, voitPorteeAuScore: false, voitConcurrence: false,
     poidsCadeau: 0, decisionsAuScoreComplet: false,
-    miseAdrenalineMax: 2, largeurJointe: 2, programmationSequentielle: false,
+    miseAdrenalineMax: 2, largeurJointe: 4, programmationSequentielle: true,
     topN: 1, biais: 1,
   },
   [FORCES.FACILE]: {
@@ -397,7 +452,12 @@ export const FORCE_SETTINGS = Object.freeze({
     voitAdversaires: false, poidsAdversaires: 0,
     voitPortee: true, rayonPortee: 3, voitPorteeAuScore: false, voitConcurrence: false,
     poidsCadeau: 0, decisionsAuScoreComplet: false,
-    miseAdrenalineMax: 1, largeurJointe: 0, programmationSequentielle: false,
+    /* `largeurJointe` 0 -> 2 (2026-09-08). Il choisissait sa case sans savoir
+       quelle carte il jouerait de la — l'erreur d'ordre la plus courante a la
+       table, et la seule dont un debutant se corrige tout seul en une partie.
+       Il regarde desormais sa carte avant de bouger, sur deux cases. Tout le
+       reste de sa signature est intact. */
+    miseAdrenalineMax: 1, largeurJointe: 2, programmationSequentielle: false,
     topN: 2, biais: 4,
   },
 });

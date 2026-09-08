@@ -52,7 +52,9 @@ import {
   computeFinalScore,
   PORTEE_BOING_BOING,
   appliquerReplElement,
+  computeEnergyToutCasser,
   getBoingBoingReach,
+  getPerimeter,
   estSurLePlateau,
   indexerTitans,
   getEcroulementCells,
@@ -273,6 +275,95 @@ export function planMovement(titanId, gameState, profile = makeProfile(), portee
    Le tri statique et le développement utilisent la MÊME évaluation, donc
    une case écartée l'est parce qu'elle vaut moins, pas parce qu'un critère
    différent l'a jugée. */
+/* ── CE QUE LE TRI STATIQUE NE PEUT PAS VOIR ──────────────────
+   Nikola, 2026-09-08 : « corrige le sous-emploi de Tout Casser et FPMC ».
+
+   `planTour` développe la carte sur les `largeurJointe` cases qui notent le
+   mieux CARTE NON JOUÉE. Ce pré-tri est un compromis de coût assumé, mais il
+   n'est pas neutre : il élimine exactement les cases dont ces deux cartes-là
+   ont besoin.
+
+   Une case au contact de trois bâtiments ne vaut RIEN en elle-même — on ne
+   ramasse pas un bâtiment debout, `valeurAPortee` n'y voit aucun butin. C'est
+   pourtant la case qui double l'énergie de Tout Casser, donc celle qui décide
+   du Seuil 4, donc celle qui fait la différence entre « aucun effet » et « un
+   bloc cassé par voisin ». Même chose pour Faut Pas Me Chauffer : elle ne
+   frappe QUE les Titans du Périmètre, et se coller à trois adversaires ne
+   rapporte aucun point tant qu'on n'a pas joué la carte.
+
+   Les deux cartes étaient donc jugées depuis des cases où elles ne pouvaient
+   rien faire, et perdaient l'arbitrage contre Tête en Avant ou Boing Boing,
+   qui n'ont besoin de rien pour valoir quelque chose. Mesuré le 2026-09-07 sur
+   20 parties de 4 Experts : Tête en Avant 31,6 %, Boing Boing 28,1 %, Tout
+   Casser 13,8 %, FPMC 4,6 % — pour six cartes, donc 16,7 % à égalité.
+
+   CE N'EST PAS UNE HEURISTIQUE DE VALEUR, et c'est ce qui la rend acceptable
+   ici : on ne décide pas qu'une case est bonne, on garantit seulement que la
+   recherche VOIT les cases où la carte a un effet. La note reste rendue par
+   `evaluatePosition`, comme partout ailleurs. Les quantités mesurées sont
+   celles du moteur lui-même — l'énergie du livret pour Tout Casser, la liste
+   des cibles pour FPMC — et non une invention du module.
+
+   Le coût est négligeable : le classement ne simule rien, et les cases
+   ajoutées ne développent QUE la carte qui les a fait retenir (quatre coups au
+   plus chacune, contre cent-trente pour Boing Boing). */
+const PLACEMENTS_PAR_CARTE = 2;
+
+function occupantsAvecMoiEn(titanId, gameState, destKey) {
+  const carte = {};
+  for (const t of gameState.titans) {
+    if (t.id === titanId || !estSurLePlateau(t)) continue;
+    carte[t.cell] = t.id;
+  }
+  carte[destKey] = titanId;
+  return carte;
+}
+
+const MESURE_DE_PLACEMENT = Object.freeze({
+  // L'énergie du livret : « nombre de cases OCCUPÉES dans ton Périmètre ».
+  tout_casser: (titanId, gameState, destKey) => {
+    const perimetre = getPerimeter(destKey[0], Number(destKey.slice(1)));
+    return computeEnergyToutCasser(
+      perimetre, gameState.board, occupantsAvecMoiEn(titanId, gameState, destKey),
+      0, gameState.looseBlocks
+    );
+  },
+  // Les cibles imposées par le Périmètre : sans adversaire au contact, la
+  // carte n'a rigoureusement aucun effet.
+  faut_pas_me_chauffer: (titanId, gameState, destKey) => {
+    const carte = occupantsAvecMoiEn(titanId, gameState, destKey);
+    const perimetre = getPerimeter(destKey[0], Number(destKey.slice(1)));
+    let n = 0;
+    for (const cell of perimetre) {
+      if (cell.isSelf) continue;
+      const occ = carte[cell.row + cell.col];
+      if (occ && occ !== titanId) n++;
+    }
+    return n;
+  },
+});
+
+/* La case, parmi celles qu'on peut atteindre ce tour-ci, où cette carte a le
+   plus d'effet — au sens de sa propre mesure, pas d'un jugement de valeur.
+   `null` quand la carte ne gagne rien à bouger, ou qu'aucune case ne la sert. */
+function meilleureCasePourCarte(cardId, titanId, gameState, portee) {
+  const mesure = MESURE_DE_PLACEMENT[cardId];
+  const titan = gameState.titans.find((t) => t.id === titanId);
+  if (!mesure || !titan || !estSurLePlateau(titan) || portee <= 0) return null;
+  const { reachable } = getMovementReachable(
+    titan.cell, portee, gameState.board, indexerTitans(gameState.titans), gameState.looseBlocks
+  );
+  if (!reachable || reachable.size === 0) return null;
+  let meilleure = null;
+  let force = mesure(titanId, gameState, titan.cell);
+  reachable.forEach((destKey) => {
+    if (destKey === titan.cell) return;
+    const f = mesure(titanId, gameState, destKey);
+    if (f > force) { force = f; meilleure = destKey; }
+  });
+  return meilleure;
+}
+
 export function planTour(titanId, gameState, profile = makeProfile(), mancheNumber = 1, porteeMouvement = 2) {
   const reglages = reglagesDe(profile);
   const largeur = reglages.largeurJointe ?? 0;
@@ -304,12 +395,36 @@ export function planTour(titanId, gameState, profile = makeProfile(), mancheNumb
   triees.sort((a, b) => b.note - a.note);
 
   const candidats = [];
+  const developpees = new Set();
   for (const { destKey, note: noteSeule } of triees.slice(0, largeur)) {
+    developpees.add(destKey);
     const base = cloneEtat(gameState);
     if (destKey) resolveFreeMovement(titanId, destKey, base);
     const coup = planCardPlay(titanId, base, profile, mancheNumber);
     // Pas de carte jouable depuis là : la case vaut ce qu'elle vaut seule.
     candidats.push({ destKey, coup, note: coup ? coup.note : noteSeule });
+  }
+
+  /* Les cases retenues pour une carte précise (cf. `MESURE_DE_PLACEMENT`). On
+     n'y développe QUE cette carte : c'est elle qui a fait retenir la case, et
+     y rejouer les six coûterait le prix d'une largeur de recherche entière. */
+  if (reglages.visePlacementCarte) {
+    for (const [cardId, mesure] of Object.entries(MESURE_DE_PLACEMENT)) {
+      if (!titan.programmed?.includes(cardId)) continue;
+      const classees = triees
+        .filter(({ destKey }) => !developpees.has(destKey))
+        .map(({ destKey }) => ({ destKey, force: mesure(titanId, gameState, destKey ?? titan.cell) }))
+        .filter(({ force }) => force > 0)
+        .sort((a, b) => b.force - a.force)
+        .slice(0, PLACEMENTS_PAR_CARTE);
+      for (const { destKey } of classees) {
+        developpees.add(destKey);
+        const base = cloneEtat(gameState);
+        if (destKey) resolveFreeMovement(titanId, destKey, base);
+        const coup = planCardPlay(titanId, base, profile, mancheNumber, [cardId]);
+        if (coup) candidats.push({ destKey, coup, note: coup.note });
+      }
+    }
   }
 
   return chooseAmongBest(candidats, profile);
@@ -807,7 +922,7 @@ export function candidatsPourCarte(cardId, titanId, gameState, profile = makePro
  * Choisit quelle carte programmée jouer, et avec quels paramètres.
  * Retourne le coup retenu, ou `null` si le Titan n'a rien à jouer.
  */
-export function planCardPlay(titanId, gameState, profile = makeProfile(), mancheNumber = 1) {
+export function planCardPlay(titanId, gameState, profile = makeProfile(), mancheNumber = 1, restreindreA = null) {
   const titan = gameState.titans.find((t) => t.id === titanId);
   if (!titan || !titan.programmed || titan.programmed.length === 0) return null;
 
@@ -840,7 +955,15 @@ export function planCardPlay(titanId, gameState, profile = makeProfile(), manche
      CARTE, ce que fait cette correction-ci. */
   const K = reglagesDe(profile).correctionMaxDeN ?? 0;
   const candidats = [];
-  for (const cardId of new Set(titan.programmed)) {
+  /* `restreindreA` n'existe que pour le développement ciblé de `planTour` :
+     une case retenue POUR une carte n'est développée que sur elle. La note
+     reste calculée exactement comme dans le tour complet, pénalité de
+     maximum-de-N comprise — celle-ci ne dépend que du nombre de coups de la
+     carte, donc les deux chemins restent comparables. */
+  const jouables = restreindreA
+    ? new Set([...titan.programmed].filter((c) => restreindreA.includes(c)))
+    : new Set(titan.programmed);
+  for (const cardId of jouables) {
     const deCetteCarte = [];
     for (const coup of candidatsPourCarte(cardId, titanId, gameState, profile)) {
       const etat = cloneEtat(gameState);
@@ -965,6 +1088,7 @@ export function planProgrammationSequentielle(titanId, gameState, profile = make
   if (!titan || !titan.hand || titan.hand.length === 0) return [];
   if (titan.hand.length <= nbCartes) return [...titan.hand];
 
+  const reglages = reglagesDe(profile);
   const restantes = [...titan.hand];
   const choisies = [];
   let etatCourant = cloneEtat(gameState);
@@ -974,15 +1098,47 @@ export function planProgrammationSequentielle(titanId, gameState, profile = make
     for (const cardId of restantes) {
       let meilleure = -Infinity;
       let meilleurCoup = null;
-      for (const coup of candidatsPourCarte(cardId, titanId, etatCourant, profile)) {
-        const etat = cloneEtat(etatCourant);
-        const note = noterApres(titanId, etat, profile, (e) => simulerCarte(coup, titanId, e, mancheNumber, profile));
-        if (note !== null && note > meilleure) {
-          meilleure = note;
-          meilleurCoup = coup;
+      let meilleureDepuis = null;
+
+      /* ── UNE CARTE DE PÉRIMÈTRE SE JUGE DEPUIS UNE CASE OÙ ELLE AGIT ──
+         Nikola, 2026-09-08 : « corrige le sous-emploi de Tout Casser et FPMC ».
+
+         La programmation note chaque carte sur le plateau du moment, DEPUIS LA
+         CASE OÙ LE TITAN SE TROUVE. C'est juste pour quatre cartes sur six, et
+         faux pour celles dont tout l'effet dépend du voisinage : Tout Casser
+         ne frappe que son Périmètre, Faut Pas Me Chauffer ne défie que les
+         Titans qui s'y trouvent. Un Titan qui programme depuis une case vide
+         les note donc à zéro et ne les emporte jamais — alors qu'il aura son
+         mouvement gratuit pour aller se placer avant de les jouer. C'est un
+         angle mort de PROGRAMMATION, distinct de celui du tour lui-même : une
+         carte qu'on n'a pas programmée ne se rattrape par aucun déplacement.
+
+         On les note donc aussi depuis la meilleure case ATTEIGNABLE au sens de
+         leur propre mesure (`MESURE_DE_PLACEMENT`), et on garde le maximum des
+         deux. Une seule case de plus par carte : le mouvement gratuit du tour
+         où elle sera jouée, ni plus ni moins. */
+      const departs = [{ cell: null, etat: etatCourant }];
+      if (reglages.visePlacementCarte) {
+        const viser = meilleureCasePourCarte(cardId, titanId, etatCourant, 2);
+        if (viser) {
+          const place = cloneEtat(etatCourant);
+          resolveFreeMovement(titanId, viser, place);
+          departs.push({ cell: viser, etat: place });
         }
       }
-      notees.push({ cardId, coup: meilleurCoup, note: meilleure });
+
+      for (const depart of departs) {
+        for (const coup of candidatsPourCarte(cardId, titanId, depart.etat, profile)) {
+          const etat = cloneEtat(depart.etat);
+          const note = noterApres(titanId, etat, profile, (e) => simulerCarte(coup, titanId, e, mancheNumber, profile));
+          if (note !== null && note > meilleure) {
+            meilleure = note;
+            meilleurCoup = coup;
+            meilleureDepuis = depart.cell;
+          }
+        }
+      }
+      notees.push({ cardId, coup: meilleurCoup, depuis: meilleureDepuis, note: meilleure });
     }
 
     const pick = chooseAmongBest(notees, profile);
@@ -994,6 +1150,10 @@ export function planProgrammationSequentielle(titanId, gameState, profile = make
     if (pick.coup) {
       const suite = cloneEtat(etatCourant);
       try {
+        // Le meilleur coup a pu être trouvé depuis une AUTRE case : on rejoue
+        // le déplacement qui l'accompagne, sans quoi la projection décrirait un
+        // coup que le Titan n'a jamais pu porter.
+        if (pick.depuis) resolveFreeMovement(titanId, pick.depuis, suite);
         simulerCarte(pick.coup, titanId, suite, mancheNumber, profile);
         etatCourant = suite;
       } catch {

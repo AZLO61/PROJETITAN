@@ -1074,6 +1074,87 @@ function getCasesRepliDebris(depuis, cible, dr, dc, { board, looseBlocks = {}, t
    C'est ce qui permet de gagner une case de piste ADN avec un repli, au lieu
    de subir un arrêt sans effet.
 ============================================================ */
+/* ── LA FILE AVANCE QUAND LA CASE SE LIBERE ──────────────────
+   Nikola, 2026-09-08 : « le titan B4 a ete deplace mais celui en C5 n'a pas
+   pris la place de B4 ».
+
+   Une chaine de poussee s'arrete des qu'un maillon ne peut plus bouger, et le
+   moteur ecrit alors « personne n'a bouge ». C'est vrai a cet instant, et faux
+   une seconde plus tard : le repli qu'il vient de deposer sert precisement a
+   degager ce maillon, au choix de l'attaquant. Les elements arretes derriere
+   lui doivent donc avancer d'un cran quand ce choix se resout — chacun sur la
+   case que son predecesseur vient de quitter.
+
+   `repli.suiveurs` est renseigne par `projectInDirection` en remontant la
+   recursion, du plus proche du blocage au plus lointain. On les traite dans cet
+   ordre : le premier prend la case du Titan replie, le deuxieme celle du
+   premier, et ainsi de suite. La file s'arrete des qu'une case n'est pas libre
+   — deux Titans ne partagent jamais une case, et rien ne garantit qu'un
+   troisieme ne s'y soit pas installe entre-temps.
+
+   RAPPEL DE LA REGLE QUE CECI NE CHANGE PAS : un maillon avance d'UNE case,
+   celle qui se libere devant lui, et son deplacement s'arrete la quelle que
+   soit l'energie qui lui restait (arbitrage Nikola du 2026-09-08). Cette
+   fonction rattrape un decalage, elle ne relance pas la chaine. */
+function avancerLesSuiveurs(repli, gameState) {
+  const log = [];
+  const suiveurs = repli?.suiveurs;
+  if (!Array.isArray(suiveurs) || suiveurs.length === 0) return log;
+  const { titans = [] } = gameState;
+  for (const { id, vers } of suiveurs) {
+    const suiveur = titans.find((t) => t.id === id);
+    if (!suiveur || !estSurLePlateau(suiveur) || suiveur.cell === vers) continue;
+    const prise = titans.some((t) => t.id !== id && estSurLePlateau(t) && t.cell === vers);
+    if (prise) break; // la file ne peut pas avancer plus loin
+    suiveur.cell = vers;
+    log.push(`${vers} : case liberee par le repli — Titan ${id} y prend la place, la chaine avance d'un cran.`);
+  }
+  return log;
+}
+
+/* ── UN TITAN QUI SE POSE BOUSCULE LE BETON QUI DORT LA ──────
+   Nikola, 2026-09-08 : « le debris qui etait en A4 aurait du warp avec le titan
+   B4 qui est alle en A4 ».
+
+   C'est le ruling du 2026-09-07 — « il est arrive sur une case avec un debris,
+   il aurait du le deplacer, car c'est une action d'une attaque qui l'a fait se
+   deplacer », et sur un tas « il le renverse aussi, toujours ». La reaction en
+   chaine l'applique depuis ce jour-la (cf. `projectInDirection`), le repli ne
+   l'avait jamais recu : un Titan repose par un repli se contentait de se poser
+   SUR le debris, alors qu'il y arrive pousse par une carte comme n'importe quel
+   autre maillon.
+
+   L'axe est celui du repli lui-meme, `defaut` vers la case choisie — c'est le
+   dernier geste du Titan, donc celui qui percute. Le bord ne change rien : la
+   faille spatio-temporelle s'applique comme partout ailleurs, et c'est bien ce
+   que decrit Nikola, un debris pousse hors du plateau en A ressort en I.
+
+   Energie 1, la meme que la poussee du Titan occupant quelques lignes plus haut
+   dans `appliquerReplElement` : le repli est un pas, pas une charge. */
+function pousserElementAuSol(cellKey, depuis, gameState, initiatorId) {
+  const { board, looseBlocks = {}, titans = [], replis, trajectoires } = gameState;
+  const pile = looseBlocks[cellKey];
+  if (!pile || pile.length === 0) return [];
+  const log = [];
+  const dr = Math.sign(rowIndex(cellKey[0]) - rowIndex(depuis[0]));
+  const dc = Math.sign(Number(cellKey.slice(1)) - Number(depuis.slice(1)));
+  if (dr === 0 && dc === 0) return log;
+  const ctx = { board, looseBlocks, titans, log, replis, trajectoires, initiatorId, movingTitanId: null };
+
+  if (estAmas(pile)) {
+    basculerAmasDansLAxe(cellKey, dr, dc, ctx);
+    return log;
+  }
+
+  const bloc = pile.pop();
+  retirerPileVide(looseBlocks, cellKey);
+  const landing = projectInDirection(cellKey[0], Number(cellKey.slice(1)), dr, dc, 1, ctx);
+  const arrivee = landing.row + landing.col;
+  poserDebrisAuSol(looseBlocks, arrivee, bloc);
+  log.push(`${cellKey} : le Titan qui s'y pose bouscule le debris ${bloc} vers ${arrivee}.`);
+  return log;
+}
+
 function appliquerReplElement(repli, cellKey, gameState) {
   const log = [];
   if (!repli || !cellKey || cellKey === repli.defaut) return { log, applied: false };
@@ -1137,7 +1218,9 @@ function appliquerReplElement(repli, cellKey, gameState) {
   if (repli.titanId != null) {
     const titan = titans.find((t) => t.id === repli.titanId);
     if (!titan) return { log, applied: false };
+    log.push(...pousserElementAuSol(cellKey, repli.defaut, gameState, repli.initiatorId ?? null));
     titan.cell = cellKey;
+    log.push(...avancerLesSuiveurs(repli, gameState));
     log.push(...basculerToursSousTitans(initiateurBascule, gameState));
     return { log, applied: true };
   }
@@ -1147,6 +1230,7 @@ function appliquerReplElement(repli, cellKey, gameState) {
   if (bloc === undefined) return { log, applied: false };
   retirerPileVide(looseBlocks, repli.defaut);
   poserDebrisAuSol(looseBlocks, cellKey, bloc);
+  log.push(...avancerLesSuiveurs(repli, gameState));
   log.push(...basculerToursSousTitans(initiateurBascule, gameState));
   return { log, applied: true };
 }
@@ -1288,6 +1372,10 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
      trois points d'arrêt « je ne passe pas » ; reste null quand l'élément
      s'arrête pour une autre raison (énergie épuisée, case libre atteinte). */
   let choixRepli = null;
+  /* Le repli qui EMPECHE cet element d'avancer, quand il en existe un. Rendu a
+     l'appelant pour qu'il s'y inscrive comme suiveur : cf. `avancerLesSuiveurs`
+     et la branche « occupant coince » ci-dessous. */
+  let repliBloquant = null;
   /* CE QUI VOLE : un TITAN, ou un DÉBRIS. La distinction commande trois
      comportements différents plus bas — l'empilement sur un tas, la poussée
      d'un tas, et le droit de se poser sur la case d'un Titan. Elle est donc
@@ -1757,17 +1845,49 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
 
            Le point de chute par défaut reste sa propre case : un appelant qui
            ignore le repli garde exactement le comportement précédent. */
-        if (Array.isArray(ctx.replis)) {
+        /* ── UN SEUL CHOIX, ET IL SAIT QUI ATTEND DERRIERE ──
+           Nikola, 2026-09-08 : « j'ai charge un titan en C5, j'etais en E7, un
+           titan etait en B4, un batiment en A3 : le titan B4 a ete deplace mais
+           celui en C5 n'a pas pris la place de B4 ».
+
+           Deux defauts se rejoignaient ici, et le second est celui qu'il
+           decrit.
+
+           LE DOUBLON. Quand l'occupant s'est arrete contre un mur, la recursion
+           a DEJA depose son repli (cf. `repliOptions` en fin de fonction). En
+           deposer un second demandait deux fois de suite ou placer le meme
+           Titan — c'est le « j'ai eu le choix de le replacer 2 fois alors que 1
+           fois suffit » du meme rapport. On reprend donc celui qui existe.
+
+           LE SUIVEUR. La chaine conclut « personne n'a bouge » et l'element
+           arrivant s'arrete net, alors que le repli va precisement liberer la
+           case des que le joueur aura tranche. La case se vidait donc dans le
+           dos de celui qui la voulait, et l'attaquant restait deux cases en
+           arriere pour rien. On rattache l'element en vol au repli qui le
+           debloquera ; `appliquerReplElement` fait avancer la file au moment ou
+           la case se libere reellement.
+
+           La liste est ORDONNEE du plus proche au plus lointain : chaque
+           maillon s'y inscrit en remontant la recursion, et l'appelant de
+           premier niveau (Tete en Avant, Boing Boing) s'y ajoute en dernier. */
+        let repliDeLOccupant = pushed.repliBloquant ?? null;
+        if (!repliDeLOccupant && Array.isArray(ctx.replis)) {
           const libresAutour = getFreeAdjacentCells(caseAvant, board, indexerTitans(titans), looseBlocks);
           if (libresAutour.length > 0) {
-            ctx.replis.push({
+            repliDeLOccupant = {
               titanId: occupantTitanId,
               defaut: caseAvant,
               cases: [caseAvant, ...libresAutour],
               cible: caseAvant,
               initiatorId: ctx.initiatorId ?? null,
-            });
+            };
+            ctx.replis.push(repliDeLOccupant);
           }
+        }
+        if (repliDeLOccupant && !elementEstUnDebris) {
+          repliDeLOccupant.suiveurs = repliDeLOccupant.suiveurs || [];
+          repliDeLOccupant.suiveurs.push({ id: ctx.movingTitanId, vers: caseAvant });
+          repliBloquant = repliDeLOccupant;
         }
         // Occupant réellement coincé : personne n'a bougé. Le Titan en vol
         // s'arrête avant, le débris se pose quand même par-dessus.
@@ -2063,13 +2183,19 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
      fonction, il est donc au sommet de la pile au moment où le choix se
      résout. */
   if (repliOptions && Array.isArray(ctx.replis)) {
-    ctx.replis.push({
+    const depose = {
       titanId: ctx.movingTitanId ?? null,
       defaut: arrivee,
       cases: repliOptions.cases,
       cible: repliOptions.cible,
       initiatorId: ctx.initiatorId ?? null,
-    });
+    };
+    ctx.replis.push(depose);
+    /* Ce repli BLOQUE quelqu'un des lors qu'il concerne un Titan qui n'a pas
+       bouge d'un pouce : la case que l'element derriere lui convoite ne se
+       liberera qu'une fois le joueur consulte. On le remonte donc a l'appelant,
+       qui s'y inscrira comme suiveur au lieu d'en creer un second. */
+    if (ctx.movingTitanId != null && arrivee === chemin[0]) repliBloquant = depose;
   }
 
   /* TRAJECTOIRE POUR L'ANIMATION (Nikola, 2026-08-24).
@@ -2098,7 +2224,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
     });
   }
 
-  return { row: rowFromIndex(r), col: c, energyLeft: remaining, hasBounced, log, repliOptions };
+  return { row: rowFromIndex(r), col: c, energyLeft: remaining, hasBounced, log, repliOptions, repliBloquant };
 }
 
 
@@ -2703,10 +2829,12 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
          Distance retenue pour cette carte, choix de Nikola du 2026-08-19 :
          l'ENERGIE RESTANTE de la charge. Percute de pres il part loin,
          percute en bout de course il bouge a peine. */
+      let repliBloquantCible = null;
       {
         const occupant = titans.find((t) => t.id === occupantId);
         // movingTitanId : c'est l'occupant qu'on projette (cf. projectInDirection).
         const landing = projectInDirection(row, cIdx, dr, dc, energie, { board, looseBlocks, titans, log, replis, trajectoires, bagarreSet, initiatorId: titanId, movingTitanId: occupantId });
+        repliBloquantCible = landing.repliBloquant ?? null;
         // Un Titan éjecté a déjà sa case de rentrée posée par le résolveur :
         // on ne la réécrit pas, et sa sortie du ring compte évidemment
         // comme une Bagarre remportée.
@@ -2742,6 +2870,16 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
           chemin.push(rowFromIndex(r) + c);
         }
         arrivee = chemin.find((cell) => !impraticable(cell)) ?? titan.cell;
+        /* ── IL RECULE, MAIS IL GARDE SA PLACE DANS LA FILE ──
+           Nikola, 2026-09-08 : le chargeur restait deux cases en arriere alors
+           que la chaine s'est debloquee juste apres, au moment ou l'attaquant a
+           choisi ou degager le Titan coince. On l'inscrit donc en queue de la
+           file du repli qui bloque : `appliquerReplElement` fera avancer tout le
+           monde d'un cran quand la case se liberera reellement. */
+        if (repliBloquantCible) {
+          repliBloquantCible.suiveurs = repliBloquantCible.suiveurs || [];
+          repliBloquantCible.suiveurs.push({ id: titanId, vers: key });
+        }
         log.push(`${key} occupée (cible non déplacée ou revenue dessus) — Titan ${titanId} recule en ${arrivee}.`);
       }
       titan.cell = arrivee;
@@ -3566,6 +3704,41 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
     // trouvée en attendant, avec log explicite pour rester transparent sur
     // cette simplification.
     if (landingKey === destKey) {
+      /* ── UNE SEULE DEMANDE DE PLACEMENT, PAS DEUX ──
+         Nikola, 2026-09-08 : « j'ai boing boing sur 1 titan qui a tape un
+         batiment, j'ai eu le choix de le replacer 2 fois alors que 1 fois
+         suffit ».
+
+         Quand l'occupant projete s'arrete contre un batiment faute de
+         puissance, `projectInDirection` a DEJA depose son repli — geometrie de
+         la charniere, ruling du 2026-08-17. Ce bloc-ci en deposait un second,
+         calcule autrement (toutes les cases libres adjacentes) : deux entrees
+         pour un seul arret physique, et le dedoublonnage d'`enqueueReplis` ne
+         pouvait pas les rapprocher puisque ni la case par defaut ni la liste
+         des cases ne coincidaient.
+
+         On reprend donc le repli existant quand il y en a un. Une seule chose
+         change par rapport a un arret ordinaire : le sauteur prend la case de
+         destination, donc l'occupant ne peut PAS y rester — on retire cette
+         case de ses options, et la charniere fournit le reste. La liste
+         complete des cases libres voisines ne sert plus que de filet, quand la
+         charniere ne laisse rien. */
+      const dejaPose = landing.repliBloquant ?? null;
+      const horsDest = dejaPose ? dejaPose.cases.filter((k) => k !== destKey) : [];
+      /* La CHARNIERE offre volontairement des cases portant un autre Titan —
+         c'est un coup, on l'y chasse (ruling du 2026-08-18). Mais le point de
+         chute PAR DEFAUT, lui, est applique sans passer par
+         `appliquerReplElement` : il doit donc etre libre, sans quoi deux Titans
+         se retrouvent sur la meme case. Mesure : 5 superpositions sur 30
+         parties avant ce filtre. */
+      const libreDeTitan = (k) => !titans.some((t) => estSurLePlateau(t) && t.cell === k);
+      const defautLibre = horsDest.find(libreDeTitan);
+      if (dejaPose && defautLibre) {
+        dejaPose.cases = horsDest;
+        dejaPose.defaut = defautLibre;
+        landingKey = defautLibre;
+        log.push(`${destKey} : Titan ${occupantId} arrêté faute de puissance et chassé par l'atterrissage → il se dégage au choix du Titan ${titanId} (${horsDest.length} possibilité${horsDest.length > 1 ? "s" : ""}, ${landingKey} par défaut).`);
+      } else {
       /* `titansByCell` a été relevé AVANT la projection : la réaction en
          chaîne a pu déplacer un Titan entre-temps, et proposer sa case comme
          « libre » y remettait un second Titan (graine 7086 en campagne).
@@ -3589,7 +3762,13 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
 
            Note : `cases.length <= 1` est filtre par `enqueueReplis`, donc une
            seule case libre ne derange personne avec un choix inutile. */
-        if (Array.isArray(replis)) {
+        // Un repli existe deja pour cet occupant : on le REDIRIGE au lieu d'en
+        // empiler un second (cf. le pave ci-dessus).
+        if (dejaPose) {
+          dejaPose.defaut = landingKey;
+          dejaPose.cases = freeAdj;
+          dejaPose.cible = destKey;
+        } else if (Array.isArray(replis)) {
           replis.push({
             titanId: occupantId,
             defaut: landingKey,
@@ -3602,6 +3781,7 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
       } else {
         log.push(`${destKey} : Titan ${occupantId} totalement coincé (aucune case libre adjacente) — destination refusée.`);
         return { log, applied: false, decisions: [] };
+      }
       }
     }
     target.cell = landingKey;
