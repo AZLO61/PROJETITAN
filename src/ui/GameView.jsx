@@ -255,7 +255,12 @@ function Marquee({
       <div style={{ display: "flex", alignItems: "baseline", gap: T.s3, flexWrap: "wrap" }}>
         <h1 style={marquee("clamp(1.25rem, 2.6vw, 1.75rem)", T.you)}>Projet Titan</h1>
         <span style={label(T.faint)}>
-          BIG CITY{detonateurNom ? ` — Détonateur ${detonateurNom}` : ""}
+          BIG CITY
+          {detonateurNom ? (
+            <span style={{ textTransform: "none", letterSpacing: "normal", fontWeight: 400 }}>
+              {" "}— Détonateur {detonateurNom}
+            </span>
+          ) : null}
         </span>
       </div>
 

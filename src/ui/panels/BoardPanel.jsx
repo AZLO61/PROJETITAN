@@ -90,7 +90,7 @@ function AdrenalinePicker({ value, max, onChange, label: aide }) {
         aria-label="Dépenser une Adrénaline de moins"
         style={pas(value > 0)}
       >−</button>
-      <span style={{ ...readout("0.72rem", value > 0 ? T.go : T.faint), minWidth: 34, textAlign: "center" }}>
+      <span style={{ ...readout(T.micro, value > 0 ? T.go : T.faint), minWidth: 34, textAlign: "center" }}>
         {value}/{max}
       </span>
       <button
@@ -417,7 +417,7 @@ export default function BoardPanel({ vm }) {
                 {energie >= 4 && (
                   <span
                     style={{
-                      ...label(T.stop, "0.66rem"),
+                      ...label(T.stop),
                       border: `1.5px solid ${T.stop}`,
                       padding: "2px 5px",
                     }}
@@ -523,7 +523,7 @@ export default function BoardPanel({ vm }) {
               Annuler
               {undoStack.length > 0 && (
                 <span style={{
-                  ...readout("0.62rem", "#120d02"),
+                  ...readout(T.micro, "#120d02"),
                   background: "#fb923c", borderRadius: 99, padding: "1px 7px",
                   lineHeight: "14px",
                 }}>{undoStack.length}</span>
@@ -831,7 +831,7 @@ export default function BoardPanel({ vm }) {
             {phase === "programmation" && vm.decisionBloquante === "placement" && (
               <div style={{
                 background: "rgba(255,217,61,.10)", border: "1px solid rgba(255,217,61,.35)",
-                borderRadius: 8, padding: "8px 10px", fontSize: ".74rem", color: T.dim,
+                borderRadius: 8, padding: "8px 10px", fontSize: "var(--fs-micro)", color: T.dim,
               }}>
                 📍 Mise en place en cours — les cartes s'ouvrent quand les quatre
                 Titans ont pris position.
@@ -844,7 +844,7 @@ export default function BoardPanel({ vm }) {
                 {selectedTitan.programmed.length === 3 ? (
                   <div style={{
                     background: "rgba(22,224,140,.08)", border: "1px solid rgba(22,224,140,.3)",
-                    borderRadius: 8, padding: "8px 10px", fontSize: ".74rem", color: "#16E08C",
+                    borderRadius: 8, padding: "8px 10px", fontSize: "var(--fs-micro)", color: "#16E08C",
                   }}>
                     ✅ 3 cartes programmées — attends les autres Titans
                   </div>
@@ -854,7 +854,7 @@ export default function BoardPanel({ vm }) {
                     background: "rgba(255,217,61,.08)", border: "1px solid rgba(255,217,61,.35)",
                     borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8,
                   }}>
-                    <div style={{ fontSize: ".78rem", color: "#FFD93D", fontWeight: 700 }}>
+                    <div style={{ fontSize: "var(--fs-micro)", color: "#FFD93D", fontWeight: 700 }}>
                       Programmation dans {progCountdown}s…
                     </div>
                     <div style={{ display: "flex", gap: 6 }}>
@@ -872,7 +872,7 @@ export default function BoardPanel({ vm }) {
                         setProgCountdownTimer(null);
                         setProgSelection([]);
                       }}
-                      style={{ ...cancelBtn(), fontSize: ".72rem", alignSelf: "flex-start" }}
+                      style={{ ...cancelBtn(), fontSize: "var(--fs-micro)", alignSelf: "flex-start" }}
                     >
                       ✕ Modifier ma sélection
                     </button>
@@ -889,18 +889,18 @@ export default function BoardPanel({ vm }) {
                       <div style={{
                         background: "rgba(227,35,71,.16)", border: "1.5px solid #e32347",
                         borderRadius: 8, padding: "7px 10px", marginBottom: 7,
-                        fontSize: ".72rem", color: "#ff8fa3",
+                        fontSize: "var(--fs-micro)", color: "#ff8fa3",
                       }}>
                         ⚠️ La programmation précédente a été refusée : {vm.progErreur}
                         <button
                           onClick={() => vm.setProgErreur(null)}
-                          style={{ ...cancelBtn(), marginLeft: 8, fontSize: ".66rem" }}
+                          style={{ ...cancelBtn(), marginLeft: 8, fontSize: "var(--fs-micro)" }}
                         >
                           ✕
                         </button>
                       </div>
                     )}
-                    <div style={{ fontSize: ".68rem", color: "rgba(255,255,255,.5)", marginBottom: 6 }}>
+                    <div style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.5)", marginBottom: 6 }}>
                       Sélectionne 3 cartes à programmer ({progSelection.length}/3) :
                     </div>
                     {/* TROIS PAR RANGÉE, QUOI QU'IL ARRIVE — Nikola, 2026-08-28 :
@@ -937,7 +937,7 @@ export default function BoardPanel({ vm }) {
                             accentColor={TITAN_COLORS[selectedTitan.id]?.accent}
                           />
                           {showCardEffects && (
-                            <div style={{ fontSize: ".68rem", lineHeight: 1.35, textAlign: "center", color: "rgba(255,255,255,.5)" }}>
+                            <div style={{ fontSize: "var(--fs-micro)", lineHeight: 1.35, textAlign: "center", color: "rgba(255,255,255,.5)" }}>
                               {CARD_EFFECT[cardId]}
                             </div>
                           )}
@@ -965,7 +965,7 @@ export default function BoardPanel({ vm }) {
                   <div style={{
                     background: "rgba(45,212,191,.15)",
                     border: "2.5px solid #2DD4BF",
-                    boxShadow: "0 0 0 3px rgba(45,212,191,.35), 0 4px 18px rgba(45,212,191,.35)",
+                    boxShadow: "0 12px 32px rgba(0,0,0,.55)",
                     borderRadius: 14, padding: "12px 16px", marginBottom: 10,
                   }}>
                     <div style={{
@@ -974,7 +974,7 @@ export default function BoardPanel({ vm }) {
                     }}>
                       <span aria-hidden="true">😤</span> GRAOUHHH — choisis un axe
                     </div>
-                    <p style={{ margin: "0 0 10px", fontSize: ".78rem", color: "rgba(255,255,255,.75)" }}>
+                    <p style={{ margin: "0 0 10px", fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.75)" }}>
                       Tous les Titans sur cet axe (jusqu'au premier bâtiment-mur) sont reculés, subissent Fatigue + DIL et +1 Bagarre chacun.
                     </p>
                     <div style={{
@@ -1003,7 +1003,7 @@ export default function BoardPanel({ vm }) {
                               background: isSel ? "#2DD4BF" : "rgba(255,255,255,.08)",
                               border: `2px solid ${isSel ? "#2DD4BF" : "rgba(255,255,255,.3)"}`,
                               borderRadius: 8, color: isSel ? "#04302c" : "#fff",
-                              fontWeight: 700, fontSize: ".72rem", cursor: "pointer",
+                              fontWeight: 700, fontSize: "var(--fs-micro)", cursor: "pointer",
                             }}
                           >
                             {d}
@@ -1151,7 +1151,7 @@ export default function BoardPanel({ vm }) {
                             />
                             {showCardEffects && (
                               <div style={{
-                                fontSize: ".68rem", lineHeight: 1.35, textAlign: "center",
+                                fontSize: "var(--fs-micro)", lineHeight: 1.35, textAlign: "center",
                                 color: canPlay ? "rgba(255,255,255,.55)" : "rgba(255,255,255,.3)",
                               }}>
                                 {CARD_EFFECT[cardId]}
@@ -1170,7 +1170,7 @@ export default function BoardPanel({ vm }) {
                                 style={{
                                   background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.2)",
                                   borderRadius: 6, color: "rgba(255,255,255,.6)", padding: "2px 8px",
-                                  fontSize: ".68rem", cursor: "pointer", marginTop: 1,
+                                  fontSize: "var(--fs-micro)", cursor: "pointer", marginTop: 1,
                                 }}
                               >
                                 🗑️ Défausser
@@ -1181,7 +1181,7 @@ export default function BoardPanel({ vm }) {
                                 n'est qu'un rappel compact de la direction déjà
                                 choisie, pas un second contrôle en doublon. */}
                             {canPlay && needsDir && (
-                              <div style={{ fontSize: ".68rem", color: "#7cf5e8" }}>
+                              <div style={{ fontSize: "var(--fs-micro)", color: "#7cf5e8" }}>
                                 Direction : {direction.label}
                               </div>
                             )}
@@ -1217,7 +1217,7 @@ export default function BoardPanel({ vm }) {
                       style={{
                         display: "flex", alignItems: "center", gap: 6, width: "100%",
                         background: "transparent", border: "none", padding: 0, cursor: "pointer",
-                        fontSize: ".68rem", color: "rgba(255,255,255,.35)",
+                        fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.35)",
                         textTransform: "uppercase", letterSpacing: ".04em",
                         marginBottom: showCardDetail ? 4 : 0, fontFamily: "inherit",
                       }}
@@ -1226,7 +1226,7 @@ export default function BoardPanel({ vm }) {
                       <span style={{
                         display: "inline-flex", alignItems: "center", justifyContent: "center",
                         width: 14, height: 14, borderRadius: "50%",
-                        border: "1px solid rgba(255,255,255,.3)", fontSize: ".68rem",
+                        border: "1px solid rgba(255,255,255,.3)", fontSize: "var(--fs-micro)",
                         color: "rgba(255,255,255,.5)", flexShrink: 0,
                       }}>?</span>
                       <span style={{ marginLeft: "auto" }}>{showCardDetail ? "▲" : "▼"}</span>
@@ -1236,25 +1236,25 @@ export default function BoardPanel({ vm }) {
                       {selectedTitan.playedThisManche.map((cardId) => (
                         <div key={`played-${cardId}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                           <CardVisual cardId={cardId} played selectable={false} size="normal" />
-                          <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.3)" }}>jouée</span>
+                          <span style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.3)" }}>jouée</span>
                         </div>
                       ))}
                       {(selectedTitan.discardedHidden || []).map((cardId, i) => (
                         <div key={`discard-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                           <CardVisual cardId={cardId} played selectable={false} size="normal" />
-                          <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.35)" }}>🗑️ défaussée</span>
+                          <span style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.35)" }}>🗑️ défaussée</span>
                         </div>
                       ))}
                       {selectedTitan.repos.map((entry, i) => (
                         <div key={`repos-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                           <CardVisual cardId={entry.cardId} inRepos selectable={false} size="normal" />
-                          <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.3)" }}>repos</span>
+                          <span style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.3)" }}>repos</span>
                         </div>
                       ))}
                       {selectedTitan.hand.map((cardId, idx) => (
                         <div key={`hand-${cardId}-${idx}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                           <CardVisual cardId={cardId} selectable={false} size="small" />
-                          <span style={{ fontSize: ".68rem", color: "rgba(255,255,255,.3)" }}>main</span>
+                          <span style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.3)" }}>main</span>
                         </div>
                       ))}
                     </div>
@@ -1267,7 +1267,7 @@ export default function BoardPanel({ vm }) {
             {/* Mode TEA */}
             {teaMode && (
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
-                <span style={{ fontSize: ".75rem", color: "#FB923C" }}>
+                <span style={{ fontSize: "var(--fs-micro)", color: "#FB923C" }}>
                   {teaTargets.size > 0
                     ? `Clique une cible (${teaTargets.size} disponible${teaTargets.size > 1 ? "s" : ""})`
                     : "Aucune cible accessible dans cette position"}
@@ -1304,13 +1304,13 @@ export default function BoardPanel({ vm }) {
                 background: T.plate, borderTop: `1px solid ${T.rule}`,
                 paddingTop: 7, paddingBottom: 3, marginBottom: -3,
               }}>
-                <span style={{ fontSize: ".75rem", color: "#FFD93D" }}>
+                <span style={{ fontSize: "var(--fs-micro)", color: "#FFD93D" }}>
                   {bbPath.length === 0
                     ? `Clique une case adjacente pour commencer ton chemin (budget ${bbMaxRange})`
                     : `Chemin : ${bbPath.join(" → ")} · ${bbBudgetUsed}/${bbMaxRange}`}
                 </span>
                 {bbDestIsBuilding && (
-                  <span style={{ fontSize: ".72rem", color: "#FF2E63" }}>
+                  <span style={{ fontSize: "var(--fs-micro)", color: "#FF2E63" }}>
                     Bâtiment encore debout — continue, tu ne peux pas y atterrir.
                   </span>
                 )}
@@ -1336,7 +1336,7 @@ export default function BoardPanel({ vm }) {
                     se vide. Il n'y a donc plus rien à « valider » — le compteur
                     dit où on en est, et « Terminer » ne sert qu'à clôturer une
                     carte qu'on ne peut plus finir faute de débris à portée. */}
-                <span style={{ fontSize: ".75rem", color: "#71dbff" }}>
+                <span style={{ fontSize: "var(--fs-micro)", color: "#71dbff" }}>
                   {jnpSelected.length}/{jnpNbToPick} ramassé{jnpSelected.length > 1 ? "s" : ""}{jnpNbToPick === 3 ? " (🏆 Lanterne Rouge)" : ""}
                 </span>
                 <span style={{ fontSize: ".7rem", color: "#8fa6b8" }}>

@@ -590,7 +590,7 @@ export default function PanneauDistant({
               Facultatif, et discret : neuf joueurs sur dix n'y touchent jamais. */}
           {ecran === "rejoindre" && (
             <details>
-              <summary style={{ ...label(T.faint, T.micro), cursor: "pointer" }}>
+              <summary style={{ ...prose(T.faint, T.micro), fontWeight: 700, cursor: "pointer" }}>
                 Tu es l&apos;hôte et tu reprends ta table ?
               </summary>
               <div style={{ marginTop: 8 }}>

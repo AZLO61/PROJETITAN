@@ -59,7 +59,7 @@ export default function PodiumFinal({ classement, titanDisplayName, titanModes, 
           background: T.screen,
           border: `2.5px solid ${T.you}`,
           borderRadius: T.rPlate,
-          boxShadow: `0 0 0 4px rgba(255,217,61,.22), 0 22px 60px rgba(0,0,0,.75)`,
+          boxShadow: "0 22px 60px rgba(0,0,0,.75)",
           padding: "22px 24px 20px",
           boxSizing: "border-box",
         }}

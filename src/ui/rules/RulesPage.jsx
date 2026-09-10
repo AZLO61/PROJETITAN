@@ -94,7 +94,7 @@ function Badge({ code, color }) {
     <span style={{
       display: "inline-block", padding: "2px 8px", borderRadius: T.rChip,
       background: color, color: C.ink, border: `2px solid ${T.edge}`,
-      fontWeight: 800, fontSize: ".72rem",
+      fontWeight: 800, fontSize: "var(--fs-micro)",
       letterSpacing: ".06em", verticalAlign: "middle",
     }}>
       {code}
@@ -147,10 +147,10 @@ export default function RulesPage({ onClose }) {
           style={{
             marginLeft: "auto", background: C.m1,
             border: `2px solid ${T.edge}`, borderRadius: T.rChip,
-            color: "#fffaee", padding: "10px 16px", cursor: "pointer",
+            color: C.ink, padding: "10px 16px", cursor: "pointer",
             boxShadow: `0 3px 0 ${T.edge}`,
             display: "inline-flex", alignItems: "center", gap: 7,
-            ...label("#fffaee", T.micro),
+            ...label(C.ink, T.micro),
           }}
         >
           <Icon name="close" size={14} />
@@ -230,11 +230,11 @@ function SectionEssentiel() {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))", gap: 12, marginTop: 16 }}>
         <Panel>
-          <div style={{ fontSize: ".72rem", color: C.m1, fontWeight: 700, marginBottom: 4 }}>🎯 VOTRE MISSION</div>
+          <div style={{ fontSize: "var(--fs-micro)", color: C.m1, fontWeight: 700, marginBottom: 4 }}>🎯 VOTRE MISSION</div>
           Raser la ville et écraser vos adversaires. Le plus haut score l'emporte, le reste s'effondre.
         </Panel>
         <Panel>
-          <div style={{ fontSize: ".72rem", color: C.m1, fontWeight: 700, marginBottom: 4 }}>⏱️ FORMAT</div>
+          <div style={{ fontSize: "var(--fs-micro)", color: C.m1, fontWeight: 700, marginBottom: 4 }}>⏱️ FORMAT</div>
           <strong style={{ color: C.y1 }}>3 à 4 joueurs</strong>, <strong style={{ color: C.y1 }}>1h30 à 2h</strong>, 10 ans et plus.
         </Panel>
       </div>
@@ -251,11 +251,11 @@ function SectionEssentiel() {
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
         <Panel style={{ flex: 1, minWidth: 160, textAlign: "center" }}>
           <div style={{ fontFamily: "'Titan One', sans-serif", fontSize: "1.8rem", color: C.y1 }}>6</div>
-          <div style={{ fontSize: ".78rem", color: C.muted }}>Manches à 3 joueurs</div>
+          <div style={{ fontSize: "var(--fs-micro)", color: C.muted }}>Manches à 3 joueurs</div>
         </Panel>
         <Panel style={{ flex: 1, minWidth: 160, textAlign: "center" }}>
           <div style={{ fontFamily: "'Titan One', sans-serif", fontSize: "1.8rem", color: C.y1 }}>4</div>
-          <div style={{ fontSize: ".78rem", color: C.muted }}>Manches à 4 joueurs</div>
+          <div style={{ fontSize: "var(--fs-micro)", color: C.muted }}>Manches à 4 joueurs</div>
         </Panel>
       </div>
     </>
@@ -373,22 +373,22 @@ function SectionCartes() {
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
               <div style={{ fontSize: "2rem", lineHeight: 1 }}>{c.icon}</div>
               <div>
-                <div style={{ fontSize: ".68rem", color: C.muted, letterSpacing: ".1em" }}>{c.num}</div>
+                <div style={{ fontSize: "var(--fs-micro)", color: C.muted, letterSpacing: ".1em" }}>{c.num}</div>
                 <div style={{ fontFamily: "'Bowlby One', sans-serif", fontSize: "1.05rem", color: c.couleur }}>
                   {c.nom}
                 </div>
               </div>
               <span style={{
                 marginLeft: "auto", background: "rgba(0,0,0,.3)", border: `1px solid ${c.couleur}`,
-                borderRadius: T.rChip, padding: "3px 12px", fontSize: ".76rem", color: C.cream, fontWeight: 700,
+                borderRadius: T.rChip, padding: "3px 12px", fontSize: "var(--fs-micro)", color: C.cream, fontWeight: 700,
               }}>
                 ⚡ Force {c.force}
               </span>
             </div>
 
-            <div style={{ fontSize: ".92rem", marginBottom: 10, lineHeight: 1.55 }}>{c.resume}</div>
+            <div style={{ fontSize: ".92rem", marginBottom: 10, lineHeight: 1.55, maxWidth: "64ch" }}>{c.resume}</div>
 
-            <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 5 }}>
+            <ul style={{ margin: 0, paddingLeft: 18, maxWidth: "64ch", display: "flex", flexDirection: "column", gap: 5 }}>
               {c.effets.map((e, i) => (
                 <li key={i} style={{ fontSize: ".86rem", color: C.muted, lineHeight: 1.5 }}>{e}</li>
               ))}
@@ -594,7 +594,7 @@ function SectionScoring() {
                 <div style={{ fontFamily: "'Bowlby One', sans-serif", fontSize: ".95rem", color: b.hex }}>
                   {b.type}
                 </div>
-                <div style={{ fontSize: ".76rem", color: C.muted }}>
+                <div style={{ fontSize: "var(--fs-micro)", color: C.muted }}>
                   {b.couleur} · {b.stock} blocs en jeu
                 </div>
               </div>
@@ -613,7 +613,7 @@ function SectionScoring() {
                   }}>
                     {pts}
                   </div>
-                  <div style={{ fontSize: ".66rem", color: C.muted, whiteSpace: "nowrap" }}>
+                  <div style={{ fontSize: "var(--fs-micro)", color: C.muted, whiteSpace: "nowrap" }}>
                     {b.paliersLabel ? b.paliersLabel[i] : `${i + 1} bloc${i > 0 ? "s" : ""}`}
                   </div>
                 </div>
@@ -637,7 +637,7 @@ function SectionScoring() {
               <div style={{ fontFamily: "'Bowlby One', sans-serif", fontSize: ".95rem", color: BAREME_VERT.hex }}>
                 {BAREME_VERT.type}
               </div>
-              <div style={{ fontSize: ".76rem", color: C.muted }}>
+              <div style={{ fontSize: "var(--fs-micro)", color: C.muted }}>
                 {BAREME_VERT.couleur} · {BAREME_VERT.stock} blocs en jeu
               </div>
             </div>

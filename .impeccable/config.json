@@ -1,0 +1,44 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "src/ui/icons.jsx"
+        ],
+        "createdAt": "2026-09-10T20:56:08.032Z",
+        "reason": "Agent: <img> a un src BASE_URL reel + onError -> repli dessine <Icon name=alert>; exception documentee dans DESIGN.md (seringue d'Adrenaline du livret)"
+      },
+      {
+        "rule": "repeating-stripes-gradient",
+        "value": "*",
+        "files": [
+          "src/index.css"
+        ],
+        "createdAt": "2026-09-10T20:56:08.082Z",
+        "reason": "Agent: lignes de balayage du tube CRT sur .titan-cabinet::after; DESIGN.md 'La borne' - 'la matiere du sujet, pas une trame decorative'"
+      },
+      {
+        "rule": "undersized-ui-text",
+        "value": "*",
+        "files": [
+          "src/ui/panels/RoundPanels.jsx"
+        ],
+        "createdAt": "2026-09-10T21:40:30.549Z",
+        "reason": "Agent: coordonnees de lignes/colonnes et pastilles de vol du mini-plateau de Scoring (cases 9-30px) ; micro-labels de data-viz, les agrandir casserait la grille miniature. Le texte courant du fichier est deja >=12.6px."
+      },
+      {
+        "rule": "low-contrast",
+        "value": "*",
+        "files": [
+          "src/ui/titans/TitanResourceBand.jsx"
+        ],
+        "createdAt": "2026-09-10T21:40:30.650Z",
+        "reason": "Agent: plaques des Titans non-actifs a 90% d'opacite = mecanique 'une seule chose en relief a l'ecran' de DESIGN.md ; contraste median 6-8:1, seuls les pixels d'anticrenelage passent sous 4.5."
+      }
+    ]
+  }
+}

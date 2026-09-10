@@ -24,7 +24,6 @@ export default function RepliBanner({ vm }) {
   if (!currentRepli) return null;
 
   const mainColor = "#fb923c";
-  const glow = "rgba(251,146,60,.45)";
   const quoi = currentRepli.titanId != null
     ? `${titanDisplayName ? titanDisplayName(currentRepli.titanId) : `Titan ${currentRepli.titanId}`}`
     : "Le débris";
@@ -33,7 +32,7 @@ export default function RepliBanner({ vm }) {
     <div style={{
       background: "rgba(251,146,60,.16)",
       border: `2.5px solid ${mainColor}`,
-      boxShadow: `0 0 0 3px ${glow}, 0 4px 18px ${glow}`,
+      boxShadow: "0 12px 32px rgba(0,0,0,.55)",
       borderRadius: 14, padding: "14px 18px", marginBottom: 14, fontSize: ".9rem",
     }}>
       <div style={{
@@ -55,7 +54,7 @@ export default function RepliBanner({ vm }) {
         s'arrête là. À toi de choisir où il se pose.
       </p>
 
-      <div style={{ fontSize: ".78rem", color: "#ffb877", fontWeight: 700 }}>
+      <div style={{ fontSize: "var(--fs-micro)", color: "#ffb877", fontWeight: 700 }}>
         👆 Clique une case orange sur le plateau ({currentRepli.cases.length} possibles)
       </div>
       <p style={{ margin: "6px 0 0", fontSize: ".7rem", color: "rgba(255,255,255,.5)" }}>
@@ -67,7 +66,7 @@ export default function RepliBanner({ vm }) {
           choix se fait — sans ça, personne ne pense à cliquer une case
           occupée, et la case de piste ADN reste sur la table. */}
       {currentRepli.titanId != null && (
-        <p style={{ margin: "6px 0 0", fontSize: ".72rem", color: "#ffb877" }}>
+        <p style={{ margin: "6px 0 0", fontSize: "var(--fs-micro)", color: "#ffb877" }}>
           💪 Une case occupée par un autre Titan est un choix valide : tu l'en chasses
           d'une case, et ça te rapporte 1 Bagarre.
         </p>

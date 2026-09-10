@@ -69,7 +69,7 @@ function StockItem({ color, label, remaining, total, alert, compact = false }) {
       <BlockIcon color={color} />
       <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 42 }}>
         <span style={{
-          fontSize: ".68rem", fontWeight: 700, lineHeight: 1,
+          fontSize: "var(--fs-micro)", fontWeight: 700, lineHeight: 1,
           color: alert ? "#ef4444" : "rgba(255,255,255,.8)",
           fontVariantNumeric: "tabular-nums",
         }}>

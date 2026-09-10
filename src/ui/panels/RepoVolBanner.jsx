@@ -42,7 +42,6 @@ export default function RepoVolBanner({ vm }) {
   if (phase !== "repos") return null;
 
   const mainColor = "#e32347";
-  const glowColor = "rgba(227,35,71,.45)";
   const detonateurId = titanState.detonateur;
   /* Le sens de la chaîne appartient au DÉTONATEUR. Les deux boutons étaient
      posés à l'écran quel que soit le propriétaire du jeton : c'était donc
@@ -94,7 +93,7 @@ export default function RepoVolBanner({ vm }) {
     <div style={{
       background: "rgba(227,35,71,.18)",
       border: `2.5px solid ${mainColor}`,
-      boxShadow: `0 0 0 3px ${glowColor}, 0 4px 18px ${glowColor}`,
+      boxShadow: "0 12px 32px rgba(0,0,0,.55)",
       borderRadius: 12, padding: "9px 13px", marginBottom: 9, fontSize: ".85rem",
     }}>
       <div style={{
@@ -157,13 +156,13 @@ export default function RepoVolBanner({ vm }) {
               la carte tombait dans une main ou dans une Zone Repos sans qu'on
               sache lequel des deux était attendu. Un mode qu'on ne peut pas
               relire est un mode dont on doute. */}
-          <p style={{ marginTop: 8, fontSize: ".74rem", color: T_MODE }}>
+          <p style={{ marginTop: 8, fontSize: "var(--fs-micro)", color: T_MODE }}>
             <strong>Règle de cette partie :</strong>{" "}
             {modeVolRepos === "repos"
               ? "Mise au repos — la carte tirée part en Zone Repos CHEZ SA VICTIME, personne ne la gagne."
               : "Emprunt — la carte tirée passe EN MAIN DU VOLEUR pour une Manche, puis retourne à son propriétaire."}
           </p>
-          <p style={{ marginTop: 6, fontSize: ".72rem", color: "rgba(255,255,255,.5)" }}>
+          <p style={{ marginTop: 6, fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.5)" }}>
             Dans les deux cas, chaque Titan vole à l'aveugle 1 carte à la cible que le sens lui désigne — posée face visible en Zone Repos (consultable en permanence dans le bandeau de chaque Titan, jusqu'à la Manche {mancheNumber + 2}).
           </p>
         </div>
@@ -187,7 +186,7 @@ export default function RepoVolBanner({ vm }) {
               fin du délai. Le bouton n'accélère rien d'autre : il pose les
               mêmes drapeaux que le minuteur, une seconde plus tôt. */}
           <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 7 }}>
-            <span style={{ fontSize: ".72rem", color: "rgba(255,255,255,.55)" }}>
+            <span style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.55)" }}>
               ⏳ La Manche suivante démarre dans quelques secondes — le temps de lire
               ce que chacun a perdu.
             </span>
@@ -214,7 +213,7 @@ export default function RepoVolBanner({ vm }) {
                   key={i}
                   style={{
                     display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
-                    fontSize: ".78rem", color: "rgba(255,255,255,.85)",
+                    fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.85)",
                     background: "rgba(0,0,0,.22)", borderRadius: 7, padding: "4px 8px",
                   }}
                 >

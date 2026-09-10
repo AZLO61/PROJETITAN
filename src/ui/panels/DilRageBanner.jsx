@@ -62,13 +62,12 @@ export default function DilRageBanner({ vm }) {
   if (!currentDecision) return null;
   const isRage = currentDecision.type === "RAGE";
   const mainColor = isRage ? "#e32347" : "#2D8DF5";
-  const glowColor = isRage ? "rgba(227,35,71,.45)" : "rgba(45,141,245,.45)";
 
   return (
     <div style={{
       background: isRage ? "rgba(227,35,71,.18)" : "rgba(45,141,245,.18)",
       border: `2.5px solid ${mainColor}`,
-      boxShadow: `0 0 0 3px ${glowColor}, 0 4px 18px ${glowColor}`,
+      boxShadow: "0 12px 32px rgba(0,0,0,.55)",
       borderRadius: 12, padding: "9px 13px", marginBottom: 9, fontSize: ".85rem",
     }}>
       {/* UNE SEULE LIGNE D'EN-TÊTE, ET ELLE PORTE TOUT — Nikola, 2026-08-28 :
@@ -101,7 +100,7 @@ export default function DilRageBanner({ vm }) {
           2026-08-18, « fais Titan par Titan pour Graouhhh »). */}
       {decisionQueue.length > 1 && (
         <div style={{
-          fontSize: ".72rem", color: "rgba(255,255,255,.65)", marginBottom: 8,
+          fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.65)", marginBottom: 8,
           display: "flex", alignItems: "center", gap: 6,
         }}>
           <span aria-hidden="true">🎯</span>
@@ -149,12 +148,12 @@ export default function DilRageBanner({ vm }) {
               })}
             </div>
             {options.includes(ADRENALINE_OPTION) && (
-              <p style={{ margin: "0 0 8px", fontSize: ".72rem", color: "rgba(255,255,255,.55)" }}>
+              <p style={{ margin: "0 0 8px", fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.55)" }}>
                 💉 L'Adrénaline est une option comme une autre : désignée et perdue, elle passe chez l'attaquant — elle ne tombe jamais au sol.
               </p>
             )}
             {options.includes(SOCLE_OPTION) && (
-              <p style={{ margin: "0 0 8px", fontSize: ".72rem", color: "rgba(255,255,255,.55)" }}>
+              <p style={{ margin: "0 0 8px", fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.55)" }}>
                 🗿 L'option Socle est tirée au sort : tu ne choisis pas lequel, et personne n'en connaît la valeur avant le tirage.
               </p>
             )}
@@ -174,7 +173,7 @@ export default function DilRageBanner({ vm }) {
             <p style={{ margin: "0 0 6px", color: "rgba(255,255,255,.75)", fontSize: ".8rem" }}>
               Laquelle perdre ?
               {currentDecision.autoAttackerPick && (
-                <span style={{ color: "rgba(255,255,255,.55)", fontSize: ".78rem" }}>
+                <span style={{ color: "rgba(255,255,255,.55)", fontSize: "var(--fs-micro)" }}>
                   {" "}— l'attaquant n'avait pas le choix, ce sont les 2 seules options de ton Repaire.
                 </span>
               )}

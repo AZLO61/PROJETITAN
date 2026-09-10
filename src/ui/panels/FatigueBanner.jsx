@@ -26,7 +26,7 @@ export default function FatigueBanner({ vm }) {
     <div style={{
       background: "rgba(168,85,247,.16)",
       border: `2.5px solid ${T.tele}`,
-      boxShadow: `0 0 0 3px rgba(168,85,247,.3), 0 4px 18px rgba(168,85,247,.3)`,
+      boxShadow: "0 12px 32px rgba(0,0,0,.55)",
       borderRadius: 12, padding: "9px 13px", marginBottom: 9, fontSize: ".85rem",
     }}>
       <div style={{

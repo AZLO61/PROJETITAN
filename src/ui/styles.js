@@ -38,7 +38,13 @@ function encrePour(couleur) {
   const b = parseInt(h.slice(5, 7), 16) / 255;
   const lin = (c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  return L > 0.42 ? "#120d02" : "#fffaee";
+  /* Le seuil vit au point d'équilibre : sous une luminance de fond d'environ
+     0.18, l'encre blanche donne le meilleur contraste ; au-dessus, l'encre
+     sombre. L'ancien seuil à 0.42 renvoyait du blanc sur le rouge #f44336
+     (3.7:1), le violet et le rose des Titans (2.6:1) — sous le plancher AA.
+     Toutes les couleurs de signal, de Titan et de bloc du jeu sont au-dessus
+     de 0.18 : elles prennent donc l'encre sombre, qui passe AA sur chacune. */
+  return L > 0.18 ? "#120d02" : "#fffaee";
 }
 
 const base = {

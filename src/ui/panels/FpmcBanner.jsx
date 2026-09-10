@@ -41,7 +41,7 @@ export default function FpmcBanner({ vm }) {
   return (
     <div style={{
       background: "rgba(244,67,54,.1)", border: "1px solid rgba(244,67,54,.4)",
-      borderRadius: 12, padding: "10px 12px", marginBottom: 12, fontSize: ".78rem",
+      borderRadius: 12, padding: "10px 12px", marginBottom: 12, fontSize: "var(--fs-micro)",
     }}>
       <div style={{ fontFamily: "'Bowlby One', sans-serif", color: "#F44336", marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
         05 · Faut Pas Me Chauffer — <TitanTag id={fpmcAttackerId} titanDisplayName={titanDisplayName} /> (somme {fpmcAttackerBase})
@@ -51,7 +51,7 @@ export default function FpmcBanner({ vm }) {
           <span>Choisis la cible :</span>
           {fpmcPendingIds.map((id) => (
             <button key={id} onClick={() => pickFpmcTarget(id)}
-              style={{ background: "rgba(244,67,54,.2)", border: "1px solid #F44336", borderRadius: 6, color: "#fff", padding: "4px 10px", fontSize: ".74rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+              style={{ background: "rgba(244,67,54,.2)", border: "1px solid #F44336", borderRadius: 6, color: "#fff", padding: "4px 10px", fontSize: "var(--fs-micro)", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
               <TitanTag id={id} titanDisplayName={titanDisplayName} />
             </button>
           ))}
@@ -63,13 +63,13 @@ export default function FpmcBanner({ vm }) {
             <TitanTag id={fpmcCurrent.defenderId} titanDisplayName={titanDisplayName} /> ({fpmcCurrent.defenderBase})
           </span>
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: ".74rem" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "var(--fs-micro)" }}>
               Mise <TitanTag id={fpmcAttackerId} titanDisplayName={titanDisplayName} /> :
               <input type="number" min="0" max={adrenalineDe(fpmcAttackerId)}
                 value={fpmcCurrent.attackerBid} onChange={(e) => updateFpmcBid("attackerBid", e.target.value)}
                 style={{ width: 44, background: "rgba(255,255,255,.08)", color: "#fffaee", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "2px 5px" }} />
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: ".74rem" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "var(--fs-micro)" }}>
               Mise <TitanTag id={fpmcCurrent.defenderId} titanDisplayName={titanDisplayName} /> :
               <input type="number" min="0" max={adrenalineDe(fpmcCurrent.defenderId)}
                 value={fpmcCurrent.defenderBid} onChange={(e) => updateFpmcBid("defenderBid", e.target.value)}

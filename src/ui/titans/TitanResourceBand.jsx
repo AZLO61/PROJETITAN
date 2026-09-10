@@ -153,7 +153,7 @@ function Piste({ icone, nom, valeur, meilleur, couleur, tour }) {
           ))
         )}
         {reste > 0 && (
-          <span style={{ ...readout("0.56rem", couleur), marginLeft: 3 }}>+{reste}</span>
+          <span style={{ ...readout(T.micro, couleur), marginLeft: 3 }}>+{reste}</span>
         )}
       </span>
       {/* Ce que l'action VIENT de rapporter, à côté du total. Fond plein pour
@@ -178,7 +178,7 @@ function Piste({ icone, nom, valeur, meilleur, couleur, tour }) {
           piste, les autres l'encre ordinaire. */}
       <span
         style={{
-          ...readout("0.62rem", valeur === 0 ? T.faint : estMeilleur ? couleur : T.text),
+          ...readout(T.micro, valeur === 0 ? T.faint : estMeilleur ? couleur : T.text),
           minWidth: 16, textAlign: "right",
         }}
       >
@@ -336,7 +336,7 @@ export default function TitanResourceBand({
                   ? `0 0 0 1px ${tc.accent}55`
                   : "none",
               transform: isActive ? "translateY(-4px)" : "none",
-              opacity: isActive || isSelected ? 1 : 0.82,
+              opacity: isActive || isSelected ? 1 : 0.9,
               transition: `transform 260ms ${T.easeOut}, box-shadow 260ms ${T.easeOut}, opacity 200ms linear, border-color 160ms linear`,
             }}
           >
@@ -423,7 +423,7 @@ export default function TitanResourceBand({
                 }}
               >
                 <AdrenalineIcon size={16} />
-                <span style={readout("0.78rem")}>{t.adrenaline || 0}</span>
+                <span style={readout("var(--fs-micro)")}>{t.adrenaline || 0}</span>
               </div>
             </div>
 
@@ -437,7 +437,7 @@ export default function TitanResourceBand({
                     style={{ display: "flex", alignItems: "center", gap: 3, cursor: "help" }}
                   >
                     <BlockIcon color={c} size={19} />
-                    <span style={readout("0.62rem", T.text)}>{counts[c]}</span>
+                    <span style={readout(T.micro, T.text)}>{counts[c]}</span>
                   </div>
                 ) : null
               )}
@@ -451,11 +451,11 @@ export default function TitanResourceBand({
                   style={{ display: "flex", alignItems: "center", gap: 3, cursor: "help", color: T.dim }}
                 >
                   <Icon name="socle" size={17} />
-                  <span style={readout("0.62rem", T.text)}>{t.socles.length}</span>
+                  <span style={readout(T.micro, T.text)}>{t.socles.length}</span>
                 </div>
               )}
               {t.repaire.length === 0 && (t.socles || []).length === 0 && (
-                <span style={label(T.faint, "0.68rem")}>Repaire vide</span>
+                <span style={label(T.faint)}>Repaire vide</span>
               )}
             </div>
 
@@ -640,7 +640,7 @@ export default function TitanResourceBand({
                     display: "inline-flex", alignItems: "center", gap: 3,
                     border: `1px solid ${T.go}`, color: T.go,
                     padding: "1px 5px", cursor: "help",
-                    ...label(T.go, "0.62rem"),
+                    ...label(T.go),
                   }}
                 >
                   <RainbowIcon size={14} /> +5
@@ -651,7 +651,7 @@ export default function TitanResourceBand({
               {estIA && profilsReveles[t.id] && profileLabel && (
                 <span
                   title="Profil de cette IA : sa force et son tempérament"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 3, color: T.tele, ...label(T.tele, "0.62rem") }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 3, color: T.tele, ...label(T.tele) }}
                 >
                   <Icon name="bot" size={12} /> {profileLabel(titanProfiles[t.id])}
                 </span>
@@ -679,8 +679,7 @@ export default function TitanResourceBand({
                       padding: "3px 9px",
                       cursor: canValidatePhase && canValidatePhase(t.id) ? "pointer" : "not-allowed",
                       ...label(
-                        canValidatePhase && canValidatePhase(t.id) ? "#00311e" : T.faint,
-                        "0.62rem"
+                        canValidatePhase && canValidatePhase(t.id) ? "#00311e" : T.faint
                       ),
                     }}
                   >

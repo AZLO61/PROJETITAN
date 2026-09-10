@@ -71,8 +71,13 @@
      un appareil qu'on lit à bout de bras, posé au milieu d'une table. Les
      quatre frictions signalées par l'auteur sont toutes des échecs de
      lisibilité, et celui-ci en était la cause commune. Le plancher est
-     maintenant 12,5px, et le corps courant est à 15–16px. */
-  --fs-micro: 0.78rem;
+     maintenant 12,5px, et le corps courant est à 15–16px.
+
+     `html` est réglé à .9375rem (15px) plus bas : le `rem` racine vaut donc
+     15px, pas 16. .78rem y rendait 11,7px — sous le plancher affiché, et
+     tout ce qui pointait dessus était signalé comme texte trop petit. La
+     valeur est portée à .84rem pour retrouver 12,5px effectifs. */
+  --fs-micro: 0.84rem;
   --fs-small: 0.875rem;
   --fs-body: 0.9375rem;
   --fs-lead: 1.0625rem;
@@ -325,7 +330,11 @@ button {
    tablette et PC, comptent autant l'une que l'autre). */
 @media (max-width: 480px) {
   .titan-cabinet {
-    padding: var(--sp-2) var(--sp-2) !important;
+    /* Rembourrage horizontal à 16px : sous cette largeur, le rembourrage à
+       8px laissait les paragraphes toucher le bord du tube. Le vertical
+       reste serré — chaque bande prise en haut est une bande de plateau
+       perdue en bas. */
+    padding: var(--sp-2) var(--sp-4) !important;
   }
 }
 

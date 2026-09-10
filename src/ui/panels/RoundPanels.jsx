@@ -462,7 +462,7 @@ export default function RoundPanels({ vm }) {
       {show3D && (
         <div style={{ marginBottom: 14 }}>
           <Suspense fallback={
-            <div style={{ padding: "28px 0", textAlign: "center", fontSize: ".68rem", color: "rgba(255,255,255,.35)" }}>
+            <div style={{ padding: "28px 0", textAlign: "center", fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.35)" }}>
               Chargement de la vue 3D…
             </div>
           }>
@@ -559,7 +559,7 @@ export default function RoundPanels({ vm }) {
               })}
             </span>
           </div>
-          <div style={{ marginTop: 6, color: "rgba(255,255,255,.6)", fontSize: ".74rem" }}>
+          <div style={{ marginTop: 6, color: "rgba(255,255,255,.6)", fontSize: "var(--fs-micro)" }}>
             Un débris qui tombe sur un Titan le pousse de {ecroulement.energie} case(s) et te rapporte la Bagarre.
             {ecroulementCells.length > 0 && ecroulement.choix.length < ecroulement.blocs.length
               && " Chaque clic pose le débris et applique ses effets tout de suite — les cases suivantes se recalculent sur le plateau qui en résulte. Les cases déjà servies ne sont proposées que s'il n'en reste plus de vierge."}
@@ -742,7 +742,7 @@ export default function RoundPanels({ vm }) {
         {/* Ligne des numéros de colonne */}
         <div /><div />
         {[1,2,3,4,5,6,7,8,9].map((c) => (
-          <div key={c} style={{ display: "grid", placeItems: "center", ...readout("0.62rem", T.dim) }}>{c}</div>
+          <div key={c} style={{ display: "grid", placeItems: "center", ...readout(T.micro, T.dim) }}>{c}</div>
         ))}
         <div />
         {/* Gouttière haute : attente au-dessus de la ligne A */}
@@ -751,7 +751,7 @@ export default function RoundPanels({ vm }) {
         <div />
         {ROWS.map((r) => (
           <React.Fragment key={r}>
-            <div style={{ display: "grid", placeItems: "center", ...readout("0.62rem", T.dim) }}>{r}</div>
+            <div style={{ display: "grid", placeItems: "center", ...readout(T.micro, T.dim) }}>{r}</div>
             <Gouttiere cle={`${r}1`} zone="gauche" />
             {[1,2,3,4,5,6,7,8,9].map((c) => {
               const key = r + c;
@@ -1053,7 +1053,7 @@ export default function RoundPanels({ vm }) {
                   }}
                 >
                   {isBldg && cellData && cellData.blocks.length > 0 && (
-                    <span style={{ position: "absolute", bottom: 2, right: 3, fontSize: ".68rem", fontWeight: 700, color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,.7)", whiteSpace: "nowrap" }}>
+                    <span style={{ position: "absolute", bottom: 2, right: 3, fontSize: "var(--fs-micro)", fontWeight: 700, color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,.7)", whiteSpace: "nowrap" }}>
                       {cellData.socle !== cellData.blocks.length
                         ? `${cellData.socle}/${cellData.blocks.length}`
                         : cellData.blocks.length}
@@ -1067,7 +1067,7 @@ export default function RoundPanels({ vm }) {
                       téléporteurs là où le moteur n'en comptait plus qu'un
                       (bug remonté par Nikola le 2026-08-17). */}
                   {cellData && cellData.isTeleporter && cellData.blocks.length > 0 && (
-                    <span title={`${key} — Téléporteur actif`} style={{ position: "absolute", top: 1, left: 2, fontSize: ".68rem" }}>🌀</span>
+                    <span title={`${key} — Téléporteur actif`} style={{ position: "absolute", top: 1, left: 2, fontSize: "var(--fs-micro)" }}>🌀</span>
                   )}
                   {moveIsTeleport && (
                     <span style={{ position: "absolute", top: 1, right: 2, fontSize: "8px", opacity: .8 }}>🌀</span>
@@ -1081,7 +1081,7 @@ export default function RoundPanels({ vm }) {
                         background: "#16E08C", color: "#04240f",
                         fontSize: "9px", fontWeight: 900, lineHeight: "13px",
                         textAlign: "center", padding: "0 2px",
-                        boxShadow: "0 0 4px rgba(22,224,140,.8)",
+                        boxShadow: "none",
                       }}
                     >
                       {bbNumeroSaut}
@@ -1164,7 +1164,7 @@ export default function RoundPanels({ vm }) {
                               display: "flex", alignItems: "center", gap: 3, lineHeight: 1,
                             }}
                           >
-                            <span style={{ fontSize: ".68rem", fontWeight: 700, color: "#FFD93D", lineHeight: 1 }}>
+                            <span style={{ fontSize: "var(--fs-micro)", fontWeight: 700, color: "#FFD93D", lineHeight: 1 }}>
                               {colorBlocks.length}
                             </span>
                           </button>
@@ -1204,7 +1204,7 @@ export default function RoundPanels({ vm }) {
                             <img src={`${import.meta.env.BASE_URL}assets/rules/socle.png`}
                               alt="" aria-hidden="true"
                               style={{ width: 11, height: 11, objectFit: "contain", filter: "brightness(1.3)", display: "block" }} />
-                            <span style={{ fontSize: ".68rem", fontWeight: 700, color: "#fff", lineHeight: 1 }}>
+                            <span style={{ fontSize: "var(--fs-micro)", fontWeight: 700, color: "#fff", lineHeight: 1 }}>
                               {stack.filter(isSocleMarker).map(socleValue).join("+")}
                             </span>
                           </div>
@@ -1426,7 +1426,7 @@ export default function RoundPanels({ vm }) {
               boxShadow: "0 10px 30px rgba(0,0,0,.7)", pointerEvents: "none",
             }}
           >
-            <div style={{ fontSize: ".66rem", color: "#FFD93D", fontWeight: 700, marginBottom: 5, whiteSpace: "nowrap", textAlign: "center" }}>
+            <div style={{ fontSize: "var(--fs-micro)", color: "#FFD93D", fontWeight: 700, marginBottom: 5, whiteSpace: "nowrap", textAlign: "center" }}>
               {titre}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1435,7 +1435,7 @@ export default function RoundPanels({ vm }) {
                   {isSocleMarker(c)
                     ? <Icon name="socle" size={20} style={{ color: "#FFD93D" }} />
                     : <BlockIcon color={c} size={20} />}
-                  <span style={{ fontSize: ".66rem", color: "rgba(255,255,255,.7)" }}>
+                  <span style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.7)" }}>
                     {isSocleMarker(c) ? `Socle · valeur ${socleValue(c)}` : BLOCK_NAME[c]}
                   </span>
                 </div>
@@ -1460,7 +1460,7 @@ export default function RoundPanels({ vm }) {
             onClick={(e) => e.stopPropagation()}
             style={{
               background: "rgba(20,8,35,.97)", border: "2.5px solid #16E08C",
-              boxShadow: "0 0 0 3px rgba(22,224,140,.35), 0 4px 18px rgba(22,224,140,.35)",
+              boxShadow: "0 12px 32px rgba(0,0,0,.55)",
               borderRadius: 14, padding: "16px 20px", maxWidth: 280,
             }}
           >
@@ -1496,7 +1496,7 @@ export default function RoundPanels({ vm }) {
                 </button>
               ))}
             </div>
-            <button onClick={() => setRecupChoiceCell(null)} style={{ ...cancelBtn(), marginTop: 10, width: "100%", fontSize: ".72rem" }}>
+            <button onClick={() => setRecupChoiceCell(null)} style={{ ...cancelBtn(), marginTop: 10, width: "100%", fontSize: "var(--fs-micro)" }}>
               ✕ Annuler
             </button>
           </div>

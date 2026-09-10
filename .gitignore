@@ -166,3 +166,6 @@ scripts/tmp/
 
 # Configuration de lancement locale de l'apercu navigateur.
 .claude/
+
+# snapshots de vues pour le scan anti-pattern impeccable (regenerables)
+.impeccable/scan/

@@ -123,7 +123,7 @@ function EcranManche() {
         {phases.map((p, i) => (
           <Plaque key={p.nom} accent={p.ton}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-              <span style={{ ...readout("0.72rem", "#0f0826"), background: p.ton, width: 22, height: 22, display: "grid", placeItems: "center", flexShrink: 0 }}>
+              <span style={{ ...readout(T.micro, "#0f0826"), background: p.ton, width: 22, height: 22, display: "grid", placeItems: "center", flexShrink: 0 }}>
                 {i + 1}
               </span>
               <Icon name={p.icone} size={15} style={{ color: p.ton }} />
@@ -413,7 +413,7 @@ export default function TutorielPage({ onClose, onOuvrirRegles = null }) {
                 width: i === etape ? 22 : 9, height: 9, borderRadius: 99,
                 background: i === etape ? T.you : T.rule,
                 border: "none", padding: 0, cursor: "pointer", flexShrink: 0,
-                transition: "width 140ms linear, background 140ms linear",
+                transition: "background 140ms linear",
               }}
             />
           ))}

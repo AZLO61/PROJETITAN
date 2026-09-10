@@ -30,7 +30,7 @@ export default function PlacementBanner({ vm }) {
     <div style={{
       background: "rgba(255,217,61,.16)",
       border: `2.5px solid ${T.you}`,
-      boxShadow: `0 0 0 3px rgba(255,217,61,.35), 0 4px 18px rgba(255,217,61,.35)`,
+      boxShadow: "0 12px 32px rgba(0,0,0,.55)",
       borderRadius: 12, padding: "9px 13px", marginBottom: 9, fontSize: ".85rem",
     }}>
       {/* Compacté le 2026-08-28 : « le panneau est trop gros, ça décale trop le

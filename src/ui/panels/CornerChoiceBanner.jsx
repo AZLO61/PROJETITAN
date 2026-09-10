@@ -19,13 +19,12 @@ export default function CornerChoiceBanner({ vm }) {
   if (!cornerChoice) return null;
 
   const mainColor = "#71dbff";
-  const glow = "rgba(113,219,255,.45)";
 
   return (
     <div style={{
       background: "rgba(113,219,255,.14)",
       border: `2.5px solid ${mainColor}`,
-      boxShadow: `0 0 0 3px ${glow}, 0 4px 18px ${glow}`,
+      boxShadow: "0 12px 32px rgba(0,0,0,.55)",
       borderRadius: 14, padding: "14px 18px", marginBottom: 14, fontSize: ".9rem",
     }}>
       <div style={{

@@ -72,7 +72,7 @@ export default function Superposition({ titre, icone = null, onClose, largeur = 
           <h2 style={{ ...marquee(T.h3, T.you), flex: 1 }}>
             {titre.split(" · graine ")[0]}
             {titre.includes(" · graine ") && (
-              <span style={{ ...readout("0.62rem", T.faint), marginLeft: 9, WebkitTextStroke: "0", letterSpacing: 0 }}>
+              <span style={{ ...readout(T.micro, T.faint), marginLeft: 9, WebkitTextStroke: "0", letterSpacing: 0 }}>
                 graine {titre.split(" · graine ")[1]}
               </span>
             )}

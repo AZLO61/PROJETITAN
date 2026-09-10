@@ -306,7 +306,7 @@ export default function SetupScreen({
                   }}
                 >
                   <span style={readout("1.3rem", on ? "#1a1400" : T.text)}>{n}</span>
-                  <span style={label(on ? "#1a1400" : T.faint, "0.68rem")}>
+                  <span style={label(on ? "#1a1400" : T.faint)}>
                     {manchesMax(n)} Manches
                   </span>
                 </button>
@@ -407,7 +407,7 @@ export default function SetupScreen({
                       padding: "7px 13px",
                       cursor: "pointer",
                       flexShrink: 0,
-                      ...label(mode === "ia" ? "#0f0826" : T.faint, "0.68rem"),
+                      ...label(mode === "ia" ? "#0f0826" : T.faint),
                     }}
                   >
                     <Icon name="bot" size={13} />
@@ -489,7 +489,7 @@ export default function SetupScreen({
                           width: i === index ? 22 : 9, height: 9, borderRadius: 99,
                           background: i === index ? n.ton : T.rule,
                           border: "none", padding: 0, cursor: "pointer",
-                          transition: "width 140ms linear, background 140ms linear",
+                          transition: "background 140ms linear",
                         }}
                       />
                     ))}

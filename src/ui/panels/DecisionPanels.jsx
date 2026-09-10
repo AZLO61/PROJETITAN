@@ -434,7 +434,7 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
               placement n'était plus jamais recalculé. */}
           {gameOver && (
           <div style={{ marginBottom: 12 }}>
-            <div style={{ color: "#22C55E", fontWeight: 700, marginBottom: 6, fontSize: ".76rem" }}>
+            <div style={{ color: "#22C55E", fontWeight: 700, marginBottom: 6, fontSize: "var(--fs-micro)" }}>
               Placement secret des Blocs Verts
             </div>
             {/* PERSONNE NE VOIT LE CHOIX DES AUTRES — demande de Nikola du
@@ -472,14 +472,14 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
                 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     <TitanIcon titanId={t.id} size={18} variant="plain" />
-                    <strong style={{ color: "#FFD93D", fontSize: ".74rem" }}>{titanDisplayName(t.id)}</strong>
+                    <strong style={{ color: "#FFD93D", fontSize: "var(--fs-micro)" }}>{titanDisplayName(t.id)}</strong>
                     <span style={{ fontSize: ".7rem", color: "rgba(255,255,255,.5)" }}>
                       {vertCount} Vert{vertCount > 1 ? "s" : ""}
                     </span>
                     {fini && scoresReveles ? (
                       // Révélation : le détail n'apparaît qu'ici, une fois
                       // que plus personne ne peut s'en servir pour décider.
-                      <span style={{ fontSize: ".72rem", color: "rgba(255,255,255,.7)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginLeft: "auto" }}>
+                      <span style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.7)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginLeft: "auto" }}>
                         {(vertAssignments[t.id] || []).filter(Boolean).map((a, i) => (
                           <span key={i} style={{
                             background: "rgba(34,197,94,.16)", border: "1px solid rgba(34,197,94,.45)",
@@ -490,11 +490,11 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
                         ))}
                       </span>
                     ) : fini ? (
-                      <span style={{ fontSize: ".72rem", color: "#7ef2a8", fontWeight: 700, marginLeft: "auto" }}>
+                      <span style={{ fontSize: "var(--fs-micro)", color: "#7ef2a8", fontWeight: 700, marginLeft: "auto" }}>
                         {estIA ? "🤖 placés, secret" : "✔ placés, secret"}
                       </span>
                     ) : estIA ? (
-                      <span style={{ fontSize: ".72rem", color: "rgba(255,255,255,.5)", marginLeft: "auto" }}>en cours…</span>
+                      <span style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.5)", marginLeft: "auto" }}>en cours…</span>
                     ) : ouvert ? (
                       <button
                         onClick={() => { validerVerts(t.id); setPlaceurOuvert(null); }}
@@ -578,10 +578,10 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
               décompte dit alors la même chose, en mieux. */}
           {gameOver && vertsRestants > 0 && (
             <div style={{ overflowX: "auto", marginBottom: 12 }}>
-              <div style={{ color: "rgba(255,255,255,.6)", fontSize: ".72rem", marginBottom: 5 }}>
+              <div style={{ color: "rgba(255,255,255,.6)", fontSize: "var(--fs-micro)", marginBottom: 5 }}>
                 Repaires, à cet instant. Survole une case pour savoir ce que rapporterait un bloc de plus.
               </div>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".74rem" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--fs-micro)" }}>
                 <thead>
                   <tr style={{ color: "#FFD93D" }}>
                     <th style={{ padding: "3px 8px", textAlign: "left" }}></th>
@@ -700,7 +700,7 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
                   Chaque case porte donc le NOMBRE de blocs comptés (Vert
                   affecté compris) et le score qu'il produit. Un compte gonflé
                   par un Vert est signalé, pour qu'on voie d'où vient l'écart. */}
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".74rem" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "var(--fs-micro)" }}>
                 <thead>
                   <tr style={{ color: "#FFD93D" }}>
                     <th style={{ padding: "3px 8px", textAlign: "left" }}></th>
@@ -792,11 +792,11 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
               <div style={{
                 marginTop: 12, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,.12)",
               }}>
-                <div style={{ color: "#a855f7", fontWeight: 700, marginBottom: 6, fontSize: ".76rem" }}>
+                <div style={{ color: "#a855f7", fontWeight: 700, marginBottom: 6, fontSize: "var(--fs-micro)" }}>
                   🤖 Qui étaient les IA
                 </div>
                 {iaIds.map((id) => (
-                  <div key={id} style={{ fontSize: ".74rem", marginBottom: 3 }}>
+                  <div key={id} style={{ fontSize: "var(--fs-micro)", marginBottom: 3 }}>
                     <strong style={{ color: "#FFD93D" }}>{titanDisplayName(id)}</strong>
                     <span style={{ color: "rgba(255,255,255,.6)" }}> — </span>
                     <span style={{ color: "#a855f7", fontWeight: 700 }}>{profileLabel(titanProfiles[id])}</span>
@@ -1067,7 +1067,7 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
               <button
                 onClick={() => setShowLog(true)}
                 style={{
-                  ...label(T.faint, "0.68rem"),
+                  ...label(T.faint),
                   background: "none", border: "none", padding: "6px 0",
                   cursor: "pointer", width: "100%", textAlign: "left",
                 }}
