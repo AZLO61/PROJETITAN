@@ -164,7 +164,7 @@ function Piste({ icone, nom, valeur, meilleur, couleur, tour }) {
           role="status"
           aria-label={`plus ${gain} en ${nom}`}
           style={{
-            ...readout("0.6rem", "#0b0b0b"),
+            ...readout(T.micro, "#0b0b0b"),
             background: couleur, borderRadius: 3, padding: "0 3px",
             // Une apparition, pas une disparition : la pastille reste ensuite
             // en place jusqu'au Titan suivant.
@@ -336,8 +336,12 @@ export default function TitanResourceBand({
                   ? `0 0 0 1px ${tc.accent}55`
                   : "none",
               transform: isActive ? "translateY(-4px)" : "none",
-              opacity: isActive || isSelected ? 1 : 0.9,
-              transition: `transform 260ms ${T.easeOut}, box-shadow 260ms ${T.easeOut}, opacity 200ms linear, border-color 160ms linear`,
+              /* Aucune opacité ni filtre sur les plaques inactives : l'un
+                 comme l'autre fait tomber le contraste du nom sous le
+                 plancher AA. Le relief de la plaque active est déjà porté,
+                 seul, par la translation de 4 px et l'ombre portée — les
+                 autres restent simplement à plat, sans ombre. */
+              transition: `transform 260ms ${T.easeOut}, box-shadow 260ms ${T.easeOut}, border-color 160ms linear`,
             }}
           >
             {/* Le liseré de couleur en tête de plaque : c'est le repère de
@@ -378,7 +382,7 @@ export default function TitanResourceBand({
                           : `, après ${ordreInitiative.slice(0, rangDe(t.id) - 1).map((x) => (titanDisplayName ? titanDisplayName(x) : `Titan ${x}`)).join(", ")}.`)
                       }
                       style={{
-                        ...readout("0.6rem", detonateurId === t.id ? T.warn : T.faint),
+                        ...readout(T.micro, detonateurId === t.id ? T.warn : T.faint),
                         border: `1px solid ${detonateurId === t.id ? T.warn : T.rule}`,
                         padding: "0 4px",
                         cursor: "help",
@@ -409,7 +413,7 @@ export default function TitanResourceBand({
                       <Icon name="detonator" size={13} />
                     </span>
                   )}
-                  <span style={readout("0.6rem", T.faint)}>{t.cell}</span>
+                  <span style={readout(T.micro, T.faint)}>{t.cell}</span>
                 </div>
               </div>
               {/* Adrénaline : la réserve qu'on dépense, donc à droite, là où
@@ -624,7 +628,7 @@ export default function TitanResourceBand({
                     style={{ display: "inline-flex", alignItems: "center", gap: 3, color: T.tele, cursor: "help" }}
                   >
                     <Icon name="lock" size={12} />
-                    <span style={readout("0.6rem", T.tele)}>{t.repos.length}</span>
+                    <span style={readout(T.micro, T.tele)}>{t.repos.length}</span>
                   </span>
                 );
               })()}

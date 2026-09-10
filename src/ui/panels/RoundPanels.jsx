@@ -477,7 +477,7 @@ export default function RoundPanels({ vm }) {
               onCellClick={clicCase}
             />
           </Suspense>
-          <div style={{ fontSize: ".7rem", color: "rgba(255,255,255,.45)", textAlign: "center", marginTop: 6 }}>
+          <div style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.45)", textAlign: "center", marginTop: 6 }}>
             Clique une case pour jouer · glisse pour tourner · molette pour zoomer
           </div>
         </div>
@@ -550,7 +550,7 @@ export default function RoundPanels({ vm }) {
                       ? <Icon name="socle" size={17} style={{ color: "#ffb877" }} />
                       : <BlockIcon color={bloc} size={17} />}
                     {place && (
-                      <span style={readout("0.6rem", "rgba(255,255,255,.55)")}>
+                      <span style={readout(T.micro, "rgba(255,255,255,.55)")}>
                         {ecroulement.choix[i]}
                       </span>
                     )}
@@ -1467,7 +1467,7 @@ export default function RoundPanels({ vm }) {
             <div style={{ fontFamily: "'Bowlby One', sans-serif", color: "#7CF5C8", fontSize: ".95rem", marginBottom: 10 }}>
               🤲 Case {recupChoiceCell.cle} — que ramasser ?
               {recupChoiceCell.mode === "jnp" && (
-                <span style={{ display: "block", fontFamily: T.ui, fontSize: ".7rem", fontWeight: 600, color: "rgba(255,255,255,.6)", marginTop: 4 }}>
+                <span style={{ display: "block", fontFamily: T.ui, fontSize: "var(--fs-micro)", fontWeight: 600, color: "rgba(255,255,255,.6)", marginTop: 4 }}>
                   Je Ne Partage Pas — élément {jnpSelected.length + 1} sur {vm.jnpNbToPick}
                 </span>
               )}

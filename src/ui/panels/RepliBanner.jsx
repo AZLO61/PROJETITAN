@@ -57,7 +57,7 @@ export default function RepliBanner({ vm }) {
       <div style={{ fontSize: "var(--fs-micro)", color: "#ffb877", fontWeight: 700 }}>
         👆 Clique une case orange sur le plateau ({currentRepli.cases.length} possibles)
       </div>
-      <p style={{ margin: "6px 0 0", fontSize: ".7rem", color: "rgba(255,255,255,.5)" }}>
+      <p style={{ margin: "6px 0 0", fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.5)" }}>
         Sa case de départ, ou une case qui touche à la fois sa case et celle qu'il visait.
         {currentRepli.defaut && ` Sans choix de ta part, il resterait en ${currentRepli.defaut}.`}
       </p>

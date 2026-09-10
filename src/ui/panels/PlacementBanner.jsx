@@ -64,7 +64,7 @@ export default function PlacementBanner({ vm }) {
             angles du plateau.
           </span>
         )}
-        <span style={{ fontSize: ".7rem", color: T.dim, lineHeight: 1.4 }}>
+        <span style={{ fontSize: "var(--fs-micro)", color: T.dim, lineHeight: 1.4 }}>
           {estDetonateur
             ? "Détonateur, donc dernier à poser : il voit où sont tous les autres avant de se décider."
             : `Encore ${restantApres} à poser après lui — on pose dans l'inverse de l'initiative, plus on pose tard plus on en sait.`}

@@ -54,14 +54,14 @@ function MenuDA({ valeur, options, placeholder, onChange }) {
           background: choisie ? "rgba(22,224,140,.14)" : "rgba(255,255,255,.08)",
           color: choisie ? "#7ef2a8" : "#fffaee",
           border: `1px solid ${choisie ? "rgba(22,224,140,.5)" : "rgba(255,255,255,.2)"}`,
-          borderRadius: 6, padding: "3px 8px", fontSize: ".7rem",
+          borderRadius: 6, padding: "3px 8px", fontSize: "var(--fs-micro)",
           fontFamily: "inherit", fontWeight: choisie ? 700 : 400,
           cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
         }}
       >
         {choisie?.icone}
         {choisie ? choisie.label : placeholder}
-        <span style={{ fontSize: ".6rem", opacity: .7 }}>{ouvert ? "▲" : "▼"}</span>
+        <span style={{ fontSize: "var(--fs-micro)", opacity: .7 }}>{ouvert ? "▲" : "▼"}</span>
       </button>
 
       {ouvert && (
@@ -89,7 +89,7 @@ function MenuDA({ valeur, options, placeholder, onChange }) {
                   background: active ? "rgba(255,217,61,.18)" : "transparent",
                   color: o.disabled ? "rgba(255,255,255,.28)" : (active ? "#FFD93D" : "#fffaee"),
                   border: "none", borderRadius: 5, padding: "4px 9px",
-                  fontSize: ".7rem", fontFamily: "inherit", textAlign: "left",
+                  fontSize: "var(--fs-micro)", fontFamily: "inherit", textAlign: "left",
                   fontWeight: active ? 700 : 400,
                   cursor: o.disabled ? "not-allowed" : "pointer", whiteSpace: "nowrap",
                   display: "flex", alignItems: "center", gap: 7,
@@ -473,7 +473,7 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                     <TitanIcon titanId={t.id} size={18} variant="plain" />
                     <strong style={{ color: "#FFD93D", fontSize: "var(--fs-micro)" }}>{titanDisplayName(t.id)}</strong>
-                    <span style={{ fontSize: ".7rem", color: "rgba(255,255,255,.5)" }}>
+                    <span style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.5)" }}>
                       {vertCount} Vert{vertCount > 1 ? "s" : ""}
                     </span>
                     {fini && scoresReveles ? (
@@ -783,7 +783,7 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
             if (iaIds.length === 0 || !profileLabel) return null;
             if (!scoresReveles) {
               return (
-                <div style={{ marginTop: 12, fontSize: ".7rem", color: "rgba(255,255,255,.4)", fontStyle: "italic" }}>
+                <div style={{ marginTop: 12, fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.4)", fontStyle: "italic" }}>
                   🤖 Les profils des IA seront dévoilés une fois tous les Blocs Verts placés.
                 </div>
               );
@@ -905,7 +905,7 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
                   style={{ transform: showLog ? "rotate(90deg)" : "none", transition: "transform 160ms ease" }}
                 />
                 Journal
-                <span style={readout("0.6rem", T.faint)}>{actionLog.length}</span>
+                <span style={readout(T.micro, T.faint)}>{actionLog.length}</span>
               </button>
               {/* FERMER N'EST PAS VIDER — Nikola, 2026-08-18 : « j'aimerais
                   pouvoir fermer les logs d'action sans les vider ». Le seul
@@ -1002,7 +1002,7 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
                       }}
                     >
                       M{m}
-                      <span style={readout("0.6rem", T.faint)}>{compteManche(m)}</span>
+                      <span style={readout(T.micro, T.faint)}>{compteManche(m)}</span>
                     </button>
                   );
                 })}

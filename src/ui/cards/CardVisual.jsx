@@ -101,13 +101,21 @@ export default function CardVisual({
         }}
       />
 
-      {/* Force, dans le coin de l'afficheur. */}
+      {/* Force, dans le coin de l'afficheur : le chiffre du compteur, clair
+          sur une plaque sombre, comme sur une borne. La couleur de la carte
+          est déjà portée par le bandeau, le pictogramme et le cerne ; un
+          chiffre dans cette couleur sur un aplat de la même couleur ne se
+          lisait pas (le violet #9333EA tombait à 2,7:1). */}
       <div
         style={{
           position: "absolute",
-          top: 12,
-          right: 8,
-          ...readout(isSmall ? "0.7rem" : "0.85rem", cfg.color),
+          top: 8,
+          right: 6,
+          background: T.void,
+          border: `1px solid ${T.edge}`,
+          padding: "1px 5px",
+          lineHeight: 1.25,
+          ...readout(isSmall ? T.micro : "0.9rem", T.text),
         }}
       >
         {cfg.force}
@@ -127,13 +135,15 @@ export default function CardVisual({
         <Icon name={CARD_ICON[cardId]} size={isSmall ? 34 : 46} strokeWidth={2} />
       </div>
 
-      {/* Le nom, en pied : il confirme, il n'annonce plus. */}
+      {/* Le nom, en pied : il confirme, il n'annonce plus. Au plancher de
+          12,5 px comme le reste ; sur la petite carte il peut passer sur
+          trois lignes, le pictogramme au-dessus se resserre en conséquence. */}
       <div
         style={{
-          ...marquee(isSmall ? "0.6rem" : "0.72rem", T.text),
-          padding: "0 6px 8px",
+          ...marquee(isSmall ? T.micro : "0.82rem", T.text),
+          padding: isSmall ? "0 4px 6px" : "0 6px 8px",
           textAlign: "center",
-          lineHeight: 1.15,
+          lineHeight: 1.1,
           hyphens: "auto",
         }}
       >

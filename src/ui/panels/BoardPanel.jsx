@@ -33,7 +33,7 @@ function Step({ n, titre, quand, accent, ouvert, children }) {
         <span
           aria-hidden="true"
           style={{
-            ...readout("0.7rem", ouvert ? "#0f0826" : T.faint),
+            ...readout(T.micro, ouvert ? "#0f0826" : T.faint),
             background: ouvert ? accent : "transparent",
             border: `2px solid ${ouvert ? accent : T.rule}`,
             width: 22,
@@ -768,7 +768,7 @@ export default function BoardPanel({ vm }) {
                 <span
                   aria-hidden="true"
                   style={{
-                    ...readout("0.7rem", "#1a1400"), background: T.you,
+                    ...readout(T.micro, "#1a1400"), background: T.you,
                     border: `2px solid ${T.you}`, width: 22, height: 22,
                     display: "grid", placeItems: "center", flexShrink: 0,
                   }}
@@ -795,7 +795,7 @@ export default function BoardPanel({ vm }) {
                       border: `1.5px solid ${showCardEffects ? T.you : T.rule}`,
                       borderRadius: 99, cursor: "pointer",
                       color: showCardEffects ? T.you : T.dim,
-                      fontFamily: T.ui, fontWeight: 700, fontSize: ".7rem", lineHeight: 1,
+                      fontFamily: T.ui, fontWeight: 700, fontSize: "var(--fs-micro)", lineHeight: 1,
                       padding: 0,
                     }}
                   >
@@ -1011,7 +1011,7 @@ export default function BoardPanel({ vm }) {
                         );
                       })}
                     </div>
-                    <p style={{ margin: "8px 0 0", fontSize: ".7rem", color: "rgba(255,255,255,.5)" }}>
+                    <p style={{ margin: "8px 0 0", fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.5)" }}>
                       Direction choisie : <strong style={{ color: "#7cf5e8" }}>{direction.label}</strong>
                     </p>
                     {/* LE DOSEUR (Nikola, 2026-09-01 : « on peut augmenter de
@@ -1027,7 +1027,7 @@ export default function BoardPanel({ vm }) {
                         onChange={setGraouAdrenaline}
                         label="Chaque Adrénaline dépensée recule les Titans touchés d'une case de plus"
                       />
-                      <span style={{ fontSize: ".7rem", color: "rgba(255,255,255,.5)" }}>
+                      <span style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.5)" }}>
                         recul = Titans touchés + 1{graouAdrenaline > 0 ? ` + ${graouAdrenaline}` : ""}
                       </span>
                     </div>
@@ -1339,7 +1339,7 @@ export default function BoardPanel({ vm }) {
                 <span style={{ fontSize: "var(--fs-micro)", color: "#71dbff" }}>
                   {jnpSelected.length}/{jnpNbToPick} ramassé{jnpSelected.length > 1 ? "s" : ""}{jnpNbToPick === 3 ? " (🏆 Lanterne Rouge)" : ""}
                 </span>
-                <span style={{ fontSize: ".7rem", color: "#8fa6b8" }}>
+                <span style={{ fontSize: "var(--fs-micro)", color: "#8fa6b8" }}>
                   Clique une case : le ramassage est immédiat, la portée se recalcule depuis ta nouvelle position.
                 </span>
                 <button

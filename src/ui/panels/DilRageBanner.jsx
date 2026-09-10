@@ -140,7 +140,7 @@ export default function DilRageBanner({ vm }) {
                     }}
                   >
                     <OptionIcon option={c} />
-                    <span style={{ fontSize: ".7rem", fontWeight: 700 }}>
+                    <span style={{ fontSize: "var(--fs-micro)", fontWeight: 700 }}>
                       {c === SOCLE_OPTION ? `? ×${compteOption(defender, c)}` : compteOption(defender, c)}
                     </span>
                   </button>
@@ -194,7 +194,7 @@ export default function DilRageBanner({ vm }) {
                   }}
                 >
                   <OptionIcon option={c} size={34} />
-                  <span style={{ fontSize: ".7rem", fontWeight: 700 }}>
+                  <span style={{ fontSize: "var(--fs-micro)", fontWeight: 700 }}>
                     {c === SOCLE_OPTION ? `Socle au hasard (${compteOption(defender, c)})` : "Perdre"}
                   </span>
                 </button>

@@ -142,7 +142,7 @@ export default function RepoVolBanner({ vm }) {
                 }}
               >
                 <span style={{ fontWeight: 700 }}>{sens.titre}</span>
-                <span style={{ fontSize: ".7rem", opacity: .85, fontWeight: 400 }}>
+                <span style={{ fontSize: "var(--fs-micro)", opacity: .85, fontWeight: 400 }}>
                   {chaine(sens.cle)}
                 </span>
               </button>
@@ -222,7 +222,7 @@ export default function RepoVolBanner({ vm }) {
                   <strong style={{ color: "#FFD93D" }}>{CARD_LABEL[v.cardId] ?? v.cardId}</strong>
                   <span style={{ opacity: .6 }}>à</span>
                   <TitanIcon titanId={v.victimId} size={16} variant="plain" />
-                  <span style={{ opacity: .55, fontSize: ".7rem" }}>
+                  <span style={{ opacity: .55, fontSize: "var(--fs-micro)" }}>
                     {v.mode === "main"
                       ? `— empruntée, rendue fin de Manche ${v.revientALaManche}`
                       : `— en Zone Repos jusqu'à la Manche ${v.revientALaManche}`}

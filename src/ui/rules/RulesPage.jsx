@@ -368,13 +368,13 @@ function SectionCartes() {
         {CARTES.map((c) => (
           <div key={c.num} style={{
             background: `color-mix(in srgb, ${c.couleur} 16%, rgba(0,0,0,.3))`,
-            border: `1px solid ${c.couleur}55`, borderRadius: T.rPlate, padding: "16px 18px",
+            border: `2px solid ${c.couleur}`, borderRadius: T.rPlate, padding: "16px 18px",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
               <div style={{ fontSize: "2rem", lineHeight: 1 }}>{c.icon}</div>
               <div>
                 <div style={{ fontSize: "var(--fs-micro)", color: C.muted, letterSpacing: ".1em" }}>{c.num}</div>
-                <div style={{ fontFamily: "'Bowlby One', sans-serif", fontSize: "1.05rem", color: c.couleur }}>
+                <div style={{ fontFamily: "'Bowlby One', sans-serif", fontSize: "1.05rem", color: C.cream }}>
                   {c.nom}
                 </div>
               </div>

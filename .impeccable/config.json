@@ -38,6 +38,15 @@
         ],
         "createdAt": "2026-09-10T21:40:30.650Z",
         "reason": "Agent: plaques des Titans non-actifs a 90% d'opacite = mecanique 'une seule chose en relief a l'ecran' de DESIGN.md ; contraste median 6-8:1, seuls les pixels d'anticrenelage passent sous 4.5."
+      },
+      {
+        "rule": "all-caps-body",
+        "value": "*",
+        "files": [
+          "src/ui/cards/CardVisual.jsx"
+        ],
+        "createdAt": "2026-09-10T22:05:32.509Z",
+        "reason": "Agent: noms de carte en Bowlby One majuscule = typographie imposee par DESIGN.md ('marquee : titres, nom du jeu, noms de carte') ; le detecteur additionne des noms courts adjacents (2 x ~18 car.) en un faux 'passage' de 37 car."
       }
     ]
   }
