@@ -1475,6 +1475,11 @@ export function useBoardGeneratorController() {
          Pour l'annulation, ces champs sont inertes : on y remet exactement ce
          qui s'y trouvait déjà. */
       placementRestant: [...placementRestant],
+      /* Le ramassage en cours de Je Ne Partage Pas (2026-09-14). Depuis qu'il se
+         joue chez l'hôte, c'est de l'état de partie : l'invité en a besoin pour
+         voir son compteur et clôturer, et « Annuler » le remet à ce qu'il était
+         avant le premier bloc. */
+      jnpSelected: [...jnpSelected],
       table: {
         nbJoueurs,
         titanModes: { ...titanModes },
@@ -1503,7 +1508,7 @@ export function useBoardGeneratorController() {
     decisionQueue, repliQueue, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcNTargets,
     fpmcAttackerBase, fpmcCurrent, mancheNumber, phaseValidated, volDirection, currentEvent,
     rainbowWinnerId, vertAssignments, vertsValides, gameOver, showScoring, coutRentree, toutCasserFile,
-    undoStack.length,
+    undoStack.length, jnpSelected,
   ]);
 
   const captureSnapshot = useCallback(() => {
@@ -1585,6 +1590,8 @@ export function useBoardGeneratorController() {
        dû — ou disparaissait, selon la file. Ni l'un ni l'autre n'est une
        annulation. */
     setDecisionQueue(structuredClone(snap.decisionQueue || []));
+    // Après la remise à plat de l'interface, qui le vide : cf. `instantaneCourant`.
+    setJnpSelected([...(snap.jnpSelected || [])]);
     setRepliQueue(structuredClone(snap.repliQueue || []));
     setEcroulement(snap.ecroulement ? structuredClone(snap.ecroulement) : null);
     setToutCasserFile(snap.toutCasserFile ? structuredClone(snap.toutCasserFile) : null);
@@ -1733,6 +1740,11 @@ export function useBoardGeneratorController() {
     jouerGraouhhh: "actif",
     jouerBoingBoing: "actif",
     jouerJeNePartagePas: "actif",
+    /* Le ramassage élément par élément de Je Ne Partage Pas (2026-09-14). Il
+       manquait ici : chez un invité, le clic sur une case ramassait DANS SON
+       NAVIGATEUR — l'hôte n'en savait rien, et le plateau suivant effaçait
+       tout. Joué chez l'hôte, il y tient le vrai compteur (`jnpSelected`). */
+    jnpPickCell: "actif",
     jouerFautPasMeChauffer: "actif",
     jouerToutCasser: "actif",
     jouerMouvementGratuit: "actif",
@@ -1741,7 +1753,8 @@ export function useBoardGeneratorController() {
     passerAuTitanSuivant: "actif",
     toutCasserResoudre: "actif",
     pickFpmcTarget: "actif",
-    updateFpmcBid: "actif",
+    // Chacun ne mise que pour lui : cf. la portée « mise-fpmc » de `titanAutorise`.
+    updateFpmcBid: "mise-fpmc",
     revealFPMC: "actif",
 
     // Décisions bloquantes : c'est le Titan interrogé qui répond
@@ -1768,18 +1781,36 @@ export function useBoardGeneratorController() {
      pas de l'état de partie : le chemin qu'on est en train de tracer, le
      nombre d'Adrénalines qu'on s'apprête à miser. Ils vivent donc chez celui
      qui les compose, et ne traversent le réseau qu'au moment de valider. */
-  const CONTEXTE_DISTANT = useMemo(() => ({
-    bbPath: setBbPath,
-    bbAdrenaline: setBbAdrenaline,
-    moveAdrenaline: setMoveAdrenaline,
-    teaAdrenaline: setTeaAdrenaline,
-    tcAdrenaline: setTcAdrenaline,
-    graouAdrenaline: setGraouAdrenaline,
-    jnpSelected: setJnpSelected,
-    progSelection: setProgSelection,
-    direction: setDirection,
-    useAdrenaline: setUseAdrenaline,
-  }), []);
+  /* ── LES VALEURS SONT VÉRIFIÉES, PAS SEULEMENT LES CLÉS ──
+     Revue du 2026-09-14. L'exécuteur ne laisse passer que ces clés-ci, mais la
+     VALEUR arrivait telle quelle : `progSelection: 5` était posé chez l'hôte,
+     et le rendu suivant appelait `.map` sur un nombre — un plantage hors de
+     tout filet, et la partie de la table avec. Chaque réglage vérifie donc sa
+     forme et ignore le reste.
+
+     `jnpSelected` n'est plus ici : ce n'est pas un brouillon mais le compteur
+     de ce que l'hôte a réellement ramassé (cf. `jnpPickCell`, désormais joué
+     chez lui). L'adopter depuis le réseau permettait de le réécrire. */
+  const CONTEXTE_DISTANT = useMemo(() => {
+    const entier = (poser) => (v) => { if (Number.isInteger(v) && v >= 0 && v <= 99) poser(v); };
+    return {
+      bbPath: (v) => { if (Array.isArray(v) && v.length <= 64 && v.every((k) => typeof k === "string")) setBbPath(v); },
+      bbAdrenaline: entier(setBbAdrenaline),
+      moveAdrenaline: entier(setMoveAdrenaline),
+      teaAdrenaline: entier(setTeaAdrenaline),
+      tcAdrenaline: entier(setTcAdrenaline),
+      graouAdrenaline: entier(setGraouAdrenaline),
+      progSelection: (v) => {
+        if (Array.isArray(v) && v.length <= 3
+          && v.every((c) => c && Number.isInteger(c.idx) && typeof c.cardId === "string")) setProgSelection(v);
+      },
+      direction: (v) => {
+        if (v && Number.isInteger(v.dr) && Number.isInteger(v.dc) && Math.abs(v.dr) <= 1
+          && Math.abs(v.dc) <= 1 && typeof v.label === "string") setDirection(v);
+      },
+      useAdrenaline: (v) => { if (typeof v === "boolean") setUseAdrenaline(v); },
+    };
+  }, []);
 
   /* ══════════════════════════════════════════════════════════
      L'HÔTE PRÊTE SA MAIN À UN INVITÉ, LE TEMPS D'UNE ACTION
@@ -1861,6 +1892,14 @@ export function useBoardGeneratorController() {
         .find((id) => joueurs.find((t) => t.id === id)?.aPlacer) ?? null;
       return attendu === titanDuSiege;
     }
+    /* Faut Pas Me Chauffer : chaque camp ne fixe que SA mise (2026-09-14). La
+       portée « actif » donnait les deux champs à l'attaquant — un invité qui
+       attaque réglait la mise du défenseur, et un défenseur distant ne pouvait
+       pas miser du tout. */
+    if (portee === "mise-fpmc") {
+      const miseur = args?.[0] === "attackerBid" ? fpmcAttackerId : fpmcCurrent?.defenderId;
+      return miseur != null && Number(miseur) === Number(titanDuSiege);
+    }
     if (portee === "decision") {
       /* Une décision bloquante interroge quelqu'un de précis. Faute de pouvoir
          nommer ce quelqu'un pour les sept sortes de décisions, on retombe sur
@@ -1870,7 +1909,7 @@ export function useBoardGeneratorController() {
       return true;
     }
     return false;
-  }, [activePlayerId]);
+  }, [activePlayerId, fpmcAttackerId, fpmcCurrent]);
 
   /* ══════════════════════════════════════════════════════════
      QUAND QUELQU'UN PART, SON TITAN NE S'ARRÊTE PAS DE JOUER
@@ -1924,6 +1963,13 @@ export function useBoardGeneratorController() {
       setFileIntentions((f) => f.slice(1));
       setEtapeIntention("recu");
       setActionLog((prev) => [...prev, `🚫 ${intention.pseudo} : ${raison}`]);
+      /* Un refus APRÈS l'adoption du siège rend la main à l'hôte, comme le
+         chemin qui aboutit (2026-09-14) : sans ça, son panneau restait
+         accroché au Titan de l'invité et à sa sélection de cartes. */
+      if (etapeIntention !== "recu") {
+        if (selectionHoteRef.current != null) setSelectedTitanId(selectionHoteRef.current);
+        setProgSelection(progHoteRef.current || []);
+      }
     };
 
     /* ── UN INVITÉ PREND UN TITAN LIBRE, SANS PASSER PAR L'HÔTE ──
@@ -1948,6 +1994,13 @@ export function useBoardGeneratorController() {
       }
       if (sieges[voulu] && sieges[voulu] !== intention.de) {
         rejeter("ce Titan est déjà pris."); return;
+      }
+      /* Partie lancée : seul un Titan tenu par l'IA est libre (2026-09-14). Un
+         Titan humain sans siège distant se joue sur l'appareil de l'hôte ; le
+         céder à qui le demandait délogeait l'hôte de sa propre place. Avant le
+         lancement, le salon distribue encore les places librement. */
+      if (setupDoneRef.current && !sieges[voulu] && aiTitanModesRef.current[voulu] !== "ia") {
+        rejeter("ce Titan se joue à la table de l'hôte."); return;
       }
       /* ── ON PREND LA MAIN À L'IA, ET C'EST TOUT L'INTÉRÊT ──
          Nikola, 2026-08-30 : « un joueur peut rejoindre la partie en cours de
@@ -1990,7 +2043,13 @@ export function useBoardGeneratorController() {
       ? ACTIONS_DISTANTES[intention.fn]
       : null;
     if (typeof portee !== "string") { rejeter(`action « ${intention.fn} » non autorisée à distance.`); return; }
-    const titanDuSiege = intention.titanId;
+    /* Le siège se lit dans la table de l'HÔTE, pas dans la copie du relais
+       (2026-09-14) : `intention.titanId` est posé par le relais d'après la
+       dernière table que l'hôte lui a publiée, et une réattribution encore en
+       vol laissait l'ancien occupant jouer le Titan qu'on venait de lui
+       retirer. L'expéditeur (`intention.de`), lui, vient toujours du relais. */
+    const titanDuSiege = Number(Object.keys(distantSiegesRef.current)
+      .find((id) => distantSiegesRef.current[id] === intention.de)) || null;
     if (!titanAutorise(portee, titanDuSiege, intention.args)) {
       rejeter("ce n'est pas à toi de jouer.");
       return;
@@ -2035,6 +2094,13 @@ export function useBoardGeneratorController() {
       return;
     }
     // etapeIntention === "contexte" : tout est en place, on joue.
+    /* … sauf si la sélection a bougé entre deux crans (enchaînement d'une IA,
+       clic de l'hôte) : l'action se jouerait pour le mauvais Titan. On refuse
+       plutôt que de réadopter, ce qui pourrait tourner en rond (2026-09-14). */
+    if (selectedTitanId !== titanDuSiege) {
+      rejeter("la table a bougé pendant ton coup, rejoue-le.");
+      return;
+    }
     const action = Object.prototype.hasOwnProperty.call(actionsRef.current, intention.fn)
       ? actionsRef.current[intention.fn]
       : null;
@@ -2067,6 +2133,11 @@ export function useBoardGeneratorController() {
     setDistantSieges(nouvelle.sieges || {});
     setDistantFin(null);
     setDistantAvis(null);
+    /* Une table neuve repart sans garde-fou (2026-09-14) : levé pour une table
+       précédente — un F5 de l'hôte —, il coupait en silence la diffusion de la
+       suivante, faute de jamais être redescendu. */
+    diffusionBloqueeRef.current = false;
+    setDistantDiffusionBloquee(false);
 
     nouvelle.sur("presence", ({ joueurs, sieges }) => {
       /* La comparaison se fait sur la liste PRÉCÉDENTE, lue dans le setter :
@@ -2083,9 +2154,13 @@ export function useBoardGeneratorController() {
           arrivants.filter((j) => !refsAvant.has(j.ref)).forEach((j) => signalerMouvement("arrivee", j.pseudo));
           avant.filter((j) => !refsApres.has(j.ref)).forEach((j) => signalerMouvement("depart", j.pseudo));
         }
-        return arrivants;
+        /* Même contenu, même référence (2026-09-14) : chaque relève redonne la
+           présence, et un objet neuf relançait le rendu du contrôleur entier
+           et les effets qui dépendent des sièges, pour rien. */
+        return JSON.stringify(avant) === JSON.stringify(arrivants) ? avant : arrivants;
       });
-      setDistantSieges(sieges || {});
+      const nouveauxSieges = sieges || {};
+      setDistantSieges((avant) => (JSON.stringify(avant) === JSON.stringify(nouveauxSieges) ? avant : nouveauxSieges));
     });
     nouvelle.sur("etat", (instantane) => setEtatDistantRecu(instantane));
     nouvelle.sur("prive", (charge) => setMainPriveeRecue(charge));
@@ -2095,7 +2170,12 @@ export function useBoardGeneratorController() {
        abonnement réseau n'est pas un endroit d'où piloter React. */
     nouvelle.sur("intention", (m) => setFileIntentions((f) => [...f, m]));
     nouvelle.sur("chat", (m) => setDistantChat((prev) => [...prev.slice(-40), m]));
-    nouvelle.sur("erreur", ({ message }) => setDistantAvis(message));
+    /* L'avis de coupure s'efface quand la liaison revient (2026-09-14) — mais
+       seulement s'il est encore affiché : un avis plus récent (l'hôte s'est
+       tu, par exemple) ne doit pas disparaître avec lui. */
+    let dernierAvisCoupure = null;
+    nouvelle.sur("erreur", ({ message }) => { dernierAvisCoupure = message; setDistantAvis(message); });
+    nouvelle.sur("retablie", () => setDistantAvis((a) => (a === dernierAvisCoupure ? null : a)));
     /* Les nouvelles de liaison qui n'arrêtent rien : l'hôte s'est tu, l'hôte
        est revenu. Elles vont au même bandeau que les avis de reconnexion —
        c'est le même sujet, « où en est la liaison » — mais elles ne coupent
@@ -2171,8 +2251,19 @@ export function useBoardGeneratorController() {
     setDistantMouvements([]);
     setEtatDistantRecu(null); setMainPriveeRecue(null);
     setFileIntentions([]); setEtapeIntention("recu"); setFileDeparts([]);
+    // La table suivante repart d'un cadre vierge : ses brouillons survivaient au
+    // changement de table quand la Manche, la Phase et le tour coïncidaient.
+    dernierCadreDistantRef.current = "";
     if (s) await s.quitter();
   }, []);
+
+  /* ── UN CONTRÔLEUR DÉMONTÉ QUITTE SA TABLE ──
+     2026-09-14. Le contrôleur ne se démonte que sur un plantage rattrapé par la
+     frontière de `main.jsx`. Sa boucle réseau, elle, continuait de relever le
+     courrier : le relais croyait l'hôte présent alors que son moteur n'existait
+     plus, et la table attendait sans fin, sans même l'avis « l'hôte s'est
+     déconnecté ». */
+  useEffect(() => () => { sessionRef.current?.quitter(); }, []);
 
   /* Fermer l'onglet doit libérer la place tout de suite. Sans ça, un joueur qui
      recharge sa page revient comme un SECOND participant, et son siège reste
@@ -2284,11 +2375,26 @@ export function useBoardGeneratorController() {
      personne. On attend que ça se stabilise, puis on envoie une fois. */
   const dernierEnvoiRef = useRef("");
   const dernieresMainsRef = useRef({});
+  /* ── LA REPRISE QUE L'AVIS PROMETTAIT ──
+     2026-09-14. « Diffusion impossible, reprise… » ne reprenait rien : la passe
+     suivante n'avait lieu qu'au prochain changement d'état chez l'hôte, et
+     l'avis ne s'effaçait jamais. Un échec relance l'effet deux secondes plus
+     tard, et un envoi réussi retire l'avis qu'un échec avait posé.
+
+     `derniereDemandeRef` : les envois d'état partent en série (cf.
+     `diffuserEtat`), donc la promesse d'une demande ancienne se résout APRÈS
+     l'envoi d'une plus récente. Il évite de reposer une empreinte périmée, et
+     de redemander un plateau déjà en vol. */
+  const derniereDemandeRef = useRef("");
+  const [relanceDiffusion, setRelanceDiffusion] = useState(0);
+  const AVIS_DIFFUSION = "Diffusion impossible, reprise…";
+  const AVIS_MAIN = "Envoi d'une main impossible, nouvelle tentative…";
   useEffect(() => {
     if (!distantHote || !session) return undefined;
     // Garde-fou du F5 (cf. `brancherSession`) : tant qu'il est levé, cette
     // page ne publie RIEN — ni plateau, ni courrier privé.
     if (diffusionBloqueeRef.current) return undefined;
+    const relancer = () => { setTimeout(() => setRelanceDiffusion((n) => n + 1), 2000); };
     const minuteur = setTimeout(() => {
       const complet = instantaneCourant();
       const public_ = plateauPublic(complet);
@@ -2300,10 +2406,21 @@ export function useBoardGeneratorController() {
          En fin de tour, ça peut durer une minute entière sans que rien ne
          l'explique à l'écran. On note ce qu'on a réellement envoyé, et un
          échec laisse l'empreinte précédente, donc la prochaine passe réessaie. */
-      if (signature !== dernierEnvoiRef.current) {
+      if (signature !== dernierEnvoiRef.current && signature !== derniereDemandeRef.current) {
+        derniereDemandeRef.current = signature;
         session.diffuserEtat(public_)
-          .then(() => { dernierEnvoiRef.current = signature; })
-          .catch(() => setDistantAvis("Diffusion impossible, reprise…"));
+          .then(() => {
+            if (derniereDemandeRef.current === signature) {
+              dernierEnvoiRef.current = signature;
+              derniereDemandeRef.current = "";
+            }
+            setDistantAvis((a) => (a === AVIS_DIFFUSION ? null : a));
+          })
+          .catch(() => {
+            if (derniereDemandeRef.current === signature) derniereDemandeRef.current = "";
+            setDistantAvis(AVIS_DIFFUSION);
+            relancer();
+          });
       }
       /* ── LE COURRIER PRIVÉ A SON PROPRE COMPTEUR ──
          Nikola, 2026-08-30 : « si l'hôte prend la main pas de soucis, sauf que
@@ -2341,12 +2458,16 @@ export function useBoardGeneratorController() {
         const empreinte = `${ref}|${JSON.stringify(main)}`;
         if (dernieresMainsRef.current[titanId] === empreinte) return;
         session.envoyerPrive(ref, main)
-          .then(() => { dernieresMainsRef.current[titanId] = empreinte; })
-          .catch(() => setDistantAvis("Envoi d'une main impossible, nouvelle tentative…"));
+          .then(() => {
+            dernieresMainsRef.current[titanId] = empreinte;
+            setDistantAvis((a) => (a === AVIS_MAIN ? null : a));
+          })
+          .catch(() => { setDistantAvis(AVIS_MAIN); relancer(); });
       });
     }, 120);
     return () => clearTimeout(minuteur);
-  }, [distantHote, session, distantSieges, instantaneCourant]);
+    // Les deux avis sont des chaînes : les lister ne relance jamais l'effet.
+  }, [distantHote, session, distantSieges, instantaneCourant, relanceDiffusion, AVIS_DIFFUSION, AVIS_MAIN]);
 
   useEffect(() => {
     if (distantInviteRef.current) return; // `passifUsed` arrive dans l'instantané
@@ -3942,7 +4063,11 @@ export function useBoardGeneratorController() {
       if (res.ok) {
         setTitanState((p) => ({ ...p, players: [...p.players] }));
         setPhaseValidated((p) => ({ ...p, [selectedTitanId]: true }));
-        setActionLog((p) => [...p, `✅ T${selectedTitanId} programme : ${ids.map((c) => CARD_LABEL[c]).join(", ")}`]);
+        /* Le journal dit QUE le Titan a programmé, jamais QUOI (2026-09-14) : il
+           est diffusé à toute la table et lu par l'hôte, et nommer les trois
+           cartes rendait publique la Phase Programmation — même principe que
+           le placement des Verts d'une IA, plus bas. */
+        setActionLog((p) => [...p, `✅ T${selectedTitanId} a programmé ses 3 cartes.`]);
         setProgErreur(null);
       } else {
         // Échec (ex. état déjà modifié entre-temps) : on informe le joueur au
@@ -3984,7 +4109,8 @@ export function useBoardGeneratorController() {
       setProgErreur(res.reason);
       return;
     }
-    setActionLog((prev) => [...prev, `✅ T${selectedTitanId} programme : ${ids.map((c) => CARD_LABEL[c]).join(", ")}`]);
+    // Jamais QUOI : cf. le compte à rebours de `toggleProgCard`, plus haut.
+    setActionLog((prev) => [...prev, `✅ T${selectedTitanId} a programmé ses 3 cartes.`]);
     setProgErreur(null);
     setProgSelection([]);
     setPhaseValidated((prev) => ({ ...prev, [selectedTitanId]: true }));
@@ -5126,10 +5252,13 @@ export function useBoardGeneratorController() {
      dernière case, la carte est marquée jouée, et il n'y a plus rien à
      rouvrir. Pour vraiment revenir en arrière, il reste « Annuler », dont
      c'est le métier — l'instantané a été pris avant le premier bloc. */
-  const clotureJnpRef = useRef(null);
   const toggleJnpMode = useCallback(() => {
     if (jnpMode) {
-      if (jnpSelected.length > 0) { clotureJnpRef.current?.(); return; }
+      /* Par le vm du rendu courant, pas par une ref posée sur la fonction brute
+         (2026-09-14) : chez un invité, `vm.jouerJeNePartagePas` est l'envoi à
+         l'hôte, et la clôture partait jusqu'ici dans le moteur local, que
+         l'hôte n'entend pas. Chez l'hôte, c'est la même fonction qu'avant. */
+      if (jnpSelected.length > 0) { actionsRef.current.jouerJeNePartagePas?.(); return; }
       setJnpMode(false);
       setJnpSelected([]);
       return;
@@ -5243,10 +5372,6 @@ export function useBoardGeneratorController() {
     setJnpSelected([]);
   }, [selectedTitanId, jnpSelected, jnpNbToPick, canPlayCard, markCardPlayed,
       titanState.players, looseBlocks, state.board]);
-  /* Le pont pour `toggleJnpMode`, déclaré plus haut : refermer la carte en
-     cours de ramassage doit la CLÔTURER, jamais remettre le compteur à zéro
-     (cf. la triche du 2026-09-07). */
-  useEffect(() => { clotureJnpRef.current = jouerJeNePartagePas; }, [jouerJeNePartagePas]);
 
   const jouerFautPasMeChauffer = useCallback(() => {
     /* ── CETTE CARTE APPARTIENT-ELLE ENCORE À LA PARTIE EN COURS ? ──
@@ -5571,6 +5696,13 @@ export function useBoardGeneratorController() {
     setActionLog((prev) => [...prev, ...journal]);
   }, [gameOver, titanState.players, titanModes, vertAssignments, getVertCount, titanDisplayName]);
   const updateVertAssignment = useCallback((titanId, index, value) => {
+    /* Les trois arguments peuvent venir du réseau, et la portée « soi-arg0 »
+       ne vérifie que le Titan. Une valeur non-chaîne faisait lever `split`
+       DANS l'updater, donc pendant le rendu, hors du filet de l'exécuteur
+       d'intentions : l'hôte perdait son moteur, la table sa partie. Un index
+       démesuré allouait, lui, un tableau géant (revue du 2026-09-14). */
+    if (!Number.isInteger(index) || index < 0 || index > 64) return;
+    if (value != null && typeof value !== "string") return;
     setVertAssignments((prev) => {
       const current = prev[titanId] ? [...prev[titanId]] : [];
       current[index] = value ? (() => { const [type, target] = value.split(":"); return { type, target }; })() : null;
@@ -6390,14 +6522,26 @@ export function useBoardGeneratorController() {
       "jouerFautPasMeChauffer", "jouerRecuperation",
     ]);
 
+    /* Un envoi refusé par le relais (plafond, table fermée) ou perdu en route
+       ne disait RIEN : le mode se refermait comme si le coup était parti, et
+       l'invité attendait un plateau qui ne viendrait pas (2026-09-14). Le
+       refus s'affiche dans le bandeau de liaison. */
+    const envoyerIntention = (nom, args, contexte) => {
+      const envoi = sessionRef.current?.envoyerIntention(nom, args, contexte);
+      envoi?.catch?.((e) => setDistantAvis(`Ton coup n'est pas parti : ${e?.message || "liaison coupée"} Rejoue-le.`));
+      return envoi;
+    };
+
     Object.keys(ACTIONS_DISTANTES).forEach((nom) => {
       if (typeof vm[nom] !== "function") return;
       vm[nom] = (...args) => {
-        const envoi = sessionRef.current?.envoyerIntention(nom, args, contexteCourant());
+        const envoi = envoyerIntention(nom, args, contexteCourant());
         if (REFERME_SON_MODE.has(nom)) { closeAllCardModes(); setMoveMode(false); setRecupMode(false); }
         return envoi;
       };
     });
+    // Le clic sur une case de ramassage passe par l'alias historique (cf. `jnpToggleCell`).
+    vm.jnpToggleCell = vm.jnpPickCell;
 
     /* ── ANNULER TRAVERSE LE RÉSEAU COMME LE RESTE ──
        Il ne faisait rien du tout ici (« vm.handleUndo = () => {} »), au motif

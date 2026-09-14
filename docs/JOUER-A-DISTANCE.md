@@ -36,7 +36,10 @@ Ses garde-fous, tous dans le même fichier, en haut :
   énumère les salles ;
 - 10 échecs par adresse IP → un quart d'heure de mise à l'écart ;
 - 60 requêtes par 10 s et par adresse ;
-- 2 Mo par message, 50 salles, 8 participants ;
+- 2 Mo par message, 50 salles, 8 participants, dont 4 au plus depuis une même
+  adresse (la boucle locale n'est pas comptée) ;
+- un message reste en file jusqu'à ce que son destinataire en accuse
+  réception : une réponse perdue en route est redonnée à la relève suivante ;
 - rien sur disque : couper le relais efface tout.
 
 ### Les deux secrets, à ne pas confondre

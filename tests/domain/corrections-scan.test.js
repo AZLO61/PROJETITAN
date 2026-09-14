@@ -36,7 +36,7 @@ import {
 } from "../../src/domain/gameRules.js";
 import { candidatsPourCarte } from "../../src/domain/aiPlanner.js";
 import { evaluatePosition, makeProfile, FORCES } from "../../src/domain/aiEvaluation.js";
-import { jouerPartie, lancerCampagne } from "../../src/domain/simulation.js";
+import { jouerPartie, lancerCampagneCedante } from "../../src/domain/simulation.js";
 import { verifierHygiene, verifierInvariants } from "../../src/domain/invariants.js";
 import { setSeed } from "../../src/domain/rng.js";
 
@@ -244,8 +244,10 @@ describe("Aucun débris ne se pose sur un bâtiment debout", () => {
      compris. C'est un prix assumé, pas une lenteur accidentelle : la même
      campagne mesure la même chose, elle la mesure sur une IA qui réfléchit
      nettement plus. */
-  it("aucune campagne n'en produit", () => {
-    const r = lancerCampagne({ parties: 30, nbJoueurs: 4, seed: 3000, verifier: true });
+  it("aucune campagne n'en produit", async () => {
+    // Cède la boucle entre deux parties, sans quoi la CI sort en code 1
+    // (cf. `lancerCampagneCedante`).
+    const r = await lancerCampagneCedante({ parties: 30, nbJoueurs: 4, seed: 3000, verifier: true });
     const regles = Object.values(r.anomalies.invariant?.details || {}).length
       ? Object.keys(r.anomalies.invariant.details).join(" ")
       : "";

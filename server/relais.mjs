@@ -106,7 +106,9 @@ function cleAttendue() {
   return process.env.CLE_RELAIS || "";
 }
 
-const MAX_SALLES = Number(process.env.MAX_SALLES || 50);
+// `|| 50` APRÈS la conversion : une valeur illisible donnait NaN, et
+// `salles.size >= NaN` est toujours faux — le plafond disparaissait sans bruit.
+const MAX_SALLES = Number(process.env.MAX_SALLES) || 50;
 const MAX_PARTICIPANTS = 8;            // 4 joueurs + spectateurs éventuels
 const MAX_CORPS = 2 * 1024 * 1024;     // 2 Mo : un instantané complet pèse ~60 ko
 const MAX_CORPS_AUTH = 4 * 1024;       // « créer » et « rejoindre » : un pseudo et un mot de passe
@@ -400,6 +402,18 @@ async function rejoindreSalle({ id, motDePasse, pseudo, ip, cleRelais }) {
   if (salle.participants.size >= MAX_PARTICIPANTS) {
     return { erreur: "Cette partie est complète." };
   }
+  /* ── QUATRE PLACES AU PLUS PAR ADRESSE ──
+     Revue de sécurité du 2026-09-14. Rien ne liait une place à son adresse :
+     un invité qui connaît le mot de passe rejoignait en boucle avec des jetons
+     neufs, prenait les sept places restantes et verrouillait la table devant
+     un ami légitime. Quatre couvre une maisonnée qui joue à quatre derrière la
+     même box. La boucle locale n'est pas comptée : sans `DERRIERE_CLOUDFLARE`,
+     tout le monde y arrive par le tunnel, et le plafond fermerait la table. */
+  const MAX_PAR_ADRESSE = 4;
+  const boucleLocale = /^(127\.|::1$|::ffff:127\.)/.test(String(ip));
+  if (!boucleLocale && [...salle.participants.values()].filter((q) => q.ip === ip).length >= MAX_PAR_ADRESSE) {
+    return { erreur: "Trop de connexions depuis la même adresse sur cette table." };
+  }
   const j = jeton();
   salle.participants.set(j, {
     pseudo: nettoyerPseudo(pseudo), siege: "invite", titanId: null, vuLe: Date.now(), ip,
@@ -472,7 +486,16 @@ function deposer(salle, destinataires, message) {
        toute façon l'instantané courant à sa prochaine relève, qui le remet
        d'aplomb — c'est l'avantage d'un état complet plutôt qu'incrémental. */
     if (file.length >= 200) file.splice(0, file.length - 100);
-    file.push(message);
+    /* ── UN NUMÉRO PAR DESTINATAIRE, POUR L'ACCUSÉ DE RÉCEPTION ──
+       2026-09-14. La file était vidée au moment où la réponse PARTAIT : une
+       réponse perdue en route (liaison mobile qui hoquette, long-poll soldé
+       par un second) emportait pour de bon les intentions, le courrier privé
+       et les départs — l'état, lui, se rattrape par sa version. Chaque
+       message porte donc un numéro propre à son destinataire, et reste en
+       file jusqu'à ce que le client en accuse réception (cf. `/api/flux`). */
+    const dest = salle.participants.get(j);
+    const n = dest ? (dest.dernierNumero = (dest.dernierNumero || 0) + 1) : 0;
+    file.push({ ...message, n });
     /* ── ET BORNÉE EN OCTETS, PAS SEULEMENT EN NOMBRE ──
        Revue de sécurité du 2026-09-07. Deux cents entrées ne veulent rien dire
        tant qu'une entrée n'a pas de taille : une `intention` transporte `args`
@@ -902,9 +925,22 @@ const serveur = createServer(async (requete, reponse) => {
       p.vuLe = Date.now();
       salle.vueLe = Date.now();
 
+      /* L'accusé de réception (2026-09-14, cf. `deposer`) : le client dit le
+         plus grand numéro qu'il a TRAITÉ. On retire ce que ce numéro couvre et
+         on renvoie le reste SANS le retirer — une réponse perdue est donc
+         redonnée à la relève suivante, et le client dédoublonne par numéro.
+         Un client plus ancien n'envoie rien : il garde l'ancienne livraison. */
+      const brutRecu = url.searchParams.get("recu");
+      const accuse = brutRecu === null ? NaN : Number(brutRecu);
       const relever = () => {
         const file = salle.files.get(j) || [];
-        const messages = file.splice(0, file.length);
+        let messages;
+        if (Number.isFinite(accuse)) {
+          while (file.length > 0 && file[0].n <= accuse) file.shift();
+          messages = [...file];
+        } else {
+          messages = file.splice(0, file.length);
+        }
         /* L'état ne descend QUE s'il a bougé depuis ce que le client dit avoir
            vu. C'est ce qui évite de renvoyer soixante kilo-octets toutes les
            vingt-cinq secondes à une table qui réfléchit. */
@@ -977,9 +1013,17 @@ const serveur = createServer(async (requete, reponse) => {
     }
 
     repondre(reponse, 404, { erreur: "Route inconnue." }, origine);
-  } catch {
+  } catch (e) {
     // Le message d'erreur reste générique : détailler renseignerait un curieux
     // sur la forme attendue des requêtes.
+    /* Mais la fenêtre du relais, elle, doit le savoir (2026-09-14) : un vrai
+       défaut du relais répondait le même 400 muet qu'un corps mal formé, que le
+       client prend pour une coupure à réessayer sans fin. Les deux refus
+       attendus de `lireCorps` restent silencieux — journaliser chaque corps
+       trop grand offrirait la console à qui veut la remplir. */
+    if (!["corps trop grand", "JSON invalide"].includes(e?.message)) {
+      console.error("[relais] erreur interne", requete.method, url.pathname, e);
+    }
     repondre(reponse, 400, { erreur: "Requête invalide." }, origine);
   }
 });

@@ -82,7 +82,13 @@ async function appeler(url, options = {}) {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
   let corps = {};
-  try { corps = await reponse.json(); } catch { corps = {}; }
+  let lisible = true;
+  try { corps = await reponse.json(); } catch { corps = {}; lisible = false; }
+  /* Un 200 qui n'est pas du JSON n'est pas un relais Titan (adresse d'un autre
+     site, portail wifi) : la session se construisait avec un identifiant et un
+     jeton indéfinis, puis la relève échouait en boucle sous l'avis trompeur
+     « reprise en cours » (2026-09-14). */
+  if (reponse.ok && !lisible) throw new Error("Cette adresse ne répond pas comme un relais Titan.");
   if (!reponse.ok) {
     /* Le message du relais est déjà écrit pour un joueur (« Identifiant ou mot
        de passe incorrect »). On le remonte tel quel plutôt que de le doubler
@@ -100,12 +106,17 @@ function construireSession({
   const abonnes = {
     etat: new Set(), intention: new Set(), presence: new Set(),
     prive: new Set(), chat: new Set(), fin: new Set(), erreur: new Set(),
-    depart: new Set(), liaison: new Set(),
+    depart: new Set(), liaison: new Set(), retablie: new Set(),
   };
   let vivante = true;
   let version = versionEtat || 0;
   let controleur = null;      // AbortController du long-poll en cours
   let echecsDeSuite = 0;
+  /* Le plus grand numéro de message déjà traité : il part avec chaque relève,
+     et le relais ne retire de la file que ce qu'il couvre (cf. `/api/flux`). */
+  let dernierRecu = 0;
+  // L'envoi d'état en vol et le plus récent qui attend derrière (cf. `diffuserEtat`).
+  const diffusion = { attente: null, enCours: null };
 
   const emettre = (canal, charge) => {
     abonnes[canal]?.forEach((cb) => {
@@ -126,6 +137,12 @@ function construireSession({
          il ne fait qu'arriver plus tôt. */
       headers: { "X-Jeton": jeton, "X-Table": id },
       body: JSON.stringify({ id, jeton, message }),
+      /* Un relais qui accepte la connexion sans jamais répondre laissait
+         l'envoi pendu pour toujours, sans le moindre avis. Quinze secondes
+         couvrent un instantané sur une liaison mobile lente. Les navigateurs
+         d'avant 2022 n'ont pas `AbortSignal.timeout` : ils gardent l'ancien
+         comportement plutôt que de ne plus rien envoyer du tout. */
+      signal: typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(15_000) : undefined,
     });
   }
 
@@ -146,7 +163,7 @@ function construireSession({
            relais déployé lit l'en-tête partout, la moitié « adresse » de cette
            ligne pourra disparaître. */
         const reponse = await fetch(
-          `${base}/api/flux?id=${encodeURIComponent(id)}&jeton=${encodeURIComponent(jeton)}&versionEtat=${version}`,
+          `${base}/api/flux?id=${encodeURIComponent(id)}&jeton=${encodeURIComponent(jeton)}&versionEtat=${version}&recu=${dernierRecu}`,
           { signal: controleur.signal, headers: { "X-Jeton": jeton } }
         );
         if (!vivante) return;
@@ -180,6 +197,10 @@ function construireSession({
           throw new Error(`Le relais a répondu ${reponse.status}.`);
         }
         const corps = await reponse.json();
+        /* La liaison revient après une coupure : on le DIT, pour que l'avis
+           « reprise en cours » ou « le relais ne répond plus » s'efface au lieu
+           de rester affiché toute la partie (2026-09-14). */
+        if (echecsDeSuite > 0) emettre("retablie", null);
         echecsDeSuite = 0;
 
         if (corps.versionEtat !== undefined) version = corps.versionEtat;
@@ -187,7 +208,17 @@ function construireSession({
         if (corps.joueurs) emettre("presence", { joueurs: corps.joueurs, sieges: corps.sieges || {} });
 
         let coupe = false;
-        (corps.messages || []).forEach((m) => {
+        /* Un message déjà traité peut revenir : le relais le garde jusqu'à
+           l'accusé de réception, et la réponse qui le portait a pu se perdre
+           après notre traitement (cf. `/api/flux`). Le numéro tranche. Un
+           relais plus ancien ne numérote pas : tout passe, comme avant. */
+        const nouveaux = (corps.messages || []).filter((m) => {
+          if (typeof m.n !== "number") return true;
+          if (m.n <= dernierRecu) return false;
+          dernierRecu = m.n;
+          return true;
+        });
+        nouveaux.forEach((m) => {
           if (m.t === MESSAGE.HOTE_PARTI) {
             emettre("fin", { raison: "L'hôte a quitté la partie." });
             coupe = true;
@@ -259,9 +290,29 @@ function construireSession({
       return () => abonnes[canal]?.delete(cb);
     },
 
-    /** Hôte : diffuse le plateau public à toute la table. */
+    /** Hôte : diffuse le plateau public à toute la table.
+        EN SÉRIE, et le dernier demandé gagne (2026-09-14). Deux envois en vol
+        pouvaient arriver dans le désordre : le relais numérote l'état à
+        l'arrivée et garde le dernier ARRIVÉ, donc un plateau périmé restait
+        affiché chez tout le monde jusqu'au coup suivant. Un seul envoi part à
+        la fois ; ce qui est demandé entre-temps remplace l'attente, et seul le
+        plus récent part ensuite. */
     diffuserEtat(instantane) {
-      return envoyer({ t: MESSAGE.ETAT, instantane });
+      diffusion.attente = instantane;
+      if (!diffusion.enCours) {
+        diffusion.enCours = (async () => {
+          try {
+            while (diffusion.attente) {
+              const suivant = diffusion.attente;
+              diffusion.attente = null;
+              await envoyer({ t: MESSAGE.ETAT, instantane: suivant });
+            }
+          } finally {
+            diffusion.enCours = null;
+          }
+        })();
+      }
+      return diffusion.enCours;
     },
 
     /** Hôte : envoie à UN invité ce que lui seul doit voir (sa main). */

@@ -1,5 +1,63 @@
 # Changelog
 
+## Non publié — trente-deuxième passe du 2026-09-14 (audit du jeu à distance)
+
+Revue technique complète, le mode à distance d'abord : revues expertes en
+sécurité, React, Node, performance, tests et échecs silencieux, chaque constat
+recoupé avec le code avant d'être corrigé. Aucune règle de jeu n'a changé.
+
+### La CI était rouge depuis le 7 septembre, alors que tous les tests passaient
+
+Vitest attend un signe de vie du fil de test toutes les 60 s, délai codé en dur
+et sans rapport avec `testTimeout`. Les campagnes synchrones de
+`corrections-scan` (247 s) et du simulateur (61 s) l'en privaient : « Timeout
+calling onTaskUpdate », sortie en code 1, aucune annotation d'échec. Le
+déploiement, qui n'attend pas la CI, publiait quand même. `lancerCampagneCedante`
+joue les mêmes parties, mêmes graines, en rendant la main entre deux.
+
+### Le relais ne perd plus le courrier
+
+La file d'un participant était vidée au moment où la réponse partait : une
+réponse perdue en route emportait pour de bon une intention, une main privée,
+un départ. Chaque message porte désormais un numéro, le client accuse
+réception, et le relais garde ce qui n'est pas accusé. Un client ou un relais
+plus ancien garde l'ancienne livraison. La diffusion de l'état part en série,
+le plus récent gagne : deux envois croisés pouvaient laisser un plateau périmé
+chez tout le monde.
+
+### Ce qu'un invité pouvait faire à la table
+
+- **Faire tomber la partie de tous** : une valeur de Vert qui n'est pas une
+  chaîne, ou un brouillon mal formé (`progSelection: 5`), plantait le rendu de
+  l'hôte hors de tout filet. Les valeurs sont vérifiées.
+- **Prendre le Titan de l'hôte** en cours de partie : seul un Titan tenu par
+  l'IA est libre une fois la partie lancée, comme le dit JOUER-A-DISTANCE.md.
+- **Régler la mise du défenseur** de Faut Pas Me Chauffer : chacun sa mise.
+- **Accaparer les places** en rejoignant en boucle : 4 au plus par adresse.
+
+### Ce qu'un invité ne pouvait pas faire, ou ne voyait pas
+
+- **Je Ne Partage Pas** : le ramassage case par case s'exécutait dans le
+  navigateur de l'invité, l'hôte n'en savait rien. Il passe par l'hôte.
+- Un coup refusé par le relais ne disait rien : l'avis s'affiche.
+- « Diffusion impossible, reprise… » ne reprenait rien : la relance existe et
+  l'avis s'efface ; l'avis de coupure s'efface aussi quand la liaison revient.
+
+### La Phase Programmation fuyait par le journal
+
+« ✅ T1 programme : Tête en Avant, Graouhhh… » partait à toute la table et
+s'affichait chez l'hôte. Le journal dit QUE, jamais QUOI.
+
+### Robustesse et outillage
+
+- Un plantage d'affichage ne détruit plus le moteur : la frontière d'erreur
+  vit sous le contrôleur. Un contrôleur démonté quitte sa table.
+- Relais : erreurs internes journalisées, `MAX_SALLES` illisible ne désactive
+  plus le plafond. Client : délai de 15 s sur les envois, 200 non-JSON refusé.
+- Dépendances : `@eslint/js` et `globals` déclarés, `source-map` retiré,
+  Vite 7.3.6 et Vitest 3.2.7 (audit npm : 1 critique et 2 élevées → 2 modérées,
+  outillage de test seul).
+
 ## Non publié — trente-et-unième passe du 2026-09-08 (le repli, et les cartes qu'on ne joue pas)
 
 Six retours de table de Nikola. Un décrivait le comportement voulu du moteur et

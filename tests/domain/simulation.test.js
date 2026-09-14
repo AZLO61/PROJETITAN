@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { agreger, jouerPartie, lancerCampagne } from "../../src/domain/simulation.js";
+import { beforeEach, describe, expect, it } from "vitest";
+import { agreger, jouerPartie, lancerCampagne, lancerCampagneCedante } from "../../src/domain/simulation.js";
 import { FORCES, TEMPERAMENTS, makeProfile } from "../../src/domain/aiEvaluation.js";
 import { manchesMax } from "../../src/domain/gameRules.js";
+
+/* Rendre la main au fil de test ENTRE deux tests (2026-09-14). Des tests
+   synchrones enchaînés ne cèdent qu'aux microtâches : les six premiers de ce
+   fichier bloquaient ~113 s d'un seul tenant sur une machine chargée, bien
+   au-delà des 60 s au bout desquelles Vitest déclare son fil muet et sort en
+   code 1 (cf. `lancerCampagneCedante`). */
+beforeEach(() => new Promise((ok) => { setTimeout(ok, 0); }));
 
 // Le simulateur ne vaut que par sa reproductibilité et par le fait qu'il
 // joue vraiment une partie entière. Ces deux propriétés sont ce qui est
@@ -75,12 +82,15 @@ describe("simulateur — reproductibilité", () => {
     expect(a.classement).not.toEqual(b.classement);
   });
 
-  it("une campagne entière est rejouable à l'identique", () => {
+  it("une campagne entière est rejouable à l'identique", async () => {
     // 3 parties suffisent à prouver la propriété, et la version à 5 frôlait
     // le délai de 5 s de vitest : elle passait seule et échouait en suite
     // complète, ce qui ressemblait à tort à une perte de reproductibilité.
     const params = { parties: 3, nbJoueurs: 4, seed: 500 };
-    expect(lancerCampagne(params).stats).toEqual(lancerCampagne(params).stats);
+    const premiere = lancerCampagne(params).stats;
+    // Rendre la main entre les deux campagnes (cf. `lancerCampagneCedante`).
+    await new Promise((ok) => { setTimeout(ok, 0); });
+    expect(lancerCampagne(params).stats).toEqual(premiere);
     // Délai explicite, comme pour le test d'échelle plus bas : le Novice
     // NOTE désormais sa programmation au lieu de la tirer au hasard
     // (2026-08-18), ce qui alourdit mécaniquement toute campagne où il
@@ -93,7 +103,7 @@ describe("simulateur — reproductibilité", () => {
 });
 
 describe("simulateur — l'échelle de force est bien ordonnée", () => {
-  it("un Expert bat un Facile sur une série de parties", () => {
+  it("un Expert bat un Facile sur une série de parties", async () => {
     // La raison d'être de l'échelle : si l'Expert ne l'emporte pas
     // nettement, c'est que ce qu'on lui retire ne coûte rien.
     const profils = {
@@ -102,7 +112,8 @@ describe("simulateur — l'échelle de force est bien ordonnée", () => {
       3: makeProfile(FORCES.FACILE, TEMPERAMENTS.OPPORTUNISTE),
       4: makeProfile(FORCES.FACILE, TEMPERAMENTS.OPPORTUNISTE),
     };
-    const { stats } = lancerCampagne({ parties: 12, nbJoueurs: 4, seed: 77, profils });
+    // Campagne qui cède la boucle entre deux parties (cf. `lancerCampagneCedante`).
+    const { stats } = await lancerCampagneCedante({ parties: 12, nbJoueurs: 4, seed: 77, profils });
     expect(stats.parForce.expert.scoreMoyen).toBeGreaterThan(stats.parForce.facile.scoreMoyen);
     // Le délai ci-dessous a dû passer de 30 s à 90 s le 2026-08-28 : la
     // référence développe désormais dix cases avant de choisir sa carte
@@ -119,16 +130,16 @@ describe("simulateur — l'échelle de force est bien ordonnée", () => {
 });
 
 describe("agrégation — les indicateurs utiles à un auteur", () => {
-  it("expose taux de victoire, usage des cartes, biais du Détonateur et tension", () => {
-    const { stats } = lancerCampagne({ parties: 6, nbJoueurs: 4, seed: 21 });
+  it("expose taux de victoire, usage des cartes, biais du Détonateur et tension", async () => {
+    const { stats } = await lancerCampagneCedante({ parties: 6, nbJoueurs: 4, seed: 21 });
     expect(stats.parTitan["Titan 1"].parties).toBe(6);
     expect(Object.keys(stats.usageCartes).length).toBeGreaterThan(0);
     expect(stats.victoiresDetonateur.attenduSiEquilibre).toBeCloseTo(0.25);
     expect(stats.tension.ecartMoyenPremierDernier).toBeGreaterThanOrEqual(0);
   });
 
-  it("les parts d'usage des cartes totalisent 100 %", () => {
-    const { stats } = lancerCampagne({ parties: 4, nbJoueurs: 4, seed: 33 });
+  it("les parts d'usage des cartes totalisent 100 %", async () => {
+    const { stats } = await lancerCampagneCedante({ parties: 4, nbJoueurs: 4, seed: 33 });
     const somme = Object.values(stats.usageCartes).reduce((s, v) => s + v.part, 0);
     expect(somme).toBeCloseTo(1, 5);
   });

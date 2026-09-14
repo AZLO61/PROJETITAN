@@ -387,6 +387,25 @@ export function lancerCampagne({ parties = 100, nbJoueurs = 4, seed = 1, profils
   return { parties, nbJoueurs, seed, resultats, stats: agreger(resultats), anomalies: agregerAnomalies(resultats) };
 }
 
+/* ── LA MÊME CAMPAGNE, EN RENDANT LA MAIN ENTRE DEUX PARTIES ──
+   2026-09-14 : la CI était rouge depuis le 7 septembre alors que les 551 tests
+   passaient. Vitest attend un signe de vie du fil de test toutes les 60 s
+   (délai codé en dur, sans rapport avec `testTimeout`) ; une campagne
+   synchrone de plusieurs parties l'en privait, d'où « Timeout calling
+   onTaskUpdate » et une sortie en code 1 sans aucun test en échec.
+
+   Mêmes parties, mêmes graines (`seed + i`), même agrégat que
+   `lancerCampagne` : seule la boucle cède entre deux parties. */
+export async function lancerCampagneCedante(options = {}) {
+  const { parties = 100, nbJoueurs = 4, seed = 1 } = options;
+  const resultats = [];
+  for (let i = 0; i < parties; i++) {
+    resultats.push(...lancerCampagne({ ...options, parties: 1, seed: seed + i }).resultats);
+    await new Promise((ok) => { setTimeout(ok, 0); });
+  }
+  return { parties, nbJoueurs, seed, resultats, stats: agreger(resultats), anomalies: agregerAnomalies(resultats) };
+}
+
 /** Regroupe les anomalies de toute une campagne, par type puis par cause. */
 export function agregerAnomalies(resultats) {
   const parType = {};

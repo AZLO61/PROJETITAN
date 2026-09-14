@@ -58,7 +58,11 @@ function BandeauDistant({ vm }) {
   const sansSiege = invite && vm.monTitanDistant == null;
   const dispos = sansSiege
     ? Array.from({ length: vm.nbJoueurs }, (_, i) => i + 1)
-      .filter((id) => !vm.distantSieges?.[id])
+      /* Partie lancée : seul un Titan tenu par l'IA est libre (2026-09-14). Un
+         Titan humain sans siège distant est celui de l'hôte, ou d'un joueur
+         assis chez lui : le proposer invitait à le lui prendre (cf.
+         `demanderSiege` dans le contrôleur). */
+      .filter((id) => !vm.distantSieges?.[id] && vm.titanModes?.[id] === "ia")
     : [];
   return (
     <div style={{
