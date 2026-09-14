@@ -97,16 +97,20 @@ describe("La Phase Programmation reste secrète", () => {
 describe("Une intention malformée ne fait pas tomber l'hôte", () => {
   it("ignore une valeur de Vert qui n'est pas une chaîne", async () => {
     const s = await partieCoteHote({ 2: "eddy" });
+    // Témoin : la même intention, bien formée, va jusqu'au bout.
+    act(() => { s.emettre("intention", intention("updateVertAssignment", [2, 0, "piste:rouge"])); });
+    expect(vmCourant.vertAssignments[2]?.[0]).toEqual({ type: "piste", target: "rouge" });
     expect(() => {
       act(() => { s.emettre("intention", intention("updateVertAssignment", [2, 0, 42])); });
     }).not.toThrow();
-    expect(vmCourant.vertAssignments[2]?.[0] ?? null).toBeNull();
+    expect(vmCourant.vertAssignments[2]?.[0]).toEqual({ type: "piste", target: "rouge" });
   });
 
   it("ignore un brouillon qui n'a pas la bonne forme", async () => {
     const s = await partieCoteHote({ 2: "eddy" });
     act(() => { s.emettre("intention", intention("confirmProgrammation", [], { progSelection: 5, bbPath: "C4" })); });
-    expect(Array.isArray(vmCourant.progSelection)).toBe(true);
+    // Adopté tel quel, `progSelection: 5` faisait lever l'action (« n'a pas abouti »).
+    expect(vmCourant.actionLog.join(" ")).not.toMatch(/n'a pas abouti/);
     expect(Array.isArray(vmCourant.bbPath)).toBe(true);
   });
 });

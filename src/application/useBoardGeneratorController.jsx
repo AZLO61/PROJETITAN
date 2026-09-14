@@ -2133,11 +2133,15 @@ export function useBoardGeneratorController() {
     setDistantSieges(nouvelle.sieges || {});
     setDistantFin(null);
     setDistantAvis(null);
-    /* Une table neuve repart sans garde-fou (2026-09-14) : levé pour une table
+    /* Une AUTRE table repart sans garde-fou (2026-09-14) : levé pour une table
        précédente — un F5 de l'hôte —, il coupait en silence la diffusion de la
-       suivante, faute de jamais être redescendu. */
-    diffusionBloqueeRef.current = false;
-    setDistantDiffusionBloquee(false);
+       suivante, faute de jamais être redescendu. La ref retient la table pour
+       laquelle il a été posé : rebrancher la MÊME table le garde levé, et seul
+       le geste explicite (`reprendreDiffusion`) l'abaisse. */
+    if (diffusionBloqueeRef.current !== nouvelle.id) {
+      diffusionBloqueeRef.current = false;
+      setDistantDiffusionBloquee(false);
+    }
 
     nouvelle.sur("presence", ({ joueurs, sieges }) => {
       /* La comparaison se fait sur la liste PRÉCÉDENTE, lue dans le setter :
@@ -2233,7 +2237,7 @@ export function useBoardGeneratorController() {
          F5 demanderait de persister la session ET les mains, ce que le relais
          ne stocke pas — c'est noté comme tel dans JOUER-A-DISTANCE.md. */
       if (nouvelle.etatInitial && !setupDoneRef.current) {
-        diffusionBloqueeRef.current = true;
+        diffusionBloqueeRef.current = nouvelle.id; // la table visée, cf. le début de `brancherSession`
         setDistantDiffusionBloquee(true);
         setDistantAvis(
           "Cette table a déjà une partie en cours, et cette page n'en a plus le moteur (elle a été rechargée). "
@@ -2406,7 +2410,11 @@ export function useBoardGeneratorController() {
          En fin de tour, ça peut durer une minute entière sans que rien ne
          l'explique à l'écran. On note ce qu'on a réellement envoyé, et un
          échec laisse l'empreinte précédente, donc la prochaine passe réessaie. */
-      if (signature !== dernierEnvoiRef.current && signature !== derniereDemandeRef.current) {
+      /* `dernierEnvoiRef` vidé exprès (reprise de table, « Rafraîchir » de l'hôte,
+         reprise de diffusion) force l'envoi, même si ce plateau est encore en
+         vol : sans ça, la reprise attendait la fin d'un envoi pendu (15 s). */
+      const force = dernierEnvoiRef.current === "";
+      if (signature !== dernierEnvoiRef.current && (force || signature !== derniereDemandeRef.current)) {
         derniereDemandeRef.current = signature;
         session.diffuserEtat(public_)
           .then(() => {
@@ -5283,7 +5291,15 @@ export function useBoardGeneratorController() {
   const jnpPickCell = useCallback((key, pickedValue) => {
     if (!selectedTitanId || !canPlayCard("je_ne_partage_pas")) return;
     if (!jnpPool.has(key)) return;
-    if (jnpSelected.length >= jnpNbToPick) return;
+    /* Le quota se fige au PREMIER bloc, ici, et plus seulement à l'ouverture du
+       mode (2026-09-14) : chez l'hôte qui joue le ramassage d'un invité, son
+       propre mode est fermé, et `jnpNbToPick` retombait sur le compte recalculé
+       à chaque bloc — la Lanterne Rouge d'un invité s'éteignait en plein
+       ramassage, le bug du 2026-08-24 revenu par le réseau. En local, le quota
+       figé à l'ouverture et celui du premier bloc sont le même nombre. */
+    const quota = jnpSelected.length === 0 ? jnpNbToPickLive : jnpNbToPickFrozen;
+    if (jnpSelected.length >= quota) return;
+    if (jnpSelected.length === 0) setJnpNbToPickFrozen(jnpNbToPickLive);
 
     // L'instantane est pris avant le PREMIER element seulement : Annuler doit
     // ramener avant la carte entiere, pas au milieu d'un ramassage.
@@ -5329,7 +5345,7 @@ export function useBoardGeneratorController() {
        clic intermediaire ne fait donc plus bouger le Titan, ce qui lui
        permet de piocher sur des cases eloignees les unes des autres sans que
        son Perimetre ne se derobe en cours de route. */
-    if (dejaPris.length >= jnpNbToPick) {
+    if (dejaPris.length >= quota) {
       deplacerSiDerniereCaseLibre(
         selectedTitanId, key,
         { titans: titanState.players, looseBlocks, board: state.board }
@@ -5340,7 +5356,7 @@ export function useBoardGeneratorController() {
       setJnpMode(false);
       setJnpSelected([]);
     }
-  }, [selectedTitanId, jnpPool, jnpSelected, jnpNbToPick, titanState.players, looseBlocks, state.board, egalitesLanterneRouge, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [selectedTitanId, jnpPool, jnpSelected, jnpNbToPickLive, jnpNbToPickFrozen, titanState.players, looseBlocks, state.board, egalitesLanterneRouge, canPlayCard, markCardPlayed, captureSnapshot]);
 
   // Conserve sous son ancien nom : les panneaux l'appellent pour le clic case.
   const jnpToggleCell = jnpPickCell;
