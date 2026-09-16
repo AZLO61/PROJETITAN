@@ -38,7 +38,6 @@ export default [
       ecmaVersion: 2023,
       sourceType: "module",
       parserOptions: { ecmaFeatures: { jsx: true } },
-      globals: { ...globals.browser, ...globals.node },
     },
     plugins: { "react-hooks": reactHooks },
     rules: {
@@ -60,6 +59,20 @@ export default [
       "no-unused-vars": ["warn", { args: "none", varsIgnorePattern: "^_" }],
     },
   },
+  /* ── DEUX MONDES, DEUX JEUX DE GLOBALES (2026-09-16, accord de Nikola) ──
+     Les globales du navigateur et celles de Node étaient ouvertes PARTOUT.
+     `no-undef` ne voyait donc rien passer d'un monde à l'autre : un `process`
+     glissé dans le jeu, ou un `window` dans le relais, n'est défini qu'à
+     l'exécution — la même classe de plantage que `manchesMax` ci-dessus.
+
+     Chaque dossier reçoit le monde où il tourne. Le domaine est aussi chargé
+     par les scripts Node : il reste sous `src/`, donc au régime navigateur,
+     et c'est voulu — il ne doit dépendre ni de l'un ni de l'autre, et n'en
+     utilise aujourd'hui aucune globale propre. Les tests tournent sous
+     jsdom, dans Node : ils gardent les deux. */
+  { files: ["src/**"], languageOptions: { globals: globals.browser } },
+  { files: ["server/**", "scripts/**", "*.config.js"], languageOptions: { globals: globals.node } },
+  { files: ["tests/**"], languageOptions: { globals: { ...globals.browser, ...globals.node } } },
   {
     // Les composants d'interface utilisent leurs imports dans du JSX, que
     // `no-unused-vars` ne sait pas voir sans le plugin React. La règle y

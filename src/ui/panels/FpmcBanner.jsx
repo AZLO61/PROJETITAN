@@ -34,9 +34,23 @@ export default function FpmcBanner({ vm }) {
     updateFpmcBid,
     revealFPMC,
     titanDisplayName,
+    session,
+    titanMasque,
+    titanModes,
+    fpmcRevelateur,
   } = vm;
 
   const adrenalineDe = (id) => titanState.players.find((t) => t.id === id)?.adrenaline || 0;
+
+  /* ── À DISTANCE, CHACUN SA MISE, ET LE DÉFENSEUR RÉVÈLE ──
+     Nikola, 2026-09-16 : « c'est le défenseur qui fait que ça se révèle ».
+     Autour d'une seule tablette, rien ne change : tout le monde voit tout et
+     n'importe qui lance le « 3-2-1 GO ». À distance, un appareil ne règle que
+     la mise des Titans qu'il tient — celle d'en face reste « ? » jusqu'à la
+     révélation — et le bouton n'existe que chez celui qui révèle. */
+  const aDistance = Boolean(session);
+  const tenu = (id) => !aDistance || (!titanMasque(id) && titanModes[id] !== "ia");
+  const peutReveler = !aDistance || !titanMasque(fpmcRevelateur);
 
   return (
     <div style={{
@@ -65,17 +79,27 @@ export default function FpmcBanner({ vm }) {
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
             <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "var(--fs-micro)" }}>
               Mise <TitanTag id={fpmcAttackerId} titanDisplayName={titanDisplayName} /> :
-              <input type="number" min="0" max={adrenalineDe(fpmcAttackerId)}
-                value={fpmcCurrent.attackerBid} onChange={(e) => updateFpmcBid("attackerBid", e.target.value)}
-                style={{ width: 44, background: "rgba(255,255,255,.08)", color: "#fffaee", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "2px 5px" }} />
+              {tenu(fpmcAttackerId) ? (
+                <input type="number" min="0" max={adrenalineDe(fpmcAttackerId)}
+                  value={fpmcCurrent.attackerBid ?? 0} onChange={(e) => updateFpmcBid("attackerBid", e.target.value)}
+                  style={{ width: 44, background: "rgba(255,255,255,.08)", color: "#fffaee", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "2px 5px" }} />
+              ) : <span>?</span>}
             </label>
             <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "var(--fs-micro)" }}>
               Mise <TitanTag id={fpmcCurrent.defenderId} titanDisplayName={titanDisplayName} /> :
-              <input type="number" min="0" max={adrenalineDe(fpmcCurrent.defenderId)}
-                value={fpmcCurrent.defenderBid} onChange={(e) => updateFpmcBid("defenderBid", e.target.value)}
-                style={{ width: 44, background: "rgba(255,255,255,.08)", color: "#fffaee", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "2px 5px" }} />
+              {tenu(fpmcCurrent.defenderId) ? (
+                <input type="number" min="0" max={adrenalineDe(fpmcCurrent.defenderId)}
+                  value={fpmcCurrent.defenderBid ?? 0} onChange={(e) => updateFpmcBid("defenderBid", e.target.value)}
+                  style={{ width: 44, background: "rgba(255,255,255,.08)", color: "#fffaee", border: "1px solid rgba(255,255,255,.2)", borderRadius: 6, padding: "2px 5px" }} />
+              ) : <span>?</span>}
             </label>
-            <button onClick={revealFPMC} style={smallBtn(true, "#16E08C", "#00C97A")}>3-2-1 GO !</button>
+            {peutReveler ? (
+              <button onClick={revealFPMC} style={smallBtn(true, "#16E08C", "#00C97A")}>3-2-1 GO !</button>
+            ) : (
+              <span style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                <TitanTag id={fpmcRevelateur} titanDisplayName={titanDisplayName} /> lance le 3-2-1 GO
+              </span>
+            )}
           </div>
         </div>
       )}

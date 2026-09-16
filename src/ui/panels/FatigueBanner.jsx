@@ -21,6 +21,10 @@ export default function FatigueBanner({ vm }) {
   const { attackerId, targetId, cardId } = fatigueEnAttente;
   const cible = titanState.players.find((t) => t.id === targetId);
   const stock = cible?.adrenaline || 0;
+  /* À distance, seule la cible voit la carte et tranche (Nikola, 2026-09-16 :
+     la carte prise par la Fatigue ne se nomme pas). Les autres appareils
+     savent qu'une carte est partie, et attendent. En local, rien ne change. */
+  const aLaCible = !(vm.titanMasque && vm.titanMasque(targetId));
 
   return (
     <div style={{
@@ -41,12 +45,18 @@ export default function FatigueBanner({ vm }) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 11, flexWrap: "wrap" }}>
-        <CardVisual cardId={cardId} size="small" />
+        {aLaCible && <CardVisual cardId={cardId} size="small" />}
         <div style={{ flex: 1, minWidth: 160 }}>
           <p style={{ margin: "0 0 7px", color: "rgba(255,255,255,.85)", fontSize: ".8rem" }}>
-            {CARD_LABEL[cardId]} vient de partir en Zone Repos. Tu peux la reprendre
-            en donnant 1 Adrénaline à l'attaquant.
+            {aLaCible ? (
+              <>{CARD_LABEL[cardId]} vient de partir en Zone Repos. Tu peux la reprendre
+              en donnant 1 Adrénaline à l'attaquant.</>
+            ) : (
+              <>Une carte vient de partir en Zone Repos, face cachée. {titanDisplayName(targetId)} décide
+              s'il la reprend contre 1 Adrénaline.</>
+            )}
           </p>
+          {aLaCible && (
           <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
             <button
               onClick={refuserFatigueEnCours}
@@ -73,6 +83,7 @@ export default function FatigueBanner({ vm }) {
               Encaisser
             </button>
           </div>
+          )}
         </div>
       </div>
     </div>

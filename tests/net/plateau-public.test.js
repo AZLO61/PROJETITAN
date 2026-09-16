@@ -64,6 +64,18 @@ const instantane = () => ({
   vertAssignments: { 1: [{ type: "color", target: "rouge" }], 2: [{ type: "adn", target: "bagarre" }] },
   vertsValides: {},
   table: { gameSeed: 1234567, titanProfiles: { 1: { temperament: "agressif" } } },
+  /* Deux décisions en cours qui portent un secret (2026-09-16) : les cartes
+     qu'un même Graouhhh vient de prendre à T2 et à T4, et les deux mises de
+     Faut Pas Me Chauffer, T1 contre T2. L'assertion « aucun nom de carte » les
+     couvre. */
+  fatiguesEnAttente: [
+    { attackerId: 3, targetId: 2, cardId: "tout_casser", cardLabel: "Graouhhh" },
+    { attackerId: 3, targetId: 4, cardId: "boing_boing", cardLabel: "Graouhhh" },
+  ],
+  fpmc: {
+    attackerId: 1, pendingIds: [], nTargets: 1, attackerBase: 5,
+    current: { defenderId: 2, defenderBase: 4, attackerBid: 2, defenderBid: 1 },
+  },
 });
 
 describe("Le plateau public ne porte aucune main", () => {
@@ -157,6 +169,32 @@ describe("Le plateau public ne porte aucune main", () => {
     const source = instantane();
     plateauPublic(source);
     expect(source.titanState.players[0].hand).toHaveLength(3);
+  });
+});
+
+describe("Les secrets d'une décision en cours", () => {
+  it("masque la carte de la Fatigue et les deux mises de Faut Pas Me Chauffer", () => {
+    const pub = plateauPublic(instantane());
+    expect(pub.fatiguesEnAttente.map((f) => f.cardId)).toEqual(["?", "?"]);
+    expect(pub.fatiguesEnAttente[0]).toMatchObject({ attackerId: 3, targetId: 2, cardLabel: "Graouhhh" });
+    expect(pub.fpmc.current).toEqual({ defenderId: 2, defenderBase: 4, attackerBid: null, defenderBid: null });
+  });
+
+  it("rend à chacun ce qui est à lui, et rien de plus", () => {
+    const complet = instantane();
+    const pub = plateauPublic(complet);
+    // T2 : cible de la première Fatigue ET défenseur du FPMC.
+    const cible = fusionnerMain(pub, mainPrivee(complet, 2));
+    expect(cible.fatiguesEnAttente.map((f) => f.cardId)).toEqual(["tout_casser", "?"]);
+    expect(cible.fpmc.current).toMatchObject({ defenderBid: 1, attackerBid: null });
+    // T1 : l'attaquant ne voit que sa mise, et aucune carte de Fatigue.
+    const attaquant = fusionnerMain(pub, mainPrivee(complet, 1));
+    expect(attaquant.fpmc.current).toMatchObject({ attackerBid: 2, defenderBid: null });
+    expect(attaquant.fatiguesEnAttente.map((f) => f.cardId)).toEqual(["?", "?"]);
+    // T4 : sa Fatigue à lui, pas la mise des autres.
+    const autre = fusionnerMain(pub, mainPrivee(complet, 4));
+    expect(autre.fatiguesEnAttente.map((f) => f.cardId)).toEqual(["?", "boing_boing"]);
+    expect(autre.fpmc.current).toMatchObject({ attackerBid: null, defenderBid: null });
   });
 });
 

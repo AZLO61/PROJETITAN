@@ -52,6 +52,24 @@ export function setSeed(seed) {
   return currentSeed;
 }
 
+/** Exécute `fn` sur un générateur semé à part, puis rend le courant intact.
+ *  C'est ce qui rend la réflexion d'une IA identique qu'elle tourne dans un
+ *  Web Worker (qui a son propre générateur) ou sur le fil principal : dans les
+ *  deux cas, elle tire d'un flux semé par la même graine, sans consommer celui
+ *  de la partie (cf. `src/application/penseeIA.js`). */
+export function avecGraine(graine, fn) {
+  const suivant = next;
+  const graineCourante = currentSeed;
+  currentSeed = graine >>> 0;
+  next = mulberry32(currentSeed);
+  try {
+    return fn();
+  } finally {
+    next = suivant;
+    currentSeed = graineCourante;
+  }
+}
+
 /** La graine en cours, à journaliser pour pouvoir rejouer une partie. */
 export function getSeed() {
   return currentSeed;

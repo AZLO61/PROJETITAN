@@ -3122,15 +3122,21 @@ function advanceGraouhhh(gameState, payload) {
      Titan suivant tant que ce n'est pas résolu » — un repli en attente est
      tout autant non résolu qu'un Dilemme. */
   const nbReplis = () => (gameState.replis || []).length;
+  /* Les Fatigues refusables remontent à l'appelant (2026-09-16). Chaque pas les
+     produisait, aucun ne les rendait : un Titan humain touché par Graouhhh ne
+     pouvait jamais payer pour garder sa carte, contrairement à Boing Boing. */
+  const fatigues = [];
 
   if (pendingMoveId != null) {
     const avant = nbReplis();
     const step = resolveGraouhhhMoveTitan(titanId, pendingMoveId, gameState, dr, dc, reculDistance, mancheNumber);
     log.push(...step.log);
+    fatigues.push(...step.fatigues);
     bagarreIds = [...bagarreIds, ...step.bagarreIds];
     if (nbReplis() > avant) {
       return {
         log,
+        fatigues,
         done: false,
         repliEnAttente: true,
         continuation: { titanId, dr, dc, reculDistance, mancheNumber, remaining, bagarreIds, touchedCount, pendingMoveId: null },
@@ -3146,6 +3152,7 @@ function advanceGraouhhh(gameState, payload) {
       const caseAvant = gameState.titans.find((x) => x.id === targetId).cell;
       return {
         log,
+        fatigues,
         done: false,
         decision: makeDecisionRequest("DIL", titanId, targetId, "Graouhhh", caseAvant),
         continuation: { titanId, dr, dc, reculDistance, mancheNumber, remaining: rest, bagarreIds, touchedCount, pendingMoveId: targetId },
@@ -3154,11 +3161,13 @@ function advanceGraouhhh(gameState, payload) {
     const avant = nbReplis();
     const step = resolveGraouhhhMoveTitan(titanId, targetId, gameState, dr, dc, reculDistance, mancheNumber);
     log.push(...step.log);
+    fatigues.push(...step.fatigues);
     bagarreIds = [...bagarreIds, ...step.bagarreIds];
     remaining = rest;
     if (nbReplis() > avant) {
       return {
         log,
+        fatigues,
         done: false,
         repliEnAttente: true,
         continuation: { titanId, dr, dc, reculDistance, mancheNumber, remaining, bagarreIds, touchedCount, pendingMoveId: null },
@@ -3168,7 +3177,7 @@ function advanceGraouhhh(gameState, payload) {
 
   const fin = finalizeGraouhhh(titanId, gameState, bagarreIds, touchedCount);
   log.push(...fin.log);
-  return { log, done: true };
+  return { log, fatigues, done: true };
 }
 
 // Wrapper synchrone conservé pour l'IA en simulation et les tests existants
@@ -4912,9 +4921,11 @@ function ensureProgrammableHand(titan) {
     const idx = titan.repos.indexOf(entry);
     titan.repos.splice(idx, 1);
     titan.hand.push(entry.cardId);
+    // Une carte de Fatigue est face cachée : le journal ne la nomme pas.
+    const nom = entry.faceUp ? CARD_LABEL[entry.cardId] : "Une carte face cachée";
     log.push(
       `Titan ${titan.id} : main trop ciblée (${titan.hand.length - 1} carte(s) avant secours) — ` +
-      `${CARD_LABEL[entry.cardId]} reprise par anticipation depuis la Zone Repos, en avance sur son retour normal.`
+      `${nom} reprise par anticipation depuis la Zone Repos, en avance sur son retour normal.`
     );
   }
   return { log };
@@ -5059,7 +5070,11 @@ function resolveFatigue(attackerId, targetId, mancheNumber, gameStateTitans) {
        comme avant : la Fatigue tient. */
     refusable: (target.adrenaline || 0) >= 1,
     cardId,
-    log: `Fatigue (Titan ${attackerId} → Titan ${targetId}) : carte ${CARD_LABEL[cardId]} piochée au hasard, face cachée, indisponible en Zone Repos (Titan ${targetId}) jusqu'à la Manche ${mancheNumber + 2}.`,
+    /* Le journal ne nomme PAS la carte (Nikola, 2026-09-16 : « c'est pas normal
+       que le journal et le résumé nomment la carte prise par la Fatigue ; pour
+       le Vol de fin de Manche, oui »). Elle est face cachée : seule sa victime la
+       voit, par `cardId`, dans son propre bandeau. */
+    log: `Fatigue (Titan ${attackerId} → Titan ${targetId}) : une carte piochée au hasard, face cachée, indisponible en Zone Repos (Titan ${targetId}) jusqu'à la Manche ${mancheNumber + 2}.`,
   };
 }
 
@@ -5077,7 +5092,7 @@ function refuserFatigue(attackerId, targetId, cardId, gameStateTitans) {
   }
   const i = (target.repos || []).findIndex((e) => e.cardId === cardId);
   if (i === -1) {
-    return { ok: false, reason: `${CARD_LABEL[cardId]} n'est plus en Zone Repos.` };
+    return { ok: false, reason: `la carte n'est plus en Zone Repos.` };
   }
   target.repos.splice(i, 1);
   target.hand.push(cardId);
@@ -5085,7 +5100,7 @@ function refuserFatigue(attackerId, targetId, cardId, gameStateTitans) {
   if (attacker) attacker.adrenaline = (attacker.adrenaline || 0) + 1;
   return {
     ok: true,
-    log: `Titan ${targetId} refuse la Fatigue : 1 Adrénaline donnée à Titan ${attackerId}, ${CARD_LABEL[cardId]} revient en main.`,
+    log: `Titan ${targetId} refuse la Fatigue : 1 Adrénaline donnée à Titan ${attackerId}, sa carte revient en main.`,
   };
 }
 

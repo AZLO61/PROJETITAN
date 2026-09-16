@@ -1,5 +1,78 @@
 # Changelog
 
+## Non publié — trente-troisième passe du 2026-09-16 (les arbitrages de l'audit)
+
+Nikola a tranché six des sept questions laissées ouvertes par l'audit du 14.
+Le journal des invités (80 % du poids d'un plateau envoyé) attend encore sa
+réponse : le tronquer changerait ce que voit l'invité, rien n'a bougé.
+
+### L'IA réfléchit hors du fil de l'interface
+
+« On la passe dans un Web Worker, si ça améliore l'expérience. » Mesuré dans
+le navigateur, quatre IA Expert pendant 40 s, build de production : avant, sept
+blocages du fil principal dont cinq de 230 à 250 ms (1,4 s au total) ; après,
+un seul de 82 ms. L'écran, les boutons et le courrier de la table ne gèlent
+plus pendant qu'une IA cherche son coup.
+
+`planTour`, `planMovement`, `planCardPlay` et la programmation partent dans
+`iaWorker.js` par `penser()` (`src/application/penseeIA.js`). Sans Worker
+(tests, navigateur qui refuse), la même recherche tourne sur place et répond
+dans le même appel. Les deux chemins tirent d'un générateur semé par la même
+graine, prise dans le flux de la partie : une graine rejoue la même IA quel que
+soit le chemin. Un faux Worker asynchrone le vérifie, partie entière comprise.
+
+### Faut Pas Me Chauffer à distance : le défenseur révèle
+
+« C'est le défenseur qui fait que ça se révèle. » Le « 3-2-1 GO » n'apparaît
+plus que chez le défenseur — chez l'attaquant quand le défenseur est une IA —
+et l'hôte refuse la révélation venue d'ailleurs. Les deux mises partaient en
+clair sur le fil : le défenseur aurait lu celle de l'attaquant avant de fixer la
+sienne. Chacun ne reçoit plus que la sienne, l'autre s'affiche « ? » jusqu'au
+GO. Autour d'une seule tablette, rien ne change.
+
+### La carte prise par la Fatigue ne se nomme plus
+
+« C'est pas normal que le journal et le résumé nomment la carte prise par la
+Fatigue ; pour le Vol de fin de Manche, oui. » Le journal dit « une carte
+piochée au hasard », au refus comme au secours de main trop ciblée. Le Vol,
+lui, reste nommé. En chemin :
+
+- **Un invité visé ne voyait jamais son bandeau de refus**, et l'hôte le voyait
+  à sa place, carte nommée : la Fatigue en attente ne faisait pas partie de
+  l'instantané. Elle y est, carte masquée ; seule la cible la reçoit, et seule
+  elle peut payer ou encaisser.
+- **Graouhhh ne laissait jamais refuser une Fatigue** : `advanceGraouhhh` ne
+  transmettait pas celles que chaque pas produisait. Boing Boing le faisait.
+- **Deux Fatigues d'un même Graouhhh** : la seconde écrasait la première. Elles
+  attendent en file et se tranchent chacune à son tour.
+- Une Fatigue en attente survivait à « Nouvelle partie ».
+
+### Je Ne Partage Pas : un ramassage engagé se termine d'abord
+
+Ouvrir une autre carte pendant un ramassage remettait le compteur à zéro, chez
+l'hôte y compris pendant le ramassage d'un invité. Aucun mode ne touche plus au
+compteur (état de partie), et tant qu'il n'est pas vide, rien d'autre ne
+s'ouvre : ni autre carte, ni défausse, ni déplacement, ni Récupération. Rouvrir
+la carte reprend le ramassage, quota figé compris.
+
+La défausse n'avait ses gardes que sur son bouton : par intention, un invité
+actif défaussait n'importe quelle carte, y compris celle d'un autre Titan.
+
+### Déploiement, CSP, actions épinglées
+
+- Le déploiement est un job de la CI (`needs: check`) : un rouge ne publie plus.
+  `deploy.yml` est absorbé par `ci.yml`.
+- Les actions GitHub sont épinglées par SHA de commit (mêmes versions qu'avant),
+  et le jeton de la CI est en lecture seule hors déploiement.
+- Le build pose une politique de sécurité du contenu : aucun script en ligne ni
+  étranger. Le relais reste joignable à toute adresse, puisqu'elle est saisie.
+- ESLint distingue enfin les globales du navigateur (`src/`) et de Node
+  (`server/`, `scripts/`) : un `process` dans le jeu ou un `window` dans le
+  relais sont signalés.
+
+Le chunk principal passe de 499,4 à 503,2 kB, juste au-dessus du seuil
+d'avertissement de Vite.
+
 ## Non publié — trente-deuxième passe du 2026-09-14 (audit du jeu à distance)
 
 Revue technique complète, le mode à distance d'abord : revues expertes en

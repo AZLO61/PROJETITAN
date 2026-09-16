@@ -500,7 +500,30 @@ export function plateauPublic(instantane) {
     delete copie.table.gameSeed;
     delete copie.table.titanProfiles;
   }
+
+  /* ── LES MISES DE FAUT PAS ME CHAUFFER RESTENT CACHÉES JUSQU'AU « GO » ──
+     2026-09-16. Elles partaient en clair à toute la table — or le défenseur,
+     qui déclenche désormais la révélation, aurait lu la mise de l'attaquant
+     avant de fixer la sienne. Chacun reçoit la sienne par le courrier privé. */
+  if (copie.fpmc?.current) {
+    copie.fpmc.current = { ...copie.fpmc.current, attackerBid: null, defenderBid: null };
+  }
+
+  /* La carte qu'une Fatigue vient de prendre est face cachée : la table sait
+     qu'une carte est partie, seule la cible sait laquelle (même date). */
+  if (copie.fatiguesEnAttente) {
+    copie.fatiguesEnAttente = copie.fatiguesEnAttente.map((f) => ({ ...f, cardId: "?" }));
+  }
   return copie;
+}
+
+/* La mise de Faut Pas Me Chauffer de ce Titan, s'il est l'un des deux camps. */
+function miseFpmcDe(instantane, id) {
+  const f = instantane?.fpmc;
+  if (!f?.current) return null;
+  if (Number(f.attackerId) === id) return { cote: "attackerBid", valeur: f.current.attackerBid };
+  if (Number(f.current.defenderId) === id) return { cote: "defenderBid", valeur: f.current.defenderBid };
+  return null;
 }
 
 /** Ce qui n'appartient qu'à un joueur : sa main, ses cartes programmées, sa
@@ -524,6 +547,12 @@ export function mainPrivee(instantane, titanId) {
        propres choix remplacés par les jetons anonymes du plateau public, et
        ne pourrait plus ni les relire ni les valider. */
     vertAssignments: structuredClone(instantane?.vertAssignments?.[id] || []),
+    // Sa mise de Faut Pas Me Chauffer, retirée du plateau public.
+    fpmcMise: miseFpmcDe(instantane, id),
+    // Les cartes que des Fatigues en attente lui ont prises, rang pour rang
+    // dans la file (`null` là où la cible est un autre Titan).
+    fatiguesCartes: (instantane?.fatiguesEnAttente || [])
+      .map((f) => (Number(f.targetId) === id ? f.cardId : null)),
   };
 }
 
@@ -550,6 +579,15 @@ export function fusionnerMain(instantanePublic, main) {
       ...(copie.vertAssignments || {}),
       [main.titanId]: structuredClone(main.vertAssignments),
     };
+  }
+  const mise = main.fpmcMise;
+  if (copie.fpmc?.current && (mise?.cote === "attackerBid" || mise?.cote === "defenderBid")) {
+    copie.fpmc.current = { ...copie.fpmc.current, [mise.cote]: mise.valeur };
+  }
+  if (Array.isArray(main.fatiguesCartes) && copie.fatiguesEnAttente) {
+    copie.fatiguesEnAttente = copie.fatiguesEnAttente.map((f, i) => (
+      main.fatiguesCartes[i] && Number(f.targetId) === main.titanId ? { ...f, cardId: main.fatiguesCartes[i] } : f
+    ));
   }
   return copie;
 }

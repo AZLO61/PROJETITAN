@@ -7,15 +7,22 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Jeton en lecture seule par défaut : seul le job de déploiement reçoit plus.
+permissions:
+  contents: read
+
+# Actions épinglées par SHA de commit (2026-09-16) : une étiquette comme `v4`
+# se déplace, un SHA non. Le commentaire donne la version à laquelle il
+# correspond — pour monter de version, remplacer SHA et commentaire ensemble.
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           # Node 22 et non 20 : jsdom 30 charge undici, qui appelle
           # `webidl.util.markAsUncloneable`, absent de Node 20. Sous Node 20
@@ -39,3 +46,32 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Le site publié est CELUI qui vient de passer les tests.
+      - name: Upload build artifact
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: ./dist
+
+  # ── LE DÉPLOIEMENT ATTEND LA CI (2026-09-16) ──
+  # Il vivait dans son propre workflow, lancé au même push que la CI et sans
+  # l'attendre : du 7 au 14 septembre, la CI était rouge et le site partait
+  # quand même. `needs: check` en fait une conséquence des tests.
+  deploy:
+    needs: check
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

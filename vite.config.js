@@ -1,8 +1,40 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+/* ── POLITIQUE DE SÉCURITÉ DU CONTENU (2026-09-16) ──
+   Posée en <meta> : GitHub Pages ne laisse pas choisir les en-têtes. Au build
+   SEULEMENT — le serveur de développement injecte un script en ligne (React
+   Refresh) que `script-src 'self'` bloquerait.
+   · script-src 'self' : aucun script en ligne ni étranger. C'est le cœur :
+     une injection dans le journal ou un pseudo ne peut plus rien exécuter.
+   · style-src 'unsafe-inline' : React pose des <style> (animations) ; plus
+     la feuille de Google Fonts, et les polices elles-mêmes en font-src.
+   · connect-src https: http: : l'adresse du relais est saisie par le joueur
+     (tunnel tiré au sort, localhost, réseau local) — on ne peut pas la lister. */
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "worker-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  "connect-src 'self' https: http:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "titan-csp",
+      apply: "build",
+      transformIndexHtml: () => [
+        { tag: "meta", attrs: { "http-equiv": "Content-Security-Policy", content: CSP }, injectTo: "head-prepend" },
+      ],
+    },
+  ],
   base: "/PROJETITAN/",
   test: {
     // jsdom est nécessaire aux tests qui montent réellement les composants

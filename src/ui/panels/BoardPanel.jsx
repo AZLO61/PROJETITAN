@@ -201,7 +201,6 @@ export default function BoardPanel({ vm }) {
     jnpMode,
     setJnpMode,
     jnpSelected,
-    setJnpSelected,
     bbMode,
     setBbMode,
     bbAdrenaline,
@@ -1109,7 +1108,8 @@ export default function BoardPanel({ vm }) {
                                    dessous : le geste reste réversible. */
                                 if (cardId !== "tete_en_avant") setTeaMode(false);
                                 if (cardId !== "boing_boing") { setBbMode(false); setBbPath([]); setBbSurvol([]); }
-                                if (cardId !== "je_ne_partage_pas") { setJnpMode(false); setJnpSelected([]); }
+                                // Le mode seulement : le compteur du ramassage est de l'état de partie.
+                                if (cardId !== "je_ne_partage_pas") setJnpMode(false);
                                 if (cardId !== "graouhhh") setGraouMode(false);
 
                                 /* ⚠️ DEUX CARTES POUVAIENT PARAÎTRE SÉLECTIONNÉES.
@@ -1163,7 +1163,7 @@ export default function BoardPanel({ vm }) {
                               <button
                                 onClick={() => {
                                   if (animating) return;
-                                  setTeaMode(false); setBbMode(false); setBbPath([]); setJnpMode(false); setJnpSelected([]);
+                                  setTeaMode(false); setBbMode(false); setBbPath([]); setJnpMode(false);
                                   discardCurrentCard(selectedTitan.id, cardId);
                                 }}
                                 title="L'action n'est finalement pas intéressante — défausser sans effet, face cachée"
