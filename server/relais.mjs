@@ -897,6 +897,26 @@ const serveur = createServer(async (requete, reponse) => {
         return;
       }
 
+      /* ── LE JOURNAL, À PART DE L'ÉTAT ──
+         2026-09-17. Même règle de direction que « etat » : seul l'hôte fait
+         foi sur ce qui s'est passé. `charge` porte soit `{ lignes }` (les
+         nouvelles depuis le dernier envoi), soit `{ complet }` (resync d'un
+         invité qui vient d'arriver) — le relais ne lit ni l'un ni l'autre,
+         il route, comme pour tout le reste. */
+      if (message.t === "journal") {
+        if (corps.jeton !== salle.hote) {
+          repondre(reponse, 403, { erreur: "Seul l'hôte diffuse le journal." }, origine);
+          return;
+        }
+        deposer(salle, [...salle.participants.keys()], {
+          t: "journal",
+          lignes: Array.isArray(message.lignes) ? message.lignes : undefined,
+          complet: Array.isArray(message.complet) ? message.complet : undefined,
+        });
+        repondre(reponse, 200, { ok: true }, origine);
+        return;
+      }
+
       if (message.t === "chat") {
         const texte = String(message.texte || "").replace(/[<>]/g, "").slice(0, 240);
         if (texte) {

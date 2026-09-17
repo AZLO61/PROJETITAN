@@ -3,6 +3,7 @@ import { btnStyle, cancelBtn } from "../styles.js";
 import { T, marquee, prose, label, plate, key, readout } from "../theme.js";
 import Icon from "../icons.jsx";
 import BlockStockBar from "../cards/BlockStockBar.jsx";
+import { sonCoupe, definirSonCoupe } from "../audio.js";
 
 /* Une commande du meuble : icône dessinée + libellé, jamais un émoji. Toutes
    au même gabarit, pour que la rangée se lise comme une rangée de touches et
@@ -43,6 +44,9 @@ export default function HeaderPhase({ vm }) {
   // Confirmation maison plutot que window.confirm : la boite systeme casse
   // la direction artistique et ne se style pas.
   const [confirmNouvelle, setConfirmNouvelle] = React.useState(false);
+  // Lu depuis localStorage au premier rendu ; le bouton écrit et relit la
+  // même clé, cf. `ui/audio.js`.
+  const [muet, setMuet] = React.useState(() => sonCoupe());
   const {
     eventsEnabled,
     mancheNumber,
@@ -123,6 +127,16 @@ export default function HeaderPhase({ vm }) {
           title="Afficher ou masquer le décompte des points"
         >
           Scoring
+        </Commande>
+        {/* SANS ICÔNE, MÊME RAISON QUE SCORING JUSTE AU-DESSUS : pas de
+            pictogramme haut-parleur/muet dans ce jeu, ne pas en improviser un.
+            Interrupteur : « Son » allumé = son actif, comme Scoring. */}
+        <Commande
+          onClick={() => setMuet((m) => { const suite = !m; definirSonCoupe(suite); return suite; })}
+          enfonce={!muet}
+          title={muet ? "Réactiver le son" : "Couper le son"}
+        >
+          Son
         </Commande>
         {/* Bascule pure : le bouton annonce la vue vers laquelle il emmène,
             jamais celle qu'on regarde déjà, et ne porte pas d'état « actif »

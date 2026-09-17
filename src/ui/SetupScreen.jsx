@@ -74,6 +74,143 @@ function useEcranEtroit(requete = "(max-width: 639px)") {
   return etroit;
 }
 
+/* ── LE CARROUSEL DE DIFFICULTÉ, SUR TÉLÉPHONE ──
+   Nikola, 2026-09-17 : il n'aime pas les pastilles sous le sélecteur, et
+   imagine un carrousel qu'on swipe, où la difficulté précédente et la
+   suivante s'entr'aperçoivent de part et d'autre de celle choisie.
+
+   Le défilement natif fait le swipe (`scroll-snap`, pas de geste réécrit à la
+   main) : chaque carte fait `calc(100% - 64px)` de large, donc un morceau des
+   deux voisines dépasse déjà des deux côtés au repos — c'est l'aperçu demandé,
+   sans pastille pour le redire. Le padding du rail vaut la moitié de ce
+   dépassement, pour que la première et la dernière carte puissent, elles
+   aussi, se centrer.
+
+   Le défilement seul choisit : un `scroll` débattu (`requestAnimationFrame`)
+   repère la carte la plus proche du centre et règle `difficulte` dessus.
+   Taper une carte aperçue, ou une flèche, recentre EXPLICITEMENT via
+   `scrollIntoView` — sans quoi le clic changerait le réglage sans que l'œil
+   voie bouger la carte qui vient de devenir active. Les flèches restent : un
+   clavier ou un trackpad sans geste tactile doivent pouvoir choisir aussi. */
+function DifficulteCarrousel({ difficulte, setDifficulte }) {
+  const railRef = React.useRef(null);
+  const cartesRef = React.useRef([]);
+  const debatRef = React.useRef(null);
+  const index = Math.max(0, NIVEAUX.findIndex((n) => n.cle === difficulte));
+
+  const centrer = React.useCallback((i, lisse = true) => {
+    cartesRef.current[i]?.scrollIntoView({
+      behavior: lisse ? "smooth" : "auto", inline: "center", block: "nearest",
+    });
+  }, []);
+
+  // Position de départ : la carte déjà réglée, centrée sans animation.
+  React.useEffect(() => { centrer(index, false); /* eslint-disable-line react-hooks/exhaustive-deps */ }, []);
+
+  const choisir = (i) => {
+    setDifficulte(NIVEAUX[i].cle);
+    centrer(i);
+  };
+
+  // Le défilement lui-même décide, une fois qu'il s'est arrêté : sans le
+  // débat, chaque pixel parcouru en chemin déclencherait un changement.
+  const surDefilement = () => {
+    if (debatRef.current) cancelAnimationFrame(debatRef.current);
+    debatRef.current = requestAnimationFrame(() => {
+      const rail = railRef.current;
+      if (!rail) return;
+      const centreRail = rail.scrollLeft + rail.clientWidth / 2;
+      let meilleur = 0;
+      let meilleurEcart = Infinity;
+      cartesRef.current.forEach((el, i) => {
+        if (!el) return;
+        const centreCarte = el.offsetLeft + el.offsetWidth / 2;
+        const ecart = Math.abs(centreCarte - centreRail);
+        if (ecart < meilleurEcart) { meilleurEcart = ecart; meilleur = i; }
+      });
+      if (NIVEAUX[meilleur].cle !== difficulte) setDifficulte(NIVEAUX[meilleur].cle);
+    });
+  };
+
+  const fleche = {
+    background: "transparent", border: `2px solid ${T.rule}`, borderRadius: T.rChip,
+    color: T.dim, width: 40, flexShrink: 0, cursor: "pointer",
+    fontFamily: T.ui, fontWeight: 800, fontSize: "1.1rem", lineHeight: 1,
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
+      <button
+        onClick={() => choisir((index - 1 + NIVEAUX.length) % NIVEAUX.length)}
+        aria-label="Niveau de difficulté précédent"
+        style={fleche}
+      >
+        ‹
+      </button>
+      <div
+        ref={railRef}
+        onScroll={surDefilement}
+        role="listbox"
+        aria-label="Difficulté"
+        className="titan-carrousel-difficulte"
+        style={{
+          flex: 1, minWidth: 0,
+          display: "flex", gap: 10,
+          overflowX: "auto",
+          scrollSnapType: "x mandatory",
+          // Cache la barre de défilement système : le rail se lit comme un
+          // carrousel, pas comme une zone qui déborde.
+          scrollbarWidth: "none",
+          paddingInline: 32,
+        }}
+      >
+        {NIVEAUX.map((n, i) => {
+          const actif = i === index;
+          return (
+            <button
+              key={n.cle}
+              ref={(el) => { cartesRef.current[i] = el; }}
+              onClick={() => choisir(i)}
+              role="option"
+              aria-selected={actif}
+              aria-label={`Difficulté ${FORCE_LABELS[n.cle]} — ${n.aide}`}
+              style={{
+                flex: "0 0 calc(100% - 64px)",
+                scrollSnapAlign: "center",
+                background: actif ? n.ton : "transparent",
+                border: `2px solid ${actif ? n.ton : T.rule}`,
+                borderRadius: T.rChip,
+                padding: "13px 14px",
+                cursor: "pointer",
+                textAlign: "left",
+                boxShadow: actif ? `0 3px 0 ${T.edge}` : "none",
+                opacity: actif ? 1 : 0.6,
+                transition: "background 140ms linear, border-color 140ms linear, opacity 140ms linear",
+              }}
+            >
+              <div style={label(actif ? "#0f0826" : T.dim, T.body)}>{FORCE_LABELS[n.cle]}</div>
+              <div style={{ ...prose(actif ? "#0f0826" : T.faint, T.micro), lineHeight: 1.35, marginTop: 5 }}>
+                {n.aide}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <button
+        onClick={() => choisir((index + 1) % NIVEAUX.length)}
+        aria-label="Niveau de difficulté suivant"
+        style={fleche}
+      >
+        ›
+      </button>
+      {/* `scrollbar-width` couvre Firefox ; les navigateurs WebKit/Blink ont
+          besoin du pseudo-élément. Portée au rail seul via une classe, pour ne
+          rien changer ailleurs sur la page. */}
+      <style>{`.titan-carrousel-difficulte::-webkit-scrollbar { display: none; }`}</style>
+    </div>
+  );
+}
+
 /* Un bloc de réglage. Pas de plaque, pas de cadre : un titre en bandeau et
    un filet. Aucun conteneur n'existe ici pour porter une bordure. */
 function Reglage({ titre, aide, children }) {
@@ -83,6 +220,182 @@ function Reglage({ titre, aide, children }) {
       {aide && <p style={{ ...prose(T.faint, T.micro), margin: "0 0 10px" }}>{aide}</p>}
       {children}
     </section>
+  );
+}
+
+/* Les cinq réglages de partie, extraits tels quels (2026-09-17) pour être
+   rendus soit à plat (desktop), soit sous le `<details>` replié du mobile
+   (cf. `SetupScreen`) — le même JSX, un seul endroit où le corriger. */
+function ReglagesDeParties({
+  eventsEnabled, setEventsEnabled,
+  modeVolRepos, setModeVolRepos,
+  egalitesLanterneRouge, setEgalitesLanterneRouge,
+  apocalypseThreshold, setApocalypseThreshold,
+  seedInput, setSeedInput,
+  champ,
+}) {
+  return (
+    <>
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 11,
+          border: `2px solid ${eventsEnabled ? T.move : T.rule}`,
+          borderRadius: T.rChip,
+          padding: "11px 13px",
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          name="evenements"
+          checked={eventsEnabled}
+          onChange={(e) => setEventsEnabled(e.target.checked)}
+          style={{ marginTop: 3, accentColor: T.move, width: 17, height: 17 }}
+        />
+        <span>
+          <span style={label(eventsEnabled ? T.move : T.dim, T.small)}>Événements</span>
+          <span style={{ ...prose(T.faint, T.micro), display: "block", marginTop: 3 }}>
+            Ajoute la Phase 1 à chaque Manche. Le tirage fonctionne, les
+            effets ne sont pas encore codés.
+          </span>
+        </span>
+      </label>
+
+      {/* ── CE QUE FAIT LE VOL DE PHASE REPOS ──
+          Nikola, 2026-08-28 : « faudrait que ça soit un mode avant le
+          lancement pour la phase Repos : soit c'est la carte de la
+          victime qui va dans sa zone Repos, soit ça va dans la main du
+          Titan qui a sélectionné la carte ».
+
+          Les deux versions changent la nature de la phase, pas son
+          dosage : l'une prive, l'autre transfère. Ça ne se règle donc
+          pas au curseur, ça se choisit — et avant de commencer, comme
+          le nombre de Manches. */}
+      <div style={{ border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "11px 13px" }}>
+        <div style={{ ...label(T.dim, T.small), marginBottom: 8 }}>Vol de Phase Repos</div>
+        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(min(210px, 100%), 1fr))" }}>
+          {[
+            { cle: "repos", nom: "Mise au repos", aide: "La carte tirée part en Zone Repos chez sa victime : elle en est privée une Manche, personne ne la gagne." },
+            { cle: "main", nom: "Emprunt", aide: "La carte tirée passe en main du voleur pour la Manche, puis retourne à son propriétaire." },
+          ].map(({ cle, nom, aide }) => {
+            const on = modeVolRepos === cle;
+            return (
+              <button
+                key={cle}
+                onClick={() => setModeVolRepos(cle)}
+                aria-pressed={on}
+                aria-label={`Vol de Phase Repos : ${nom} — ${aide}`}
+                style={{
+                  background: on ? T.tele : "transparent",
+                  border: `2px solid ${on ? T.tele : T.rule}`,
+                  borderRadius: T.rChip,
+                  color: on ? "#0f0826" : T.dim,
+                  padding: "10px 12px",
+                  cursor: "pointer",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "flex-start",
+                  gap: 4,
+                  textAlign: "left",
+                }}
+              >
+                <span style={label(on ? "#0f0826" : T.tele, T.small)}>{nom}</span>
+                <span style={{ ...prose(on ? "#0f0826" : T.faint, T.micro), lineHeight: 1.35 }}>{aide}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── LES ÉGALITÉS EN LANTERNE ROUGE ──
+          Nikola, 2026-09-01 : « rajoute dans la configuration : les
+          égalités en "Lanterne Rouge" ne fonctionnent plus — on coche ou
+          pas ».
+
+          Coché, c'est la règle telle qu'elle a toujours tourné : tous les
+          Titans les moins dotés touchent le troisième bloc de Je Ne
+          Partage Pas. Décoché, il faut être SEUL dernier — ce qui change
+          surtout les débuts de Manche, où tout le monde est à égalité et
+          où le bonus tombait donc pour trois joueurs sur quatre.
+
+          Il vit avec les autres réglages de partie, à côté du Vol de
+          Phase Repos : ce sont les deux mêmes sortes d'arbitrage, une
+          règle qui se choisit avant de commencer. */}
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 11,
+          border: `2px solid ${egalitesLanterneRouge ? T.warn : T.rule}`,
+          borderRadius: T.rChip,
+          padding: "11px 13px",
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          name="egalites-lanterne-rouge"
+          checked={egalitesLanterneRouge}
+          onChange={(e) => setEgalitesLanterneRouge(e.target.checked)}
+          style={{ marginTop: 3, accentColor: T.warn, width: 17, height: 17 }}
+        />
+        <span>
+          <span style={label(egalitesLanterneRouge ? T.warn : T.dim, T.small)}>
+            Égalités en Lanterne Rouge
+          </span>
+          <span style={{ ...prose(T.faint, T.micro), display: "block", marginTop: 3 }}>
+            {egalitesLanterneRouge
+              ? "À égalité, tous les Titans les moins dotés sont Lanterne Rouge et ramassent 3 blocs avec Je Ne Partage Pas."
+              : "Il faut être seul dernier. À égalité, personne n'est Lanterne Rouge — Je Ne Partage Pas en rend 2."}
+          </span>
+        </span>
+      </label>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "11px 13px" }}>
+        <label style={label(T.dim, T.small)} htmlFor="seuil-apo">
+          Seuil Apocalypse
+        </label>
+        <input
+          id="seuil-apo"
+          type="number"
+          min="0"
+          max="24"
+          value={apocalypseThreshold}
+          onChange={(e) =>
+            setApocalypseThreshold(Math.max(0, Math.min(24, Number(e.target.value) || 0)))
+          }
+          style={{ ...champ, width: 74, textAlign: "center" }}
+        />
+        <span style={prose(T.faint, T.micro)}>
+          bâtiments encore debout = fin de partie.
+        </span>
+      </div>
+
+      {/* GRAINE — Nikola, 2026-08-24 : « rejouer une partie depuis sa
+          graine ». Vide pour une partie normale ; colle la graine d'un
+          rapport de bug pour retomber exactement sur la même partie
+          (même plateau, mêmes positions, même ordre de jeu, mêmes
+          profils d'IA). */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "11px 13px" }}>
+        <label style={label(T.dim, T.small)} htmlFor="graine">
+          Graine
+        </label>
+        <input
+          id="graine"
+          type="text"
+          inputMode="numeric"
+          value={seedInput}
+          onChange={(e) => setSeedInput(e.target.value.replace(/[^0-9]/g, ""))}
+          placeholder="aléatoire"
+          style={{ ...champ, width: 150, fontFamily: T.readout, fontSize: T.micro }}
+        />
+        <span style={prose(T.faint, T.micro)}>
+          vide = partie normale. Une graine rejoue la même partie à l'identique.
+        </span>
+      </div>
+    </>
   );
 }
 
@@ -363,6 +676,7 @@ export default function SetupScreen({
                     onChange={(e) =>
                       setTitanNames((prev) => ({ ...prev, [id]: e.target.value.slice(0, 18) }))
                     }
+                    name={`nom-titan-${id}`}
                     placeholder={`Titan ${id}`}
                     maxLength={18}
                     aria-label={`Nom du Titan ${id}`}
@@ -437,67 +751,7 @@ export default function SetupScreen({
           titre="Difficulté"
           aide="Toutes les IA jouent au niveau choisi. Leur tempérament, lui, reste tiré au sort : deux parties de même niveau ne se ressemblent pas."
         >
-          {ecranEtroit ? (
-            /* ── LE CARROUSEL, SUR TÉLÉPHONE ──
-               Un seul niveau à l'écran, en grand, avec son détail : le choix se
-               fait en lisant UNE phrase, pas quatre. Les deux flèches bouclent,
-               et le rang de pastilles dit où l'on en est dans l'échelle — c'est
-               ce que la grille disait par la position.
-
-               Les flèches CHANGENT le réglage, elles ne se contentent pas de
-               faire défiler : sur un choix à quatre entrées, séparer
-               « regarder » de « choisir » ajoute un geste sans rien apporter,
-               et laisse l'écran montrer autre chose que ce qui est réglé. */
-            (() => {
-              const index = Math.max(0, NIVEAUX.findIndex((n) => n.cle === difficulte));
-              const courant = NIVEAUX[index];
-              const aller = (pas) => setDifficulte(NIVEAUX[(index + pas + NIVEAUX.length) % NIVEAUX.length].cle);
-              const fleche = {
-                background: "transparent", border: `2px solid ${T.rule}`, borderRadius: T.rChip,
-                color: T.dim, width: 40, flexShrink: 0, cursor: "pointer",
-                fontFamily: T.ui, fontWeight: 800, fontSize: "1.1rem", lineHeight: 1,
-              };
-              return (
-                <div>
-                  <div style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
-                    <button onClick={() => aller(-1)} aria-label="Niveau de difficulté précédent" style={fleche}>‹</button>
-                    <div
-                      aria-live="polite"
-                      style={{
-                        flex: 1, minWidth: 0,
-                        background: courant.ton,
-                        border: `2px solid ${courant.ton}`,
-                        borderRadius: T.rChip,
-                        padding: "13px 14px",
-                        boxShadow: `0 3px 0 ${T.edge}`,
-                        transition: "background 140ms linear, border-color 140ms linear",
-                      }}
-                    >
-                      <div style={label("#0f0826", T.body)}>{FORCE_LABELS[courant.cle]}</div>
-                      <div style={{ ...prose("#0f0826", T.micro), lineHeight: 1.35, marginTop: 5 }}>{courant.aide}</div>
-                    </div>
-                    <button onClick={() => aller(1)} aria-label="Niveau de difficulté suivant" style={fleche}>›</button>
-                  </div>
-                  <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 9 }}>
-                    {NIVEAUX.map((n, i) => (
-                      <button
-                        key={n.cle}
-                        onClick={() => setDifficulte(n.cle)}
-                        aria-label={`Difficulté ${FORCE_LABELS[n.cle]}`}
-                        aria-pressed={i === index}
-                        style={{
-                          width: i === index ? 22 : 9, height: 9, borderRadius: 99,
-                          background: i === index ? n.ton : T.rule,
-                          border: "none", padding: 0, cursor: "pointer",
-                          transition: "background 140ms linear",
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })()
-          ) : (
+          {ecranEtroit ? <DifficulteCarrousel difficulte={difficulte} setDifficulte={setDifficulte} /> : (
             <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(min(150px, 100%), 1fr))" }}>
               {NIVEAUX.map(({ cle, ton, aide }) => {
                 const on = difficulte === cle;
@@ -538,169 +792,70 @@ export default function SetupScreen({
         {/* ── RÉGLAGES DE PARTIE ──
             Trois réglages qu'on touche rarement : ils tiennent sur une seule
             rangée plutôt que sur trois blocs empilés de la même taille que la
-            sélection des joueurs, qui, elle, compte. */}
+            sélection des joueurs, qui, elle, compte.
+
+            SUR TÉLÉPHONE, REPLIÉS PAR DÉFAUT (Nikola, 2026-09-17 : « peut être
+            plus optimisé sur mobile »). Cinq blocs bordés, chacun avec sa
+            phrase d'explication, poussaient l'écran entier sous la ligne de
+            flottaison sur un téléphone — pour des réglages que le code
+            lui-même qualifiait déjà de rarement touchés. `<details>` est
+            l'idiome déjà en usage dans ce dépôt pour ce geste (cf.
+            « Tu es l'hôte et tu reprends ta table ? » dans PanneauDistant) :
+            replié, il montre quand même les valeurs en cours — les mêmes
+            jetons compacts que l'écran d'un invité affiche en lecture seule
+            un peu plus haut — donc rien n'est masqué, seulement resserré.
+            Sur grand écran, rien ne change : la grille reste ouverte. */}
         <Reglage titre="Réglages de partie">
-          <div style={{ display: "grid", gap: 8 }}>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 11,
-                border: `2px solid ${eventsEnabled ? T.move : T.rule}`,
-                borderRadius: T.rChip,
-                padding: "11px 13px",
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={eventsEnabled}
-                onChange={(e) => setEventsEnabled(e.target.checked)}
-                style={{ marginTop: 3, accentColor: T.move, width: 17, height: 17 }}
-              />
-              <span>
-                <span style={label(eventsEnabled ? T.move : T.dim, T.small)}>Événements</span>
-                <span style={{ ...prose(T.faint, T.micro), display: "block", marginTop: 3 }}>
-                  Ajoute la Phase 1 à chaque Manche. Le tirage fonctionne, les
-                  effets ne sont pas encore codés.
-                </span>
-              </span>
-            </label>
-
-            {/* ── CE QUE FAIT LE VOL DE PHASE REPOS ──
-                Nikola, 2026-08-28 : « faudrait que ça soit un mode avant le
-                lancement pour la phase Repos : soit c'est la carte de la
-                victime qui va dans sa zone Repos, soit ça va dans la main du
-                Titan qui a sélectionné la carte ».
-
-                Les deux versions changent la nature de la phase, pas son
-                dosage : l'une prive, l'autre transfère. Ça ne se règle donc
-                pas au curseur, ça se choisit — et avant de commencer, comme
-                le nombre de Manches. */}
-            <div style={{ border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "11px 13px" }}>
-              <div style={{ ...label(T.dim, T.small), marginBottom: 8 }}>Vol de Phase Repos</div>
-              <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(min(210px, 100%), 1fr))" }}>
-                {[
-                  { cle: "repos", nom: "Mise au repos", aide: "La carte tirée part en Zone Repos chez sa victime : elle en est privée une Manche, personne ne la gagne." },
-                  { cle: "main", nom: "Emprunt", aide: "La carte tirée passe en main du voleur pour la Manche, puis retourne à son propriétaire." },
-                ].map(({ cle, nom, aide }) => {
-                  const on = modeVolRepos === cle;
-                  return (
-                    <button
-                      key={cle}
-                      onClick={() => setModeVolRepos(cle)}
-                      aria-pressed={on}
-                      aria-label={`Vol de Phase Repos : ${nom} — ${aide}`}
+          {ecranEtroit ? (
+            <details style={{ border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "2px 13px" }}>
+              <summary
+                style={{
+                  cursor: "pointer", padding: "9px 0",
+                  display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+                  ...label(T.dim, T.micro),
+                }}
+              >
+                Modifier
+                <span style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: "auto" }}>
+                  {[
+                    eventsEnabled ? "Événements ✓" : null,
+                    modeVolRepos === "main" ? "Emprunt" : "Mise au repos",
+                    egalitesLanterneRouge ? null : "Égalités ✗",
+                  ].filter(Boolean).map((puce) => (
+                    <span
+                      key={puce}
                       style={{
-                        background: on ? T.tele : "transparent",
-                        border: `2px solid ${on ? T.tele : T.rule}`,
-                        borderRadius: T.rChip,
-                        color: on ? "#0f0826" : T.dim,
-                        padding: "10px 12px",
-                        cursor: "pointer",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                        gap: 4,
-                        textAlign: "left",
+                        ...readout(T.micro, T.faint),
+                        border: `1px solid ${T.rule}`, borderRadius: T.rChip, padding: "2px 7px",
                       }}
                     >
-                      <span style={label(on ? "#0f0826" : T.tele, T.small)}>{nom}</span>
-                      <span style={{ ...prose(on ? "#0f0826" : T.faint, T.micro), lineHeight: 1.35 }}>{aide}</span>
-                    </button>
-                  );
-                })}
+                      {puce}
+                    </span>
+                  ))}
+                </span>
+              </summary>
+              <div style={{ display: "grid", gap: 8, paddingBottom: 11 }}>
+                <ReglagesDeParties
+                  eventsEnabled={eventsEnabled} setEventsEnabled={setEventsEnabled}
+                  modeVolRepos={modeVolRepos} setModeVolRepos={setModeVolRepos}
+                  egalitesLanterneRouge={egalitesLanterneRouge} setEgalitesLanterneRouge={setEgalitesLanterneRouge}
+                  apocalypseThreshold={apocalypseThreshold} setApocalypseThreshold={setApocalypseThreshold}
+                  seedInput={seedInput} setSeedInput={setSeedInput}
+                  champ={champ}
+                />
               </div>
-            </div>
-
-            {/* ── LES ÉGALITÉS EN LANTERNE ROUGE ──
-                Nikola, 2026-09-01 : « rajoute dans la configuration : les
-                égalités en "Lanterne Rouge" ne fonctionnent plus — on coche ou
-                pas ».
-
-                Coché, c'est la règle telle qu'elle a toujours tourné : tous les
-                Titans les moins dotés touchent le troisième bloc de Je Ne
-                Partage Pas. Décoché, il faut être SEUL dernier — ce qui change
-                surtout les débuts de Manche, où tout le monde est à égalité et
-                où le bonus tombait donc pour trois joueurs sur quatre.
-
-                Il vit avec les autres réglages de partie, à côté du Vol de
-                Phase Repos : ce sont les deux mêmes sortes d'arbitrage, une
-                règle qui se choisit avant de commencer. */}
-            <label
-              style={{
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 11,
-                border: `2px solid ${egalitesLanterneRouge ? T.warn : T.rule}`,
-                borderRadius: T.rChip,
-                padding: "11px 13px",
-                cursor: "pointer",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={egalitesLanterneRouge}
-                onChange={(e) => setEgalitesLanterneRouge(e.target.checked)}
-                style={{ marginTop: 3, accentColor: T.warn, width: 17, height: 17 }}
-              />
-              <span>
-                <span style={label(egalitesLanterneRouge ? T.warn : T.dim, T.small)}>
-                  Égalités en Lanterne Rouge
-                </span>
-                <span style={{ ...prose(T.faint, T.micro), display: "block", marginTop: 3 }}>
-                  {egalitesLanterneRouge
-                    ? "À égalité, tous les Titans les moins dotés sont Lanterne Rouge et ramassent 3 blocs avec Je Ne Partage Pas."
-                    : "Il faut être seul dernier. À égalité, personne n'est Lanterne Rouge — Je Ne Partage Pas en rend 2."}
-                </span>
-              </span>
-            </label>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "11px 13px" }}>
-              <label style={label(T.dim, T.small)} htmlFor="seuil-apo">
-                Seuil Apocalypse
-              </label>
-              <input
-                id="seuil-apo"
-                type="number"
-                min="0"
-                max="24"
-                value={apocalypseThreshold}
-                onChange={(e) =>
-                  setApocalypseThreshold(Math.max(0, Math.min(24, Number(e.target.value) || 0)))
-                }
-                style={{ ...champ, width: 74, textAlign: "center" }}
-              />
-              <span style={prose(T.faint, T.micro)}>
-                bâtiments encore debout = fin de partie.
-              </span>
-            </div>
-
-            {/* GRAINE — Nikola, 2026-08-24 : « rejouer une partie depuis sa
-                graine ». Vide pour une partie normale ; colle la graine d'un
-                rapport de bug pour retomber exactement sur la même partie
-                (même plateau, mêmes positions, même ordre de jeu, mêmes
-                profils d'IA). */}
-            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "11px 13px" }}>
-              <label style={label(T.dim, T.small)} htmlFor="graine">
-                Graine
-              </label>
-              <input
-                id="graine"
-                type="text"
-                inputMode="numeric"
-                value={seedInput}
-                onChange={(e) => setSeedInput(e.target.value.replace(/[^0-9]/g, ""))}
-                placeholder="aléatoire"
-                style={{ ...champ, width: 150, fontFamily: T.readout, fontSize: T.micro }}
-              />
-              <span style={prose(T.faint, T.micro)}>
-                vide = partie normale. Une graine rejoue la même partie à l'identique.
-              </span>
-            </div>
-          </div>
+            </details>
+          ) : (
+            <ReglagesDeParties
+              eventsEnabled={eventsEnabled} setEventsEnabled={setEventsEnabled}
+              modeVolRepos={modeVolRepos} setModeVolRepos={setModeVolRepos}
+              egalitesLanterneRouge={egalitesLanterneRouge} setEgalitesLanterneRouge={setEgalitesLanterneRouge}
+              apocalypseThreshold={apocalypseThreshold} setApocalypseThreshold={setApocalypseThreshold}
+              seedInput={seedInput} setSeedInput={setSeedInput}
+              champ={champ}
+            />
+          )}
         </Reglage>
-
         {/* ── LA TOUCHE DE DÉPART ──
             Une borne n'a qu'un seul bouton de cette taille, et il ne fait
             qu'une chose. Un invité ne l'a pas : ce n'est pas lui qui décide

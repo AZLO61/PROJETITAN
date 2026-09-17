@@ -51,6 +51,12 @@ export const MESSAGE = {
   DEPART: "depart",
   HOTE_ABSENT: "hoteAbsent",
   HOTE_REVENU: "hoteRevenu",
+  /* Le journal d'actions, à part de l'état (2026-09-17) : il pèse jusqu'à
+     80 % d'un instantané en fin de partie, et le renvoyer en entier à chaque
+     coup n'apprend rien à un invité qui l'a déjà. `{ lignes }` porte les
+     nouvelles lignes depuis le dernier envoi ; `{ complet }` ne part qu'à un
+     invité qui vient d'arriver, pour lui donner tout ce qu'il a manqué. */
+  JOURNAL: "journal",
 };
 
 export function urlPropre(brut) {
@@ -107,6 +113,7 @@ function construireSession({
     etat: new Set(), intention: new Set(), presence: new Set(),
     prive: new Set(), chat: new Set(), fin: new Set(), erreur: new Set(),
     depart: new Set(), liaison: new Set(), retablie: new Set(),
+    journal: new Set(),
   };
   let vivante = true;
   let version = versionEtat || 0;
@@ -239,6 +246,7 @@ function construireSession({
           } else if (m.t === MESSAGE.INTENTION) emettre("intention", m);
           else if (m.t === MESSAGE.PRIVE) emettre("prive", m.charge);
           else if (m.t === MESSAGE.CHAT) emettre("chat", m);
+          else if (m.t === MESSAGE.JOURNAL) emettre("journal", m);
         });
         if (coupe) { vivante = false; return; }
       } catch (e) {
@@ -318,6 +326,12 @@ function construireSession({
     /** Hôte : envoie à UN invité ce que lui seul doit voir (sa main). */
     envoyerPrive(vers, charge) {
       return envoyer({ t: MESSAGE.PRIVE, vers, charge });
+    },
+
+    /** Hôte : diffuse des lignes de journal — `{ lignes }` (delta) ou
+        `{ complet }` (resynchronisation d'un invité qui vient d'arriver). */
+    diffuserJournal(charge) {
+      return envoyer({ t: MESSAGE.JOURNAL, ...charge });
     },
 
     /** Hôte : dit qui tient quel Titan. */
@@ -432,6 +446,15 @@ export async function testerRelais(urlRelais) {
 export function plateauPublic(instantane) {
   if (!instantane) return null;
   const copie = structuredClone(instantane);
+  /* ── LE JOURNAL VOYAGE À PART, PLUS DANS L'INSTANTANÉ ──
+     2026-09-17. Il grossit toute la partie et ne rétrécit jamais : le
+     renvoyer en entier à chaque coup faisait jusqu'à 80 % du poids d'un
+     instantané en fin de partie, pour des lignes qu'un invité déjà connecté
+     possède déjà. Les nouvelles lignes partent désormais par
+     `session.diffuserJournal` (canal `MESSAGE.JOURNAL`), et un invité qui
+     vient d'arriver reçoit le journal complet une seule fois, par le même
+     canal — jamais dans ce plateau public. */
+  delete copie.actionLog;
   copie.titanState.players = copie.titanState.players.map((t) => ({
     ...t,
     hand: [],

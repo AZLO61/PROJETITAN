@@ -8,6 +8,7 @@ import SetupScreen from "../ui/SetupScreen.jsx";
 import { plateauPublic, mainPrivee, fusionnerMain } from "../net/session.js";
 // La recherche des IA, dans un Web Worker quand le navigateur en a un.
 import { penser } from "./penseeIA.js";
+import { jouerJingleFin } from "../ui/audio.js";
 
 /* Destructuration du domaine au NIVEAU MODULE, et non plus à l'intérieur du
    hook. Ces fonctions sont des constantes de module : les déclarer dans le
@@ -150,6 +151,12 @@ export function useBoardGeneratorController() {
   // évalué au moment du rendu — une déclaration plus bas provoquerait une
   // ReferenceError de zone morte temporelle.
   const [actionLog, setActionLog] = useState([]);
+  /* Lu par la diffusion réseau du journal (cf. plus bas) : cet effet doit
+     connaître le journal COURANT depuis un abonnement `presence` créé une
+     seule fois par session, donc une fermeture classique y verrait une
+     valeur figée au moment du branchement. */
+  const actionLogRef = useRef([]);
+  useEffect(() => { actionLogRef.current = actionLog; }, [actionLog]);
   const [looseBlocks, setLooseBlocks] = useState({});
   /* Files de DÉCISIONS EN ATTENTE, déclarées ici en tête pour la même
      raison que `actionLog` et `looseBlocks` juste au-dessus : les effets de
@@ -1587,7 +1594,14 @@ export function useBoardGeneratorController() {
     setActivePlayerId(snap.activePlayerId);
     setPhase(snap.phase);
     setPassifUsed(structuredClone(snap.passifUsed));
-    setActionLog([...snap.actionLog]);
+    /* ── LE JOURNAL N'EST PLUS TOUJOURS DANS L'INSTANTANÉ ──
+       2026-09-17. `snap` couvre deux cas : la pile d'annulation locale (elle
+       garde TOUJOURS le journal complet, cf. `instantaneCourant`) et l'état
+       reçu du réseau par un invité (`plateauPublic` l'en a retiré exprès,
+       cf. `net/session.js`). Un invité reconstruit son journal en local par
+       le canal dédié (`session.sur("journal", …)` plus bas) — l'écraser ici
+       avec un champ absent remettrait sa vue à zéro à chaque coup. */
+    if (snap.actionLog) setActionLog([...snap.actionLog]);
     if (reinitialiserInterface) {
       arreterTrace(); // la trace decrirait un vol que l'annulation vient d'effacer
       /* Le compte à rebours du Vol de Phase Repos décrit lui aussi une action
@@ -2191,6 +2205,18 @@ export function useBoardGeneratorController() {
           arrivants.filter((j) => !refsAvant.has(j.ref)).forEach((j) => signalerMouvement("arrivee", j.pseudo));
           avant.filter((j) => !refsApres.has(j.ref)).forEach((j) => signalerMouvement("depart", j.pseudo));
         }
+        /* ── UN ARRIVANT REÇOIT LE JOURNAL COMPLET, UNE SEULE FOIS ──
+           2026-09-17. Le plateau public ne le porte plus (cf.
+           `plateauPublic`). Sans ce resync, quiconque rejoint une partie déjà
+           commencée — ou revient après un F5, qui change de `ref` — verrait
+           un journal vide jusqu'à la prochaine ligne écrite par n'importe
+           qui. Diffusé à TOUTE la table plutôt qu'au seul arrivant : plus
+           simple qu'un courrier ciblé, et le coût ne se répète qu'aux
+           arrivées, pas à chaque coup. */
+        if (nouvelle.siege === "hote") {
+          const nouveaux = arrivants.filter((j) => !refsAvant.has(j.ref));
+          if (nouveaux.length > 0) nouvelle.diffuserJournal({ complet: actionLogRef.current });
+        }
         /* Même contenu, même référence (2026-09-14) : chaque relève redonne la
            présence, et un objet neuf relançait le rendu du contrôleur entier
            et les effets qui dépendent des sièges, pour rien. */
@@ -2201,6 +2227,19 @@ export function useBoardGeneratorController() {
     });
     nouvelle.sur("etat", (instantane) => setEtatDistantRecu(instantane));
     nouvelle.sur("prive", (charge) => setMainPriveeRecue(charge));
+    /* ── RECONSTRUIRE LE JOURNAL EN LOCAL, CÔTÉ INVITÉ SEULEMENT ──
+       2026-09-17. `complet` (resync d'arrivée) remplace tout ; `lignes`
+       (delta d'un coup normal) s'ajoute à ce qui est déjà affiché — jamais
+       l'inverse, cf. `restaurerInstantane` qui ne touche plus `actionLog`
+       quand le réseau ne le porte pas. L'hôte reçoit aussi ses propres
+       diffusions (le relais les dépose à toute la table) : les ignorer chez
+       lui, sinon un `complet` capturé un instant plus tôt écraserait, à son
+       retour par le réseau, les lignes écrites depuis. */
+    nouvelle.sur("journal", ({ lignes, complet }) => {
+      if (nouvelle.siege === "hote") return;
+      if (Array.isArray(complet)) setActionLog([...complet]);
+      else if (Array.isArray(lignes) && lignes.length > 0) setActionLog((prev) => [...prev, ...lignes]);
+    });
     /* Les intentions n'arrivent que chez l'hôte — le relais les y adresse et
        nulle part ailleurs. On les met en file plutôt que de les jouer ici : le
        traitement demande trois rendus (cf. la machine ci-dessus), et un
@@ -2509,6 +2548,31 @@ export function useBoardGeneratorController() {
     return () => clearTimeout(minuteur);
     // Les deux avis sont des chaînes : les lister ne relance jamais l'effet.
   }, [distantHote, session, distantSieges, instantaneCourant, relanceDiffusion, AVIS_DIFFUSION, AVIS_MAIN]);
+
+  /* ── DIFFUSER LE JOURNAL, À PART DE L'ÉTAT ──
+     2026-09-17. `dernierEnvoiJournalRef` retient ce qui a déjà été envoyé
+     DANS CETTE SESSION (remis à zéro si elle change — nouvelle table, ou
+     reprise après absence de l'hôte). Premier envoi de la session, ou le
+     journal a RÉTRÉCI (Annuler, ou « Vider » côté hôte) : on resynchronise
+     tout le monde avec `complet`, jamais un delta qui dupliquerait ou
+     creuserait un trou chez un invité déjà connecté. Sinon, seules les
+     lignes réellement nouvelles partent. */
+  const dernierEnvoiJournalRef = useRef(0);
+  useEffect(() => {
+    if (!distantHote || !session) { dernierEnvoiJournalRef.current = 0; return undefined; }
+    if (diffusionBloqueeRef.current) return undefined;
+    const deja = dernierEnvoiJournalRef.current;
+    if (deja !== 0 && actionLog.length === deja) return undefined;
+    if (deja === 0 || actionLog.length < deja) {
+      dernierEnvoiJournalRef.current = actionLog.length;
+      session.diffuserJournal({ complet: [...actionLog] }).catch(() => { dernierEnvoiJournalRef.current = 0; });
+      return undefined;
+    }
+    const nouvelles = actionLog.slice(deja);
+    dernierEnvoiJournalRef.current = actionLog.length;
+    session.diffuserJournal({ lignes: nouvelles }).catch(() => { dernierEnvoiJournalRef.current = deja; });
+    return undefined;
+  }, [actionLog, distantHote, session]);
 
   useEffect(() => {
     if (distantInviteRef.current) return; // `passifUsed` arrive dans l'instantané
@@ -5878,6 +5942,7 @@ export function useBoardGeneratorController() {
     if (!classementFinalPartie || classementFinalPartie.length === 0) return;
     podiumDejaOuvert.current = true;
     setShowPodium(true);
+    jouerJingleFin();
   }, [gameOver, versDeposesEtEngages, classementFinalPartie]);
 
   // ⚠️ Dépendances posées sur `state` / `looseBlocks` / `titanState` (objets

@@ -48,6 +48,7 @@ function sessionSimulee(siege, { ref = "moi", sieges = {} } = {}) {
     emettre(canal, charge) { (abonnes[canal] || []).forEach((cb) => cb(charge)); },
     envoyerIntention(fn, args, contexte) { this.intentions.push({ fn, args, contexte }); return Promise.resolve({}); },
     diffuserEtat() { return Promise.resolve({}); },
+    diffuserJournal() { return Promise.resolve({}); },
     envoyerPrive() { return Promise.resolve({}); },
     publierSieges(s) { this.siegesPublies.push(s); return Promise.resolve({}); },
     envoyerChat() { return Promise.resolve({}); },
