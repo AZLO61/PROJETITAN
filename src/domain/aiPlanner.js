@@ -50,6 +50,11 @@
 import {
   valeurMarginaleAdrenaline,
   computeFinalScore,
+  ADRENALINE_OPTION,
+  CARD_FORCE,
+  SOCLE_OPTION,
+  retirerSocleAuSort,
+  socleMarker,
   PORTEE_BOING_BOING,
   appliquerReplElement,
   computeEnergyToutCasser,
@@ -554,133 +559,36 @@ const PART_PERTE_ADVERSE = 0.5;
  * qui est l'hypothèse la moins arbitraire disponible.
  */
 export function appliquerDecisions(decisions, etat, profile = makeProfile()) {
-  const auScoreComplet = reglagesDe(profile).decisionsAuScoreComplet ?? false;
-
   for (const d of decisions || []) {
-    const attaquant = etat.titans.find((t) => t.id === d.attackerId);
-    const defenseur = etat.titans.find((t) => t.id === d.defenderId);
-    if (!attaquant || !defenseur) continue;
-
-    const delta = auScoreComplet ? faiseurDeDelta(etat) : null;
-    // Ce que me rapporte un bloc de cette couleur, et ce qu'il coûte à
-    // celui qui le perd. Au barème pour les niveaux du bas, au total réel
-    // pour la référence.
-    /* Le Socle vaut ses points de face, et l'IA parie sur le PLUS PETIT de la
-       cible : le livret le tire au sort, l'attaquant ne choisit pas lequel
-       part, et miser sur le meilleur surestimerait le coup. Un Socle gagné ne
-       rejoint jamais l'attaquant en Dilemme (il tombe au sol), d'où le 0. */
-    const petitSocle = () => Math.min(...((defenseur.socles || []).length ? defenseur.socles : [0]));
-    const monGain = (couleur) => {
-      if (couleur === OPTION_SOCLE) return 0;
-      return delta
-        ? delta(attaquant.id, (t) => ({ ...t, repaire: [...t.repaire, couleur] }), `+${couleur}`)
-        : gainSiAjoute(attaquant.repaire, couleur);
-    };
-    const saPerte = (couleur) => {
-      if (couleur === OPTION_SOCLE) return petitSocle();
-      if (!delta) return perteSiRetire(defenseur.repaire, couleur);
-      if (defenseur.repaire.indexOf(couleur) === -1) return 0;
-      return -delta(defenseur.id, (t) => {
-        const r = [...t.repaire];
-        r.splice(r.indexOf(couleur), 1);
-        return { ...t, repaire: r };
-      }, `-${couleur}`);
+    const ev = evaluationsModele(d, etat, profile);
+    if (!ev) continue;
+    const { attaquant, defenseur, versAttaquant } = ev;
+    const poserAuSol = (bloc) => {
+      const chute = d.cellAtImpact || defenseur.cell;
+      if (!etat.looseBlocks) etat.looseBlocks = {};
+      (etat.looseBlocks[chute] ||= []).push(bloc);
     };
 
     if (d.type === "RAGE") {
-      /* Livret : l'attaquant choisit librement UNE ressource. Il visait
-         celle qui lui rapportait le plus à LUI, en ignorant ce qu'elle
-         coûtait à l'autre — deux Bleus équivalents pour moi ne le sont pas
-         si l'un fait tomber son bonus Rose. Il arbitre désormais sur les
-         deux moitiés, la perte adverse comptée à demi (cf.
-         PART_PERTE_ADVERSE).
-
-         L'ADRÉNALINE EST UNE OPTION À PART ENTIÈRE, plus un pis-aller. La
-         FAQ #5 la rend ciblable, et le code ne s'en servait que si le
-         Repaire était vide : voler la dernière Adrénaline de quelqu'un qui
-         s'apprête à annuler un Dilemme vaut souvent mieux qu'un bloc de
-         plus. C'est un des « vols de points » que Nikola signale. */
-      const options = [];
-      defenseur.repaire.forEach((couleur, idx) => {
-        options.push({ idx, valeur: monGain(couleur) + saPerte(couleur) * PART_PERTE_ADVERSE });
-      });
-      if ((defenseur.adrenaline || 0) >= 1) {
-        /* Ce que l'attaquant GAGNE en l'ajoutant a sa propre reserve, plus ce
-           que le defenseur PERD en la lachant : sur un bareme progressif ces
-           deux nombres different, alors qu'un forfait les confondait. */
-        options.push({
-          idx: -1,
-          valeur: gainAdrenalinePour(attaquant) + valeurAdrenalinePour(defenseur) * PART_PERTE_ADVERSE,
-        });
-      }
-      if (options.length === 0) continue;
-      const meilleur = options.reduce((a, b) => (b.valeur > a.valeur ? b : a));
+      const meilleur = rageSelonModele(ev);
+      if (!meilleur) continue;
       if (meilleur.idx === -1) {
         defenseur.adrenaline -= 1;
         attaquant.adrenaline = (attaquant.adrenaline || 0) + 1;
       } else {
         const [pris] = defenseur.repaire.splice(meilleur.idx, 1);
-        attaquant.repaire.push(pris);
+        if (versAttaquant) attaquant.repaire.push(pris);
+        else poserAuSol(pris);
       }
       continue;
     }
 
     if (d.type === "DIL") {
-      // Livret : l'attaquant désigne 2 couleurs DIFFÉRENTES, la cible
-      // choisit laquelle elle perd, ou paie 1 Adrénaline pour annuler.
-      // La cible, elle, ne pense qu'à SON moindre mal (elle prend toujours
-      // l'option la plus douce pour elle) — mais l'attaquant, en choisissant
-      // la PAIRE à désigner, doit maximiser ce qu'il en retire lui-même, pas
-      // seulement ce qu'il fait perdre. Sur les cartes dont le bloc perdu va
-      // au Repaire de l'attaquant (cf. DESTINATION_BLOC_PERDU), un DIL qui
-      // coûte moins cher à la cible mais lui rapporte davantage peut valoir
-      // mieux qu'un DIL qui coûte plus cher à la cible sans rien lui donner.
-      /* ── ALIGNÉ SUR `getDilOptions`, SOCLE COMPRIS ──
-         Audit du 2026-09-07. Ce modèle ne comptait que les COULEURS, là où le
-         moteur compte aussi le Socle depuis le 2026-08-17 : contre une cible
-         « 1 couleur + 1 Socle », l'IA chiffrait le Dilemme à zéro et écartait
-         la carte offensive, alors que le coup était bel et bien jouable.
-
-         L'Adrénaline, elle, n'est plus une option depuis le revirement du
-         2026-09-07 (cf. `getDilOptions`) : il n'y a donc rien à en dire ici.
-
-         Le Socle entre sous une clé sentinelle qui ne peut se confondre avec
-         aucune couleur, et sa valeur est celle du plus petit Socle de la
-         cible : c'est un tirage au sort, l'attaquant ne choisit pas lequel
-         part, et une IA qui parie sur le meilleur surestimerait le coup. */
-      const presentes = COULEURS_SCORABLES.filter((c) => compteCouleur(defenseur.repaire, c) > 0);
-      if ((defenseur.socles || []).length > 0) presentes.push(OPTION_SOCLE);
-      if (presentes.length < 2) continue; // DIL structurellement impossible
-
+      const paire = paireSelonModele(ev, d);
+      if (!paire) continue;
+      const { perdue: couleurPerdue, paie } = reponseSelonModele(ev, paire);
       const gagneAttaquant = d.destination === "repaire";
-
-      let couleurPerdue = null;
-      let meilleurGainNet = -Infinity;
-      for (let i = 0; i < presentes.length; i++) {
-        for (let j = i + 1; j < presentes.length; j++) {
-          const a = saPerte(presentes[i]);
-          const b = saPerte(presentes[j]);
-          // La cible arbitre seule, sur SA perte : elle ignore ce que
-          // l'attaquant en tirera.
-          const choixDeLaCible = a <= b ? presentes[i] : presentes[j];
-          const coutSubi = Math.min(a, b);
-          const gainNet = coutSubi * PART_PERTE_ADVERSE
-            + (gagneAttaquant ? monGain(choixDeLaCible) : 0);
-          if (gainNet > meilleurGainNet) {
-            meilleurGainNet = gainNet;
-            couleurPerdue = choixDeLaCible;
-          }
-        }
-      }
-      if (!couleurPerdue) continue;
-      const meilleurMinimum = saPerte(couleurPerdue);
-
-      /* La cible paie plutôt que d'encaisser si la perte dépasse la valeur
-         d'une Adrénaline. Comparaison désormais au VRAI coût : perdre un
-         Rose qui fait basculer dix points ne se compare pas à une
-         Adrénaline de la même façon que perdre un Bleu impair, et la
-         version au barème ne savait pas les distinguer. */
-      if (meilleurMinimum > valeurAdrenalinePour(defenseur) && (defenseur.adrenaline || 0) >= 1) {
+      if (paie) {
         defenseur.adrenaline -= 1;
         /* Et elle passe chez l'attaquant : c'est ce que fait le moteur
            (`autoResolveIaDecisions`, comme la file humaine), ce modèle-ci
@@ -695,8 +603,13 @@ export function appliquerDecisions(decisions, etat, profile = makeProfile()) {
         // prise, et le modèle doit rester cohérent avec lui-même.
         const socles = defenseur.socles || [];
         const min = socles.indexOf(Math.min(...socles));
-        if (min !== -1) socles.splice(min, 1);
-        continue; // un Socle perdu en Dilemme tombe au sol, jamais chez l'attaquant
+        if (min === -1) continue;
+        const [valeur] = socles.splice(min, 1);
+        // Route réelle (cf. `acheminerPerte`) : chez l'attaquant sur Faut Pas
+        // Me Chauffer, au sol sinon — ramassable, sa valeur intacte.
+        if (gagneAttaquant) attaquant.socles = [...(attaquant.socles || []), valeur];
+        else poserAuSol(socleMarker(valeur));
+        continue;
       }
       const idx = defenseur.repaire.indexOf(couleurPerdue);
       if (idx !== -1) defenseur.repaire.splice(idx, 1);
@@ -705,8 +618,404 @@ export function appliquerDecisions(decisions, etat, profile = makeProfile()) {
       // Sans ce transfert, le modèle simplifié de l'IA perdait purement et
       // simplement le bloc, faussant ensuite sa lecture de son propre Repaire.
       if (gagneAttaquant) attaquant.repaire.push(couleurPerdue);
+      else if (idx !== -1) poserAuSol(couleurPerdue);
     }
   }
+}
+
+/* ── LES ARBITRAGES DE L'IA, SÉPARÉS DE LEUR APPLICATION ──
+   (2026-09-21) Ce que chaque camp choisit, sans rien appliquer.
+   `appliquerDecisions` s'en sert pendant la recherche, et la table comme le
+   simulateur s'en servent pour trancher pour de vrai (`trancherDecisionIA`) :
+   l'IA joue exactement ce qu'elle a prévu. */
+function evaluationsModele(d, etat, profile) {
+  const auScoreComplet = reglagesDe(profile).decisionsAuScoreComplet ?? false;
+  const attaquant = etat.titans.find((t) => t.id === d.attackerId);
+  const defenseur = etat.titans.find((t) => t.id === d.defenderId);
+  if (!attaquant || !defenseur) return null;
+  /* Le bloc perdu suit la route du moteur (cf. DESTINATION_BLOC_PERDU) : il
+     ne rejoint l'attaquant que sur les cartes qui le disent, et sinon tombe
+     au sol, à la case d'impact. Le modèle le donnait à l'attaquant sur toute
+     RAGE — une RAGE de Tout Casser se chiffrait comme un bloc encaissé alors
+     que la table le pose au sol — et faisait disparaître le bloc d'un Dilemme
+     « au sol », qui reste pourtant ramassable (2026-09-21). */
+  const versAttaquant = d.destination === "repaire";
+
+  const delta = auScoreComplet ? faiseurDeDelta(etat) : null;
+  // Ce que me rapporte un bloc de cette couleur, et ce qu'il coûte à
+  // celui qui le perd. Au barème pour les niveaux du bas, au total réel
+  // pour la référence.
+  /* Le Socle vaut ses points de face, et l'IA parie sur le PLUS PETIT de la
+     cible : le livret le tire au sort, l'attaquant ne choisit pas lequel
+     part, et miser sur le meilleur surestimerait le coup. Un Socle gagné ne
+     rejoint l'attaquant en Dilemme que sur Faut Pas Me Chauffer ; ailleurs il
+     vaut 0 pour lui. */
+  const petitSocle = () => Math.min(...((defenseur.socles || []).length ? defenseur.socles : [0]));
+  const monGain = (couleur) => {
+    if (couleur === OPTION_SOCLE) return versAttaquant ? petitSocle() : 0;
+    return delta
+      ? delta(attaquant.id, (t) => ({ ...t, repaire: [...t.repaire, couleur] }), `+${couleur}`)
+      : gainSiAjoute(attaquant.repaire, couleur);
+  };
+  const saPerte = (couleur) => {
+    if (couleur === OPTION_SOCLE) return petitSocle();
+    if (!delta) return perteSiRetire(defenseur.repaire, couleur);
+    if (defenseur.repaire.indexOf(couleur) === -1) return 0;
+    return -delta(defenseur.id, (t) => {
+      const r = [...t.repaire];
+      r.splice(r.indexOf(couleur), 1);
+      return { ...t, repaire: r };
+    }, `-${couleur}`);
+  };
+  return { attaquant, defenseur, versAttaquant, monGain, saPerte };
+}
+
+/* RAGE, côté attaquant : { idx, valeur }, `idx` -1 désignant l'Adrénaline.
+   Livret : l'attaquant choisit librement UNE ressource. Il visait celle qui
+   lui rapportait le plus à LUI, en ignorant ce qu'elle coûtait à l'autre —
+   deux Bleus équivalents pour moi ne le sont pas si l'un fait tomber son
+   bonus Rose. Il arbitre désormais sur les deux moitiés, la perte adverse
+   comptée à demi (cf. PART_PERTE_ADVERSE).
+
+   L'ADRÉNALINE EST UNE OPTION À PART ENTIÈRE, plus un pis-aller. La FAQ #5
+   la rend ciblable, et le code ne s'en servait que si le Repaire était
+   vide : voler la dernière Adrénaline de quelqu'un qui s'apprête à annuler
+   un Dilemme vaut souvent mieux qu'un bloc de plus. C'est un des « vols de
+   points » que Nikola signale. */
+function rageSelonModele(ev) {
+  const { attaquant, defenseur, versAttaquant, monGain, saPerte } = ev;
+  const options = [];
+  defenseur.repaire.forEach((couleur, idx) => {
+    options.push({ idx, valeur: (versAttaquant ? monGain(couleur) : 0) + saPerte(couleur) * PART_PERTE_ADVERSE });
+  });
+  if ((defenseur.adrenaline || 0) >= 1) {
+    /* Ce que l'attaquant GAGNE en l'ajoutant a sa propre reserve, plus ce
+       que le defenseur PERD en la lachant : sur un bareme progressif ces
+       deux nombres different, alors qu'un forfait les confondait. */
+    options.push({
+      idx: -1,
+      valeur: gainAdrenalinePour(attaquant) + valeurAdrenalinePour(defenseur) * PART_PERTE_ADVERSE,
+    });
+  }
+  if (options.length === 0) return null;
+  return options.reduce((a, b) => (b.valeur > a.valeur ? b : a));
+}
+
+/* DIL, côté attaquant : la PAIRE à désigner, en clés du modèle, ou null.
+   Livret : l'attaquant désigne 2 couleurs DIFFÉRENTES, la cible choisit
+   laquelle elle perd, ou paie 1 Adrénaline pour annuler. La cible, elle, ne
+   pense qu'à SON moindre mal (elle prend toujours l'option la plus douce
+   pour elle) — mais l'attaquant, en choisissant la PAIRE à désigner, doit
+   maximiser ce qu'il en retire lui-même, pas seulement ce qu'il fait perdre.
+   Sur les cartes dont le bloc perdu va au Repaire de l'attaquant (cf.
+   DESTINATION_BLOC_PERDU), un DIL qui coûte moins cher à la cible mais lui
+   rapporte davantage peut valoir mieux qu'un DIL qui coûte plus cher à la
+   cible sans rien lui donner.
+
+   ── ALIGNÉ SUR `getDilOptions`, SOCLE COMPRIS ──
+   Audit du 2026-09-07. Ce modèle ne comptait que les COULEURS, là où le
+   moteur compte aussi le Socle depuis le 2026-08-17 : contre une cible
+   « 1 couleur + 1 Socle », l'IA chiffrait le Dilemme à zéro et écartait la
+   carte offensive, alors que le coup était bel et bien jouable.
+
+   L'Adrénaline, elle, n'est plus une option depuis le revirement du
+   2026-09-07 (cf. `getDilOptions`) : il n'y a donc rien à en dire ici.
+
+   Le Socle entre sous une clé sentinelle qui ne peut se confondre avec
+   aucune couleur, et sa valeur est celle du plus petit Socle de la cible :
+   c'est un tirage au sort, l'attaquant ne choisit pas lequel part, et une IA
+   qui parie sur le meilleur surestimerait le coup. */
+function paireSelonModele(ev, d) {
+  const { defenseur, monGain, saPerte } = ev;
+  const presentes = COULEURS_SCORABLES.filter((c) => compteCouleur(defenseur.repaire, c) > 0);
+  // Le Vert échappe au Dilemme, sauf quand c'est la seule couleur (cf.
+  // `getDilOptions`) : depuis que cette paire est celle que la table désigne,
+  // l'oublier ferait renoncer l'IA à un Dilemme légal.
+  if (presentes.length === 0 && compteCouleur(defenseur.repaire, "vert") > 0) presentes.push("vert");
+  if ((defenseur.socles || []).length > 0) presentes.push(OPTION_SOCLE);
+  if (presentes.length < 2) return null; // DIL structurellement impossible
+
+  const gagneAttaquant = d.destination === "repaire";
+  let paire = null;
+  let meilleurGainNet = -Infinity;
+  for (let i = 0; i < presentes.length; i++) {
+    for (let j = i + 1; j < presentes.length; j++) {
+      const a = saPerte(presentes[i]);
+      const b = saPerte(presentes[j]);
+      // La cible arbitre seule, sur SA perte : elle ignore ce que
+      // l'attaquant en tirera.
+      const choixDeLaCible = a <= b ? presentes[i] : presentes[j];
+      const coutSubi = Math.min(a, b);
+      const gainNet = coutSubi * PART_PERTE_ADVERSE
+        + (gagneAttaquant ? monGain(choixDeLaCible) : 0);
+      if (gainNet > meilleurGainNet) {
+        meilleurGainNet = gainNet;
+        paire = [presentes[i], presentes[j]];
+      }
+    }
+  }
+  return paire;
+}
+
+/* DIL, côté cible : ce qu'elle lâche de la paire, et si elle paie plutôt.
+   LE DÉFENSEUR DÉCIDE, TOUJOURS, MÊME QUAND C'EST UNE IA — ruling rappelé par
+   Nikola le 2026-08-28 : « ce n'est pas l'attaquant qui décide de lui prendre
+   une Adrénaline, c'est le défenseur qui peut l'utiliser pour ne pas avoir à
+   donner un des deux blocs demandés ». Elle paie quand la perte dépasse la
+   valeur d'une Adrénaline. Comparaison au VRAI coût : perdre un Rose qui fait
+   basculer dix points ne se compare pas à une Adrénaline de la même façon
+   que perdre un Bleu impair, et la version au barème ne savait pas les
+   distinguer. */
+function reponseSelonModele(ev, paire) {
+  const { defenseur, saPerte } = ev;
+  const [a, b = a] = paire;
+  const perdue = saPerte(a) <= saPerte(b) ? a : b;
+  const perte = saPerte(perdue);
+  return { perdue, perte, paie: perte > valeurAdrenalinePour(defenseur) && (defenseur.adrenaline || 0) >= 1 };
+}
+
+/* ============================================================
+   CE QUE L'IA TRANCHE POUR DE VRAI
+   ============================================================
+   Les règles par lesquelles une IA tranche réellement un Dilemme, une RAGE,
+   une Fatigue ou un repli, et la route que prend le bloc perdu. Le
+   contrôleur (la table) et le simulateur (les campagnes, `npm run duel`)
+   appellent ces fonctions-ci : un seul code pour les deux.
+
+   UN SEUL CERVEAU (2026-09-21). La table tranchait ses Dilemmes et ses RAGE
+   avec une table de valeur à elle (`marginalValue`, `valeurOptionDil`,
+   `coutOptionDil`, `defenseurPaieAdrenaline`), écrite à la main dans le
+   contrôleur, pendant que la recherche prévoyait avec le modèle ci-dessus.
+   L'audit du 2026-09-20 a trouvé six bugs dans l'écart, et le simulateur,
+   qui résolvait tout par le modèle, ne pouvait pas voir la différence.
+   Mesuré au duel une fois le simulateur aligné sur la table : faire trancher
+   la table comme le modèle prévoit rapporte +1,24 point par partie (IC 95 %
+   [+0,28 ; +2,20], 480 parties d'Experts). L'ancienne table de valeur est
+   supprimée : ce que l'IA prévoit est ce qu'elle joue. */
+
+/**
+ * Ce que tranche une IA sur une décision qu'elle tient seule : une RAGE dont
+ * elle est l'attaquante (le livret lui laisse le choix entier), ou un Dilemme
+ * dont les deux camps sont des IA — l'attaquant désigne ses deux options, la
+ * cible lâche la moins chère ou paie 1 Adrénaline. Chaque camp décide avec
+ * son propre profil.
+ *
+ * Rien n'est appliqué ici : la route du bloc est `acheminerPerte`, le journal
+ * appartient à l'appelant.
+ *
+ *   RAGE → { option, valeur }                    option = couleur ou ADRENALINE_OPTION
+ *   DIL  → { option, valeur, paie, seulChoix }   paie = la cible donne 1 Adrénaline à la place
+ *   null → il n'y a rien à prendre
+ */
+export function trancherDecisionIA(d, titans, profilDefenseur = null, profilAttaquant = null) {
+  const defender = titans.find((t) => t.id === d.defenderId);
+  if (!defender) return null;
+  if (d.type === "RAGE") {
+    const ev = evaluationsModele(d, { titans }, profilAttaquant);
+    const choix = ev && rageSelonModele(ev);
+    if (!choix) return null;
+    return { option: choix.idx === -1 ? ADRENALINE_OPTION : defender.repaire[choix.idx], valeur: choix.valeur };
+  }
+  const offertes = optionsDesigneesIA(d, titans, profilAttaquant);
+  if (offertes.length === 0) return null;
+  return reponseCibleIA(d, titans, offertes, profilDefenseur);
+}
+
+/**
+ * Dilemme, côté IA ATTAQUANTE : les deux options qu'elle désigne, en clés du
+ * moteur — la paire qui lui rapporte le plus, compte tenu de ce que la cible
+ * lâchera (cf. `paireSelonModele`). Sert au Dilemme entre deux IA comme à
+ * celui d'une IA contre un humain.
+ */
+export function optionsDesigneesIA(d, titans, profilAttaquant = null) {
+  const ev = evaluationsModele(d, { titans }, profilAttaquant);
+  return ((ev && paireSelonModele(ev, d)) || []).map(versMoteur);
+}
+
+/**
+ * Dilemme, côté IA CIBLÉE : parmi les options désignées — par une IA ou par
+ * un humain —, celle qu'elle lâche, ou 1 Adrénaline donnée à la place
+ * (cf. `reponseSelonModele`).
+ *   → { option, valeur, paie, seulChoix }, ou null sans cible.
+ */
+export function reponseCibleIA(d, titans, offertes, profilDefenseur = null) {
+  const ev = evaluationsModele(d, { titans }, profilDefenseur);
+  if (!ev || offertes.length === 0) return null;
+  const rep = reponseSelonModele(ev, offertes.map(versModele));
+  return { option: versMoteur(rep.perdue), valeur: rep.perte, paie: rep.paie, seulChoix: offertes.length === 1 };
+}
+
+// Le Socle porte deux clés : `SOCLE_OPTION` au moteur, `OPTION_SOCLE` dans le modèle.
+const versMoteur = (o) => (o === OPTION_SOCLE ? SOCLE_OPTION : o);
+const versModele = (o) => (o === SOCLE_OPTION ? OPTION_SOCLE : o);
+
+/* ── OÙ VA LE BLOC PERDU ── (arbitrage Nikola du 2026-08-17, carte par carte)
+   Le bloc quittait le Repaire de la victime et n'arrivait NULLE PART : ni
+   au sol, ni chez l'attaquant. Il disparaissait de la partie, sur le
+   chemin humain comme sur le chemin IA du DIL — et le journal annonçait
+   quand même « T1 prend rouge à T2 ».
+
+   La destination n'est pas une règle générale : elle dépend de la carte
+   jouée ET du type d'effet, et c'est le domaine qui tranche (cf.
+   DESTINATION_BLOC_PERDU). On ne fait qu'appliquer le `destination` figé à
+   la création de la demande, en même temps que la case d'impact. Coder ici
+   un « DIL au sol, RAGE au Repaire » aurait été faux sur trois cartes sur
+   cinq.
+
+   `looseBlocks` est muté en place, exactement comme le font les résolveurs ;
+   à l'appelant de notifier. Rend de quoi journaliser. Un seul endroit pour
+   tous les chemins d'appel (DIL humain, DIL IA, DIL IA↔IA, RAGE humaine,
+   simulateur) : c'est exactement le motif qui avait laissé la RAGE correcte
+   côté IA et cassée côté humain. */
+export function acheminerPerte(decision, defender, attacker, color, looseBlocks) {
+  const chute = decision.cellAtImpact || defender.cell;
+  const poserAuSol = (cellKey, bloc) => {
+    if (!cellKey || !bloc) return false;
+    if (!looseBlocks[cellKey]) looseBlocks[cellKey] = [];
+    looseBlocks[cellKey].push(bloc);
+    return true;
+  };
+
+  /* ── UN DILEMME QUI NE PREND RIEN DOIT LE DIRE ──
+     Nikola, 2026-09-01 : « j'ai chargé un Titan en rebord avec un seuil de 3,
+     il y a bien eu un Dilemme, mais je n'ai pas vu le bloc sur le plateau ni
+     chez moi ».
+
+     Les deux sorties « rien à prendre » renvoyaient une chaîne VIDE. La ligne
+     de journal se terminait alors sèchement après le nom de la couleur, sans
+     destination et sans raison : à l'écran, le Dilemme avait tout l'air de
+     s'être résolu, et le bloc de s'être évaporé.
+
+     Le cas arrive pour de bon : les options d'un Dilemme sont figées à
+     l'impact, et plusieurs décisions peuvent s'empiler sur la même cible dans
+     une seule carte. La seconde réclame alors une couleur que la première a
+     déjà emportée. Rien ne se perd — il n'y avait simplement plus rien à
+     perdre — mais il faut l'écrire, sans quoi ça se lit comme un bloc disparu
+     du jeu. */
+  /* L'Adrénaline perdue rejoint TOUJOURS l'attaquant, jamais le sol : il
+     n'existe pas de pile d'Adrénaline sur le plateau (FAQ #5, et le tableau
+     des destinations le note déjà pour la RAGE). Elle ne suit donc pas
+     `decision.destination`. */
+  if (color === ADRENALINE_OPTION) {
+    if ((defender.adrenaline || 0) < 1) return ` → mais Titan ${defender.id} n'a plus d'Adrénaline : rien n'est perdu.`;
+    defender.adrenaline -= 1;
+    if (attacker) {
+      attacker.adrenaline = (attacker.adrenaline || 0) + 1;
+      return ` → 1 Adrénaline passe chez Titan ${attacker.id}.`;
+    }
+    return " → 1 Adrénaline perdue.";
+  }
+
+  /* OPTION SOCLE (livret : « ou 1 socle tiré au sort si applicable »).
+     Le Socle suit exactement la même route que les blocs — sol ou Repaire
+     selon la carte — mais il vit dans `socles`, pas dans `repaire`, et sa
+     VALEUR compte pour le score. Au sol, il se pose sous forme de marqueur
+     et redevient ramassable comme n'importe quel débris, en conservant sa
+     valeur. Chez l'attaquant, il rejoint sa pile de Socles. */
+  if (color === SOCLE_OPTION) {
+    const tire = retirerSocleAuSort(defender);
+    if (!tire) return ` → mais Titan ${defender.id} n'a plus aucun Socle : rien n'est perdu.`;
+    if (decision.destination === "repaire" && attacker) {
+      attacker.socles.push(tire.valeur);
+      return ` → Socle de ${tire.valeur} tiré au sort, passe chez Titan ${attacker.id}.`;
+    }
+    return poserAuSol(chute, tire.marker)
+      ? ` → Socle de ${tire.valeur} tiré au sort, tombe au sol en ${chute}, ramassable.`
+      : ` → Socle de ${tire.valeur} tiré au sort.`;
+  }
+
+  const idx = defender.repaire.indexOf(color);
+  if (idx === -1) return ` → mais Titan ${defender.id} n'a plus de ${color} en Repaire : rien n'est perdu.`;
+  const bloc = defender.repaire.splice(idx, 1)[0];
+  if (decision.destination === "repaire" && attacker) {
+    attacker.repaire.push(bloc);
+    return ` → passe dans le Repaire de Titan ${attacker.id}.`;
+  }
+  return poserAuSol(chute, bloc) ? ` → tombe au sol en ${chute}, ramassable.` : ".";
+}
+
+/* ── REFUS DE FATIGUE PAR UNE IA ── (ruling du 2026-08-28 : « l'Adrénaline
+   permet de refuser une Fatigue »)
+   L'IA paie quand la carte lui coûte plus que le jeton. La Force d'une carte
+   est le seul étalon dont on dispose côté cartes — le décompte final ne les
+   compte pas — et elle dit assez bien ce qu'on perd : une Faut Pas Me
+   Chauffer à 3 pèse plus qu'un Tout Casser à 1. */
+export function iaRefuseFatigue(fatigue, titans) {
+  const cible = titans.find((t) => t.id === fatigue.targetId);
+  const marginale = valeurMarginaleAdrenaline(Math.max(0, (cible?.adrenaline || 0) - 1));
+  return (CARD_FORCE[fatigue.cardId] || 0) > marginale;
+}
+
+/**
+ * Tranche les replis dont l'initiateur est une IA, et rend ceux qu'un humain
+ * doit trancher. `profilDe(id)` et `estIA(id)` disent qui décide ; le journal
+ * rendu ne nomme que les replis posés ailleurs qu'à leur case par défaut —
+ * celle-là, le résolveur l'a déjà appliquée.
+ */
+export function trancherReplisIA(liste, etat, profilDe, estIA) {
+  const humains = [];
+  const journal = [];
+
+  /* ── UN MÊME ÉLÉMENT NE SE PLACE QU'UNE FOIS ──
+     Bug remonté par Nikola sur la Manche 3 de la graine 3144532881 :
+     « j'étais en F3, j'ai fait Graouhhh, j'aurais dû déplacer 1 Titan puis
+     1 autre — j'ai dû déplacer 2 fois le même. »
+
+     Le journal de ce rapport le montre noir sur blanc, deux lignes de
+     suite :
+       « Titan 4 arrêté faute de puissance → posé en I4 au lieu de H3 »
+       « Titan 4 arrêté faute de puissance → posé en H2 au lieu de H3 »
+     Même Titan, même case de repli par défaut : ce sont DEUX demandes pour
+     UN SEUL arrêt. Elles naissent quand un Titan est touché directement
+     PUIS repercuté par la chaîne au même endroit — `projectInDirection`
+     dépose alors un repli à chacun des deux passages, sans savoir que
+     l'autre existe.
+
+     Le joueur se retrouvait à placer deux fois le même Titan, et le second
+     choix écrasait le premier : le premier n'avait donc servi à rien.
+
+     On dédoublonne sur (Titan, case par défaut) : deux demandes qui
+     désignent le même élément arrêté au même endroit sont le même
+     événement physique, et une seule décision doit être posée au joueur.
+     Deux poussées RÉELLEMENT distinctes ont des cases d'arrêt
+     différentes — elles passent toutes les deux, comme avant.
+
+     Le simulateur, lui, appliquait chaque demande sans dédoublonner
+     (2026-09-21) : c'est la raison pour laquelle cette boucle a quitté le
+     contrôleur. */
+  const dejaVu = new Set();
+
+  for (const r of liste || []) {
+    if (r.cases.length <= 1) continue;
+    /* DEUX CLÉS, ET LA SECONDE VIENT DU 2026-08-28. La première dit « même
+       élément, même case d'arrêt ». Elle laissait passer le cas que Nikola a
+       décrit — « quand on m'a demandé la 2e case, c'étaient les mêmes que la
+       première » : deux arrêts à des cases DIFFÉRENTES dont les voisines
+       libres coïncident.
+
+       Du point de vue du joueur, deux demandes qui offrent exactement les
+       mêmes destinations pour le même élément sont indiscernables, et
+       répondre à la seconde ne peut qu'écraser la première. On dédoublonne
+       donc aussi sur l'ensemble des cases offertes. */
+    const signature = `${r.titanId ?? "debris"}@${r.defaut}`;
+    const signatureCases = `${r.titanId ?? "debris"}#${[...r.cases].sort().join(",")}`;
+    if (dejaVu.has(signature) || dejaVu.has(signatureCases)) continue;
+    dejaVu.add(signature);
+    dejaVu.add(signatureCases);
+    if (!estIA(r.initiatorId)) { humains.push(r); continue; }
+
+    const choix = choisirRepliIA(r, etat, profilDe(r.initiatorId));
+    if (choix && choix !== r.defaut) {
+      // `appliquerRepli` remonte son propre journal : depuis le ruling du
+      // 2026-08-18, poser l'élément peut chasser un Titan et rapporter une
+      // Bagarre. Sans ça, l'IA marquait un point que rien n'expliquait.
+      journal.push(
+        `🤖 Titan ${r.initiatorId} (IA) pose l'élément arrêté en ${choix} plutôt qu'en ${r.defaut}.`,
+        ...(appliquerRepli(r, choix, etat) || [])
+      );
+    }
+  }
+  return { humains, journal };
 }
 
 /**
@@ -714,9 +1023,17 @@ export function appliquerDecisions(decisions, etat, profile = makeProfile()) {
  * mise d'Adrénaline (cf. « point d'attention » en en-tête).
  *
  * Exporté parce que le simulateur de parties s'en sert pour JOUER, quand
- * l'IA s'en sert pour RÉFLÉCIR. C'est délibéré : la partie simulée et le
- * raisonnement de l'IA passent ainsi par exactement le même code, il ne
- * peut pas y avoir de divergence entre ce que l'IA croit et ce qui arrive.
+ * l'IA s'en sert pour RÉFLÉCIR : la carte elle-même passe par le même code
+ * des deux côtés.
+ *
+ * LES DÉCISIONS NE SONT PAS RÉSOLUES ICI (2026-09-21). Elles l'étaient par le
+ * modèle, et c'est ce qui faisait dire à ce commentaire qu'aucune divergence
+ * n'était possible entre ce que l'IA croit et ce qui arrive : c'était vrai
+ * dans le simulateur, précisément parce qu'il n'exécutait pas ce que la table
+ * exécute. Les DIL/RAGE (`res.decisions`) et les Fatigues refusables
+ * (`res.fatigues`) remontent à l'appelant, qui les tranche avec les règles
+ * réelles (`trancherDecisionIA`, `iaRefuseFatigue`), au moment où le
+ * contrôleur le fait.
  */
 export function appliquerCoup(coup, titanId, etat, mancheNumber, profile = makeProfile()) {
   /* Application RÉELLE d'un coup (simulateur et campagnes), par opposition
@@ -732,12 +1049,8 @@ export function appliquerCoup(coup, titanId, etat, mancheNumber, profile = makeP
      tomber ses débris n'importe où, et le simulateur mesurerait une force
      qui n'est pas celle qu'un joueur affronte. */
   const replis = [];
-  const res = simulerCarte(coup, titanId, { ...etat, replis }, mancheNumber, profile);
-  for (const repli of replis) {
-    if (repli.cases.length <= 1) continue;
-    const choix = choisirRepliIA(repli, etat, profile);
-    if (choix) appliquerRepli(repli, choix, etat);
-  }
+  const res = simulerCarte(coup, titanId, { ...etat, replis }, mancheNumber, profile, false);
+  trancherReplisIA(replis, etat, () => profile, () => true);
   return res;
 }
 
@@ -783,7 +1096,10 @@ export function choisirRepartitionEcroulement(ecroulement, etat, initiatorId = n
   return choix;
 }
 
-function simulerCarte(coup, titanId, etat, mancheNumber, profile = makeProfile()) {
+// `modele` : pendant la recherche, les décisions sont résolues par le modèle
+// (`appliquerDecisions`) ; pour jouer pour de vrai (`appliquerCoup`), elles
+// remontent à l'appelant.
+function simulerCarte(coup, titanId, etat, mancheNumber, profile = makeProfile(), modele = true) {
   const { cardId, dir, bbDest, jnpCells, mise = 0 } = coup;
   const moi = etat.titans.find((t) => t.id === titanId);
   let res = null;
@@ -859,7 +1175,7 @@ function simulerCarte(coup, titanId, etat, mancheNumber, profile = makeProfile()
       break;
   }
 
-  appliquerDecisions(res?.decisions, etat, profile);
+  if (modele) appliquerDecisions(res?.decisions, etat, profile);
   // Sur Faut Pas Me Chauffer, le duel a déjà débité la mise cible par cible :
   // la retrancher ici la compterait deux fois.
   if (mise > 0 && moi && cardId !== "faut_pas_me_chauffer") {

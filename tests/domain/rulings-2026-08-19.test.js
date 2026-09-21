@@ -139,7 +139,10 @@ describe("La valeur de l'Adrénaline ne vit qu'à une seule source dans le code"
        sur un barème progressif. */
     const src = lire("src/application/useBoardGeneratorController.jsx");
     expect(src).not.toMatch(/coutAdrenaline\s*=\s*voitAdversaires\s*\?\s*\d/);
-    expect(src).toContain("valeurMarginaleAdrenaline");
+    /* Depuis le 2026-09-21 il ne chiffre plus rien lui-même : l'IA ciblée
+       tranche par `reponseCibleIA` (aiPlanner.js), qui lit la valeur
+       marginale — c'est le premier test de ce bloc qui le vérifie. */
+    expect(src).toContain("reponseCibleIA");
   });
 });
 

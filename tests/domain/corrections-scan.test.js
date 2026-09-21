@@ -243,7 +243,14 @@ describe("Aucun débris ne se pose sur un bâtiment debout", () => {
      chiffre chaque bloc à portée au score complet, placements de Verts
      compris. C'est un prix assumé, pas une lenteur accidentelle : la même
      campagne mesure la même chose, elle la mesure sur une IA qui réfléchit
-     nettement plus. */
+     nettement plus.
+
+     Puis de 300 s à 450 s le 2026-09-21 : 189 s seul, mais 307 s dans la
+     suite complète, où les autres campagnes tournent en même temps. Le délai
+     dépassé se lisait comme une régression alors qu'aucune assertion
+     n'échouait — et on avait déjà pris l'habitude d'ignorer ce rouge-là.
+     Relever le budget garde la couverture entière ; réduire la campagne à
+     20 parties l'aurait amputée d'un tiers. */
   it("aucune campagne n'en produit", async () => {
     // Cède la boucle entre deux parties, sans quoi la CI sort en code 1
     // (cf. `lancerCampagneCedante`).
@@ -253,7 +260,7 @@ describe("Aucun débris ne se pose sur un bâtiment debout", () => {
       : "";
     expect(regles).not.toContain("debris-sur-batiment");
     expect(r.anomalies.invariant?.total ?? 0).toBe(0);
-  }, 300000);
+  }, 450000);
 });
 
 describe("Un Titan poussé hors du plateau sort du ring", () => {

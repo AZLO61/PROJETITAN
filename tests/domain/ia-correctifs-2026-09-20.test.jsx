@@ -19,14 +19,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { isValidElement } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { appliquerDecisions, planCardPlay, planTour } from "../../src/domain/aiPlanner.js";
+import { appliquerDecisions, planCardPlay, planTour, trancherDecisionIA } from "../../src/domain/aiPlanner.js";
 import { FORCES, TEMPERAMENTS, makeProfile } from "../../src/domain/aiEvaluation.js";
-import { makeDecisionRequest, scoreBareme } from "../../src/domain/gameRules.js";
+import { makeDecisionRequest } from "../../src/domain/gameRules.js";
 import { setSeed } from "../../src/domain/rng.js";
-import {
-  marginalValue,
-  useBoardGeneratorController,
-} from "../../src/application/useBoardGeneratorController.jsx";
+import { useBoardGeneratorController } from "../../src/application/useBoardGeneratorController.jsx";
 
 const titan = (id, extra = {}) => ({
   id, cell: "E5", repaire: [], socles: [], bagarre: 0, destruction: 0,
@@ -43,27 +40,17 @@ const expert = makeProfile(FORCES.EXPERT, TEMPERAMENTS.OPPORTUNISTE);
    qu'elle devait protéger. Conséquence : aucune IA ne volait un Orange en
    RAGE, n'en proposait un en Dilemme, ni ne payait pour garder une paire —
    sur le barème le plus raide du jeu.
+
+   Depuis le 2026-09-21, ces décisions suivent la règle du modèle : la table
+   de valeur du contrôleur (`marginalValue`) a disparu avec le reste de ce
+   « second cerveau ». Même enjeu, vérifié sur la règle qui l'a remplacée.
 ──────────────────────────────────────────────────────────── */
-describe("marginalValue — l'Orange se compte par paires, pas à zéro", () => {
-  const seul = [{ id: 2, repaire: [] }];
-
-  it("chiffre le bloc qui COMPLÈTE une paire à ce que la paire rapporte", () => {
+describe("RAGE — l'Orange se compte par paires, pas à zéro", () => {
+  it("vole l'Orange qui COMPLÈTE sa paire plutôt qu'un Bleu", () => {
+    const joueurs = [titan(1, { repaire: ["orange"] }), titan(2, { repaire: ["orange", "bleu"] })];
+    const choix = trancherDecisionIA(makeDecisionRequest("RAGE", 1, 2, "Tête en Avant", "E6"), joueurs);
     // 1 Orange en Repaire : le 2e ouvre la première paire, 5 points.
-    expect(marginalValue("orange", ["orange"], seul, 1)).toBe(5);
-    // 3 Orange : le 4e ouvre la deuxième paire, 11 - 5 = 6 points.
-    expect(marginalValue("orange", Array(3).fill("orange"), seul, 1)).toBe(6);
-  });
-
-  it("laisse le bloc IMPAIR à zéro — c'est le barème qui le dit, pas une garde", () => {
-    expect(marginalValue("orange", [], seul, 1)).toBe(0);
-    expect(marginalValue("orange", Array(2).fill("orange"), seul, 1)).toBe(0);
-  });
-
-  it("colle au barème réel sur toute la plage", () => {
-    for (let n = 0; n <= 7; n++) {
-      const attendu = scoreBareme("orange", n + 1) - scoreBareme("orange", n);
-      expect(marginalValue("orange", Array(n).fill("orange"), seul, 1)).toBe(attendu);
-    }
+    expect(choix).toMatchObject({ option: "orange", valeur: 5 });
   });
 });
 
@@ -72,29 +59,22 @@ describe("marginalValue — l'Orange se compte par paires, pas à zéro", () => 
    Il est acquis une fois pour toutes par le bloc qui prend la tête. L'ancien
    calcul le recréditait sur chacun : une IA déjà en tête surpayait tout vol
    de Rose de dix points, et un défenseur payait une Adrénaline pour protéger
-   un bonus qu'il ne pouvait plus perdre.
+   un bonus qu'il ne pouvait plus perdre. Même note qu'au point 1 : vérifié
+   sur la règle du modèle, où l'Expert chiffre au score complet.
 ──────────────────────────────────────────────────────────── */
-describe("marginalValue — le bonus Rose est un écart, pas un forfait", () => {
-  const rival = [{ id: 2, repaire: ["rose", "rose"] }];
+describe("RAGE — le bonus Rose est un écart, pas un forfait", () => {
+  const rage = () => makeDecisionRequest("RAGE", 1, 2, "Tête en Avant", "E6");
 
-  it("crédite le bonus au bloc qui fait basculer le classement", () => {
-    // 1 → 2 Roses : égalité avec le rival, la moitié du bonus. Barème 4-2=2.
-    expect(marginalValue("rose", ["rose"], rival, 1)).toBe(2 + 5);
-    // 2 → 3 : passe en tête, l'autre moitié. Barème 6-4=2.
-    expect(marginalValue("rose", Array(2).fill("rose"), rival, 1)).toBe(2 + 5);
+  it("vole le Rose qui fait basculer la majorité", () => {
+    // 2 Roses contre 2 : en prendre un fait passer de l'égalité à la tête.
+    const joueurs = [titan(1, { repaire: ["rose", "rose"] }), titan(2, { repaire: ["rose", "rose", "rouge"] })];
+    expect(trancherDecisionIA(rage(), joueurs, null, expert).option).toBe("rose");
   });
 
-  it("ne le crédite plus une fois la tête acquise", () => {
-    // 3 → 4 Roses, rival à 2 : le bonus est déjà à moi, il ne rebascule pas.
-    // Reste le seul barème, 8 - 6 = 2. Rendait 12 avant correction.
-    expect(marginalValue("rose", Array(3).fill("rose"), rival, 1)).toBe(2);
-    expect(marginalValue("rose", Array(4).fill("rose"), rival, 1))
-      .toBe(scoreBareme("rose", 5) - scoreBareme("rose", 4));
-  });
-
-  it("donne bien le bonus plein au premier Rose quand personne n'en a", () => {
-    const personne = [{ id: 2, repaire: [] }];
-    expect(marginalValue("rose", [], personne, 1)).toBe(2 + 10);
+  it("ne le surpaie plus une fois la tête acquise : il prend le Rouge", () => {
+    // Déjà 3 contre 2 : le bonus est à lui, un Rose de plus ne vaut que son barème.
+    const joueurs = [titan(1, { repaire: ["rose", "rose", "rose"] }), titan(2, { repaire: ["rose", "rose", "rouge"] })];
+    expect(trancherDecisionIA(rage(), joueurs, null, expert).option).toBe("rouge");
   });
 });
 

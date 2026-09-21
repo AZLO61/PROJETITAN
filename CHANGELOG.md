@@ -1,5 +1,77 @@
 # Changelog
 
+## Non publié — trente-quatrième passe du 2026-09-21 (le duel mesure la table, l'IA n'a plus qu'un cerveau)
+
+« J'aimerais encore améliorer le script de test pour que les IA soient encore
+meilleures. » Le script de duel mesurait un jeu qui n'est pas celui de la
+table : c'est ce qu'il fallait réparer avant de s'en servir pour régler quoi
+que ce soit.
+
+### Le simulateur joue enfin les décisions de la table
+
+`npm run duel` et toutes les campagnes tournent sur le simulateur. Pour
+résoudre les Dilemmes et les RAGE, il appelait le modèle que l'IA consulte
+pour prévoir, au lieu des règles que la table applique : ses prévisions y
+tombaient donc toujours juste. Six écarts en tout — une RAGE de Tout Casser y
+donnait son bloc à l'attaquant (la table le pose au sol), le bloc d'un
+Dilemme « au sol » y disparaissait, aucune Fatigue n'y était refusée, chaque
+Titan y plaçait ses Verts en voyant ceux des précédents, les replis n'y
+étaient pas dédoublonnés, et l'IA y choisissait des replis qu'elle ne
+choisissait pas à la table.
+
+Les règles de décision de l'IA — Dilemme, RAGE, route du bloc perdu, refus de
+Fatigue, replis — vivent désormais dans `aiPlanner.js`, et le contrôleur comme
+le simulateur les appellent, dans le même ordre. Un test interdit de les
+réécrire dans le contrôleur. **Un duel antérieur à cette passe ne se compare
+pas à ceux d'après.**
+
+### Deux trous de l'IA à la table, trouvés par la comparaison
+
+- **Elle ne choisissait jamais où poser un élément arrêté** sur Tout Casser,
+  Tête en Avant et Boing Boing : sans collecteur de replis, le résolveur
+  appliquait la case par défaut. Les campagnes, elles, la faisaient choisir.
+- **Les Fatigues de son Boing Boing n'étaient jamais proposées au refus**, ni
+  à un humain ni à une IA. Le même saut joué par un humain ouvrait le bandeau.
+
+### L'IA ramasse après ses Dilemmes, comme un joueur
+
+Ses RAGE et ses Dilemmes contre une autre IA se résolvaient après son
+ramassage : le bloc que son propre Dilemme faisait tomber à ses pieds lui
+échappait à chaque fois, contre l'intention du ruling du 18 août. Mesuré au
+duel : **+1,22 point par partie** (IC 95 % [+0,32 ; +2,12], 480 parties
+d'Experts). Ce qui attend un humain reste en fin de tour.
+
+### Un seul cerveau
+
+La table de valeur écrite à la main du contrôleur (`marginalValue`,
+`valeurOptionDil`, `coutOptionDil`, `defenseurPaieAdrenaline`) est supprimée.
+L'IA tranche à la table avec les arbitrages de son modèle : ce que
+l'attaquant gagne plus la moitié de ce que la cible perd, une paire de
+Dilemme choisie en anticipant ce que la cible lâchera, le score complet pour
+l'Expert. **+1,24 point par partie** (IC 95 % [+0,28 ; +2,20]). C'était le
+chantier laissé ouvert par l'audit du 20 : ce que l'IA prévoit est
+maintenant ce qu'elle joue, et un test le vérifie sur cinq situations.
+
+Le modèle suit aussi la route du moteur (un bloc que la carte envoie au sol y
+tombe, ramassable) : mesuré neutre deux fois, gardé pour la cohérence. Le
+journal ne donne plus de « +N pts » sur la RAGE d'une IA, la valeur n'étant
+plus un barème.
+
+### Le script de duel
+
+- Les parties sont réparties sur les cœurs de la machine
+  (`scripts/parallele.mjs`), résultats identiques partie par partie à
+  l'ancienne boucle. 480 parties d'Experts : ~25 min sur 15 fils. `FILS=4`
+  garde la main sur la machine.
+- L'intervalle de confiance à 95 % est calculé sur les paires (une graine
+  jouée sièges 1+3 puis 2+4), et le script imprime son verdict : meilleure,
+  moins bonne, ou indiscernable avec la fourchette de l'effet.
+- `npm run forces` passe par le même module.
+
+Hiérarchie revérifiée (20 parties × 8 graines, opportuniste, face à un
+Expert) : Facile 51-66 % de son score (3-13 % de victoires), Moyen 58-79 %
+(7-20 %), Difficile 86-97 % (18-27 %). Aucune inversion.
+
 ## Non publié — trente-troisième passe du 2026-09-16 (les arbitrages de l'audit)
 
 Nikola a tranché six des sept questions laissées ouvertes par l'audit du 14.

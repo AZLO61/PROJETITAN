@@ -19,144 +19,35 @@ import { jouerJingleFin } from "../ui/audio.js";
 const {
   STOCK_INITIAL, COULEURS, COLOR_HEX, ROWS, BUILDING_ROWS, BUILDING_COLS, socleMarker, isSocleMarker, socleValue, isBuildingCell,
   countStandingBuildings, countColorOnBoard, countActiveTeleporters, checkEndGameTriggers, manchesMax, shuffle, buildBag, getQuadrant, generateBoard,
-  CORNERS, TITAN_GRADIENT, ACTION_CARDS, CARD_LABEL, PHASES, getActivePhases, PHASE_LABELS, EVENT_NAMES, CARD_FORCE, placeTitans, getPlacementCells, placerTitanInitial, nextDetonateur,
+  CORNERS, TITAN_GRADIENT, ACTION_CARDS, CARD_LABEL, PHASES, getActivePhases, PHASE_LABELS, EVENT_NAMES, placeTitans, getPlacementCells, placerTitanInitial, nextDetonateur,
   rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, releaseSocle, projectInDirection, estSurLePlateau, indexerTitans, rentrerEnJeu,
   resolveToutCasserBatiments, resolveToutCasserBlocs,
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, releverPercussion, listerCiblesToutCasser, resolveToutCasserCase, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
   scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, getJeNePartagePasCount, resolveJeNePartagePasElement, deplacerSiDerniereCaseLibre, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
-  choisirRepliIA, appliquerRepli, appliquerReplElement,
-  canRage, canDil, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions, retirerSocleAuSort, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
+  appliquerReplElement,
+  canRage, canDil, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
   getRecuperationPool, resolveRecuperation, retirerPileVide, programCards, ensureProgrammableHand, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
   resolveFatigue, refuserFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, resolveFautPasMeChauffer, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS,
   scoreBareme, PODIUM_POINTS, rankWithTies, countRepaireColors, computeFinalScore, classementFinal,
-  valeurMarginaleAdrenaline,
   pick,
   setSeed,
   // IA : profils et choix de coup (cf. src/domain/aiEvaluation.js et aiPlanner.js)
-  FORCES, FORCE_SETTINGS, TEMPERAMENTS, makeProfile, profileLabel, bestVertAssignment, reglagesDe,
+  FORCES, TEMPERAMENTS, makeProfile, profileLabel, bestVertAssignment, reglagesDe,
   rendreCartesEmpruntees,
   // Les autres planificateurs passent par `penser` (cf. `penseeIA.js`).
-  planRecuperation, choisirRepartitionEcroulement
+  planRecuperation, choisirRepartitionEcroulement,
+  // Ce qu'une IA tranche pour de vrai : le même code que le simulateur.
+  trancherDecisionIA, optionsDesigneesIA, reponseCibleIA,
+  acheminerPerte, iaRefuseFatigue, trancherReplisIA,
 } = Domain;
 
-/* ── VALEUR D'UNE OPTION DE DILEMME, POUR L'IA ──
-   Quatre fonctions pures, remontées au niveau du module le 2026-08-18.
-   Elles étaient déclarées DANS le composant, donc reconstruites à chaque
-   rendu : `coutOptionDil` servait de dépendance à `autoResolveIaDecisions`,
-   qui perdait sa mémoïsation à chaque frappe. Elles ne lisent que leurs
-   arguments et le barème du domaine, elles n'ont rien à faire là-dedans. */
-export function marginalValue(color, currentRepaire, allPlayers, selfId) {
-  const counts = {};
-  currentRepaire.forEach((c) => { counts[c] = (counts[c] || 0) + 1; });
-  const before = scoreBareme(color, counts[color] || 0);
-  const after = scoreBareme(color, (counts[color] || 0) + 1);
-  let delta = after - before;
-  if (color === "rose") {
-    /* ── LE BONUS ROSE EST UN ÉCART, PAS UN FORFAIT (audit du 2026-09-20) ──
-       Il était ajouté à CHAQUE Rose : une IA déjà en tête se créditait +10
-       sur son quatrième comme sur celui qui lui avait donné la tête. Mesuré
-       face à un rival à 2 Roses, un Titan qui en a déjà 3 chiffrait le
-       suivant à 12 points alors qu'il en vaut 2 — il surpayait donc tout vol
-       de Rose de dix points, et le défenseur payait une Adrénaline pour
-       protéger un bonus qu'il ne pouvait plus perdre.
-
-       On chiffre ce que le bonus vaut AVANT et APRÈS, et on garde la
-       différence : seul le bloc qui fait basculer le classement la porte. */
-    const maxOthers = Math.max(0, ...allPlayers
-      .filter((p) => p.id !== selfId)
-      .map((p) => p.repaire.filter((c) => c === "rose").length));
-    const bonus = (n) => {
-      if (n > maxOthers) return 10;
-      return n > 0 && n === maxOthers ? 5 : 0;
-    };
-    const avant = counts["rose"] || 0;
-    delta += bonus(avant + 1) - bonus(avant);
-  }
-  /* ── L'ORANGE NE MARQUE QUE PAR PAIRES, ET `scoreBareme` LE SAIT DÉJÀ ──
-     Ici vivait `if (counts.orange % 2 === 1) delta = 0`, la condition à
-     l'envers : `counts` est le compte AVANT ajout, donc impair veut dire que
-     le bloc COMPLÈTE la paire — le seul cas où il vaut quelque chose. La
-     garde annulait exactement ce qu'elle devait protéger, et l'Orange
-     ressortait à 0 pour TOUS les comptes (mesuré : 0, 0, 0, 0, 0 de 0 à
-     5 blocs, contre 0, 5, 0, 6, 0, 7 au barème réel).
-
-     Conséquence, sur le barème le plus raide du jeu (5/11/18/26 la paire) :
-     aucune IA ne volait un Orange en RAGE, n'en proposait un en Dilemme, ni
-     ne payait une Adrénaline pour garder une paire.
-
-     Rien ne la remplace : `after - before` rend déjà 0 sur le bloc impair. */
-  return delta;
-}
-
-/* VALEUR D'UN SOCLE POUR L'IA — espérance, pas certitude.
-   Le Socle du Dilemme est tiré AU SORT : ni l'attaquant ni la cible ne
-   savent lequel partira. La seule évaluation honnête est donc la valeur
-   MOYENNE des Socles de la cible. Prendre le maximum ferait surestimer
-   l'option à l'IA et lui ferait proposer le Socle bien trop souvent ;
-   prendre le minimum la lui ferait ignorer. */
-function esperanceSocle(defender) {
-  const socles = defender.socles || [];
-  if (socles.length === 0) return 0;
-  return socles.reduce((s, v) => s + v, 0) / socles.length;
-}
-
-/* Ce que l'option rapporte à l'ATTAQUANT s'il la désigne.
-   Quand la carte envoie le bloc au sol, l'attaquant ne gagne rien
-   directement : il ne fait que retirer des points à sa cible. La valeur du
-   coup est donc le COÛT pour la cible, pas le gain marginal chez lui. Sans
-   cette distinction, l'IA évaluait une RAGE de Tout Casser — désormais « au
-   sol » — comme si elle encaissait le bloc. */
-function valeurOptionDil(option, defender, attacker, allPlayers, decision) {
-  const versRepaire = decision.destination === "repaire";
-  if (option === SOCLE_OPTION) return esperanceSocle(defender);
-  /* L'Adrénaline ne se pose jamais au sol (FAQ #5) : quelle que soit la ligne
-     du tableau des destinations, elle passe chez l'attaquant. Sa valeur pour
-     lui est donc TOUJOURS son gain marginal à lui, jamais la perte de la
-     cible. */
-  if (option === ADRENALINE_OPTION) return valeurMarginaleAdrenaline(attacker.adrenaline || 0);
-  if (versRepaire) return marginalValue(option, attacker.repaire, allPlayers, attacker.id);
-  return marginalValue(option, defender.repaire, allPlayers, defender.id);
-}
-
-/* Ce que l'option coûte à la CIBLE si elle l'abandonne. Elle choisit
-   toujours la moins chère des deux. */
-function coutOptionDil(option, defender, allPlayers) {
-  if (option === SOCLE_OPTION) return esperanceSocle(defender);
-  // Ce que lâcher son dernier jeton coûte à la cible : la valeur marginale du
-  // stock qu'il lui reste une fois celui-ci parti (même barème que le refus
-  // de Fatigue).
-  if (option === ADRENALINE_OPTION) return valeurMarginaleAdrenaline(Math.max(0, (defender.adrenaline || 0) - 1));
-  return marginalValue(option, defender.repaire, allPlayers, defender.id);
-}
-
-/* ── LE DÉFENSEUR DÉCIDE, TOUJOURS, MÊME QUAND C'EST UNE IA ──
-   Ruling rappelé par Nikola le 2026-08-28 : « quand un joueur ou une IA fait
-   un DIL à une cible, ce n'est pas l'attaquant qui décide de lui prendre une
-   Adrénaline, c'est le défenseur qui peut l'utiliser pour ne pas avoir à
-   donner un des deux blocs demandés ».
-
-   Le choix existait dans deux des trois configurations — le défenseur humain
-   a son bouton « Payer 1 💉 », le défenseur IA face à un attaquant humain a
-   son arbitrage. Il manquait EXACTEMENT là où personne ne pouvait le voir :
-   la résolution automatique IA contre IA, qui faisait perdre un bloc au
-   défenseur sans jamais lui proposer de payer. Deux IA de même force ne
-   jouaient donc pas la même règle selon qui les attaquait.
-
-   L'arbitrage est extrait ici pour que les deux chemins lisent le MÊME code,
-   plutôt que d'en avoir une copie chacun qui dérive.
-
-   COMMENT IL TRANCHE. Une Adrénaline lâchée coûte sa valeur marginale au
-   barème progressif — elle vaut d'autant plus cher que la réserve est
-   grosse — et elle atterrit chez l'attaquant, donc elle coûte double pour
-   qui suit le score de ses adversaires (`voitAdversaires`). Le défenseur
-   paie quand le bloc menacé lui coûte davantage. */
-function defenseurPaieAdrenaline(defender, coutDuBloc, voitAdversaires) {
-  if ((defender?.adrenaline || 0) < 1) return false;
-  const marginale = valeurMarginaleAdrenaline((defender.adrenaline || 0) - 1);
-  const coutAdrenaline = voitAdversaires ? marginale * 2 : marginale;
-  return coutDuBloc > coutAdrenaline;
-}
+/* Ce qu'une IA tranche pour de vrai — valeur d'une option de Dilemme,
+   arbitrage de l'Adrénaline, route du bloc perdu, refus de Fatigue, replis —
+   vit dans le domaine depuis le 2026-09-21 (cf. aiPlanner.js, « CE QUE L'IA
+   TRANCHE POUR DE VRAI »). Ces règles étaient écrites ici, hors d'atteinte du
+   simulateur, qui en appliquait donc d'autres : le contrôleur et les
+   campagnes exécutent maintenant le même code. */
 
 export function useBoardGeneratorController() {
   const [nbJoueurs, setNbJoueurs] = useState(4);
@@ -3149,6 +3040,14 @@ export function useBoardGeneratorController() {
         // part où déposer ce qu'il déplace, et les cartes des IA se
         // résolvaient sans qu'aucun chemin ne s'allume (Nikola, 2026-08-29).
         trajectoires: [],
+        /* Collecteur de replis, qui manquait de la même façon (2026-09-21).
+           Sans lui, les résolveurs posent l'élément arrêté à sa case par
+           défaut et ne demandent rien : sur Tout Casser, Tête en Avant et Boing
+           Boing, l'IA ne choisissait JAMAIS où poser un débris ni où repousser
+           un Titan, alors que le simulateur — donc chaque campagne et chaque
+           duel — la faisait choisir (`appliquerCoup`). Les campagnes
+           mesuraient une IA plus forte que celle de la table. */
+        replis: [],
       };
       // Si aucun coup n'a pu être noté, on défausse la première carte.
       const cardId = move?.cardId ?? curTitan2.programmed[0];
@@ -3218,6 +3117,12 @@ export function useBoardGeneratorController() {
             const suite = resolveEcroulementAmas(playerId, res.ecroulement, choix, jeu2);
             newLog = [...newLog, ...suite.log];
           }
+          /* La Fatigue du Titan percuté est refusable (ruling du 2026-08-28),
+             et ce chemin ne la transmettait pas (2026-09-21) : face au Boing
+             Boing d'une IA, ni un humain ni une IA ne pouvait payer pour
+             garder sa carte, alors que le même saut joué par un humain
+             ouvrait bien le bandeau (cf. `jouerBoingBoing`). */
+          if (res.fatigues?.length) enqueueFatigues(res.fatigues);
           setState((p) => ({ ...p })); setLooseBlocks((p) => ({ ...p }));
         } else {
           newLog = [`IA T${playerId} : Boing Boing sans destination, défausse.`];
@@ -3274,6 +3179,27 @@ export function useBoardGeneratorController() {
       }
 
       setActionLog((prev) => [...prev, ...newLog]);
+      // Les replis de la carte, tranchés par l'IA qui l'a jouée (cf. `jeu2`).
+      enqueueReplis(jeu2.replis);
+      /* ── CE QUE L'IA TRANCHE SEULE SE RÉSOUT AVANT SON RAMASSAGE (2026-09-21) ──
+         Une RAGE dont elle est l'attaquante, un Dilemme entre deux IA : tout
+         se résolvait APRÈS son ramassage, en fin de tour. Le bloc que son
+         propre Dilemme faisait tomber à ses pieds lui échappait donc à chaque
+         fois — alors qu'un joueur humain ramasse une fois son Dilemme tranché,
+         et que c'est l'intention même du ruling du 2026-08-18 (« son bloc
+         perdu doit tomber dans le Périmètre de T1, qui pourra le ramasser avec
+         son passif »). Mesuré au duel, simulateur aligné sur la table :
+         +1,22 point par partie, IC 95 % [+0,32 ; +2,12], 480 parties
+         d'Experts.
+         Ce qui attend un humain reste en fin de tour : l'IA ne suspend pas son
+         ramassage à un clic. */
+      const modesIA = aiTitanModesRef.current;
+      const tranchablesSeule = newDecisions.filter((d) =>
+        modesIA[d.attackerId] === "ia" && (d.type === "RAGE" || modesIA[d.defenderId] === "ia"));
+      if (tranchablesSeule.length > 0) {
+        enqueueDecisions(tranchablesSeule);
+        newDecisions = newDecisions.filter((d) => !tranchablesSeule.includes(d));
+      }
       /* Le chemin de ce que la carte a déplacé s'allume, exactement comme
          quand c'est le joueur qui joue (Nikola, 2026-08-29). Chaque case y
          porte déjà son élément, donc les débris restent jaunes et les Titans
@@ -3484,98 +3410,15 @@ export function useBoardGeneratorController() {
   //   sont indépendantes et chacune suit le mode de SON décideur.
 
   /* ── OÙ VA LE BLOC PERDU ── (arbitrage Nikola du 2026-08-17, carte par carte)
-     Le bloc quittait le Repaire de la victime et n'arrivait NULLE PART : ni
-     au sol, ni chez l'attaquant. Il disparaissait de la partie, sur le
-     chemin humain comme sur le chemin IA du DIL — et le journal annonçait
-     quand même « T1 prend rouge à T2 ».
-
-     La destination n'est pas une règle générale : elle dépend de la carte
-     jouée ET du type d'effet, et c'est le domaine qui tranche (cf.
-     DESTINATION_BLOC_PERDU). Le contrôleur ne fait qu'appliquer le
-     `destination` figé à la création de la demande, en même temps que la
-     case d'impact. Coder ici un « DIL au sol, RAGE au Repaire » aurait été
-     faux sur trois cartes sur cinq.
-
-     `looseBlocks` est muté en place puis notifié par setLooseBlocks, exactement
-     comme le font les résolveurs du domaine. */
-  const retirerBlocDuRepaire = (defender, color) => {
-    const idx = defender.repaire.indexOf(color);
-    if (idx === -1) return null;
-    return defender.repaire.splice(idx, 1)[0];
-  };
-
-  const poserBlocAuSol = useCallback((cellKey, bloc) => {
-    if (!cellKey || !bloc) return false;
-    const lb = aiLooseBlocksRef.current;
-    if (!lb[cellKey]) lb[cellKey] = [];
-    lb[cellKey].push(bloc);
-    setLooseBlocks((prev) => ({ ...prev }));
-    return true;
-  }, []);
-
-  /* Route le bloc perdu vers sa destination, et renvoie de quoi journaliser.
-     Un seul endroit pour les quatre chemins d'appel (DIL humain, DIL IA,
-     DIL IA↔IA, RAGE humaine) : c'est exactement le motif qui avait laissé la
-     RAGE correcte côté IA et cassée côté humain. */
+     La route vit dans le domaine (`acheminerPerte`, aiPlanner.js) : un seul
+     code pour les quatre chemins d'ici (DIL humain, DIL IA, DIL IA↔IA, RAGE
+     humaine) et pour le simulateur. `looseBlocks` y est muté en place, on
+     notifie ensuite, exactement comme après un résolveur. */
   const acheminerBlocPerdu = useCallback((decision, defender, attacker, color) => {
-    const chute = decision.cellAtImpact || defender.cell;
-
-    /* OPTION SOCLE (livret : « ou 1 socle tiré au sort si applicable »).
-       Le Socle suit exactement la même route que les blocs — sol ou Repaire
-       selon la carte — mais il vit dans `socles`, pas dans `repaire`, et sa
-       VALEUR compte pour le score. Au sol, il se pose sous forme de marqueur
-       et redevient ramassable comme n'importe quel débris, en conservant sa
-       valeur. Chez l'attaquant, il rejoint sa pile de Socles. */
-    /* ── UN DILEMME QUI NE PREND RIEN DOIT LE DIRE ──
-       Nikola, 2026-09-01 : « j'ai chargé un Titan en rebord avec un seuil de 3,
-       il y a bien eu un Dilemme, mais je n'ai pas vu le bloc sur le plateau ni
-       chez moi ».
-
-       Les deux sorties « rien à prendre » renvoyaient une chaîne VIDE. La ligne
-       de journal se terminait alors sèchement après le nom de la couleur, sans
-       destination et sans raison : à l'écran, le Dilemme avait tout l'air de
-       s'être résolu, et le bloc de s'être évaporé.
-
-       Le cas arrive pour de bon : les options d'un Dilemme sont figées à
-       l'impact, et plusieurs décisions peuvent s'empiler sur la même cible dans
-       une seule carte. La seconde réclame alors une couleur que la première a
-       déjà emportée. Rien ne se perd — il n'y avait simplement plus rien à
-       perdre — mais il faut l'écrire, sans quoi ça se lit comme un bloc disparu
-       du jeu. */
-    /* L'Adrénaline perdue rejoint TOUJOURS l'attaquant, jamais le sol : il
-       n'existe pas de pile d'Adrénaline sur le plateau (FAQ #5, et le tableau
-       des destinations le note déjà pour la RAGE). Elle ne suit donc pas
-       `decision.destination`. */
-    if (color === ADRENALINE_OPTION) {
-      if ((defender.adrenaline || 0) < 1) return ` → mais Titan ${defender.id} n'a plus d'Adrénaline : rien n'est perdu.`;
-      defender.adrenaline -= 1;
-      if (attacker) {
-        attacker.adrenaline = (attacker.adrenaline || 0) + 1;
-        return ` → 1 Adrénaline passe chez Titan ${attacker.id}.`;
-      }
-      return " → 1 Adrénaline perdue.";
-    }
-
-    if (color === SOCLE_OPTION) {
-      const tire = retirerSocleAuSort(defender);
-      if (!tire) return ` → mais Titan ${defender.id} n'a plus aucun Socle : rien n'est perdu.`;
-      if (decision.destination === "repaire" && attacker) {
-        attacker.socles.push(tire.valeur);
-        return ` → Socle de ${tire.valeur} tiré au sort, passe chez Titan ${attacker.id}.`;
-      }
-      return poserBlocAuSol(chute, tire.marker)
-        ? ` → Socle de ${tire.valeur} tiré au sort, tombe au sol en ${chute}, ramassable.`
-        : ` → Socle de ${tire.valeur} tiré au sort.`;
-    }
-
-    const bloc = retirerBlocDuRepaire(defender, color);
-    if (!bloc) return ` → mais Titan ${defender.id} n'a plus de ${color} en Repaire : rien n'est perdu.`;
-    if (decision.destination === "repaire" && attacker) {
-      attacker.repaire.push(bloc);
-      return ` → passe dans le Repaire de Titan ${attacker.id}.`;
-    }
-    return poserBlocAuSol(chute, bloc) ? ` → tombe au sol en ${chute}, ramassable.` : ".";
-  }, [poserBlocAuSol]);
+    const suffixe = acheminerPerte(decision, defender, attacker, color, aiLooseBlocksRef.current);
+    setLooseBlocks((prev) => ({ ...prev }));
+    return suffixe;
+  }, []);
 
   const autoResolveIaDecisions = useCallback((rawDecisions, curTitanModes, curPlayers) => {
     const needHuman = [];
@@ -3610,23 +3453,13 @@ export function useBoardGeneratorController() {
            l'ancienne règle : la recherche prévoyait l'Adrénaline, la partie
            prenait un bloc. Les deux arbitrent désormais sur la même liste.
 
-           L'arbitrage reste celui d'ici — le gain de l'attaquant — et non
-           celui du modèle, qui pèse aussi la perte adverse à demi. Les unifier
-           vraiment demande de faire appeler `appliquerDecisions` par ce
-           chemin : c'est un autre chantier, pas ce correctif-ci. */
-        let meilleur = null;
-        defender.repaire.forEach((color, idx) => {
-          const val = marginalValue(color, attacker.repaire, curPlayers, d.attackerId);
-          if (!meilleur || val > meilleur.val) meilleur = { val, idx, color };
-        });
-        if ((defender.adrenaline || 0) >= 1) {
-          // Ce que la PROCHAINE Adrénaline rapporte à l'attaquant, au barème
-          // progressif — jamais un forfait (cf. valeurMarginaleAdrenaline).
-          const val = valeurMarginaleAdrenaline(attacker.adrenaline || 0);
-          if (!meilleur || val > meilleur.val) meilleur = { val, adrenaline: true };
-        }
-        if (!meilleur) continue;
-        if (meilleur.adrenaline) {
+           Depuis le 2026-09-21, l'arbitrage est celui du modèle — ce que
+           l'attaquant y gagne plus la moitié de ce que la cible y perd — et
+           il vit dans `trancherDecisionIA` (aiPlanner.js), que le simulateur
+           appelle aussi : la partie joue ce que la recherche a prévu. */
+        const choixRage = trancherDecisionIA(d, curPlayers, null, aiTitanProfilesRef.current[d.attackerId]);
+        if (!choixRage) continue;
+        if (choixRage.option === ADRENALINE_OPTION) {
           // FAQ #5. Une Adrénaline ne se pose pas au sol : elle va toujours
           // à l'attaquant, quelle que soit la ligne du tableau des
           // destinations.
@@ -3638,8 +3471,8 @@ export function useBoardGeneratorController() {
           // juste pour Tête en Avant et Faut Pas Me Chauffer, faux pour la
           // RAGE de Tout Casser, que Nikola a tranchée « au sol » le
           // 2026-08-17 (cf. acheminerBlocPerdu).
-          const suffixe = acheminerBlocPerdu(d, defender, attacker, meilleur.color);
-          setActionLog((prev) => [...prev, `RAGE IA (T${d.attackerId} attaquant, ${d.cardLabel}) : arrache ${meilleur.color} (+${meilleur.val}pts) à T${d.defenderId}${suffixe}`]);
+          const suffixe = acheminerBlocPerdu(d, defender, attacker, choixRage.option);
+          setActionLog((prev) => [...prev, `RAGE IA (T${d.attackerId} attaquant, ${d.cardLabel}) : arrache ${choixRage.option} à T${d.defenderId}${suffixe}`]);
         }
         continue;
       }
@@ -3649,49 +3482,39 @@ export function useBoardGeneratorController() {
          échéant, « un Socle tiré au sort » (livret). L'IA raisonnait sur
          `defender.repaire` seul : elle n'aurait jamais proposé le Socle, et
          aurait planté sur une cible « 1 couleur + 1 Socle » que canDil
-         accepte maintenant. */
-      const optionsDil = getDilOptions(d.defenderId, { titans: curPlayers });
+         accepte maintenant. Ce que l'IA désigne vit dans
+         `optionsDesigneesIA`, ce qu'elle lâche dans `reponseCibleIA`
+         (aiPlanner.js) : une seule règle pour les trois configurations, et
+         pour le simulateur. */
 
       if (atkIsIa && defIsIa) {
-        // Les deux étapes auto, comme avant.
-        if (optionsDil.length < 1) continue;
-        const ranked = optionsDil
-          .map((color) => ({ color, atkVal: valeurOptionDil(color, defender, attacker, curPlayers, d) }))
-          .sort((a, b) => b.atkVal - a.atkVal);
-        const offered = ranked.slice(0, Math.min(2, ranked.length));
-        if (offered.length === 0) continue;
-        // Le bloc perdu suit la même route que côté humain : sol ou Repaire
-        // selon la carte jouée (cf. acheminerBlocPerdu). Il n'allait
-        // jusqu'ici nulle part et disparaissait de la partie.
-        /* Le défenseur choisit d'abord la moins chère des options offertes,
-           puis — et c'est l'étape qui manquait ici — décide s'il préfère
-           payer 1 Adrénaline plutôt que de la lâcher. Même arbitrage que
-           face à un attaquant humain (cf. `defenseurPaieAdrenaline`). */
-        const defValued = offered.map((o) => ({ ...o, defVal: coutOptionDil(o.color, defender, curPlayers) }));
-        const defChoice = defValued.reduce((best, curr) => (curr.defVal < best.defVal ? curr : best));
-        const voitAdversaires = FORCE_SETTINGS[aiTitanProfilesRef.current[d.defenderId]?.force]?.voitAdversaires;
-        if (defenseurPaieAdrenaline(defender, defChoice.defVal, voitAdversaires)) {
+        /* Les deux étapes auto : l'attaquant désigne ses deux options, le
+           défenseur lâche la moins chère ou paie 1 Adrénaline. La règle est
+           `trancherDecisionIA`, la même que dans le simulateur ; le bloc perdu
+           suit la même route que côté humain (cf. acheminerBlocPerdu). */
+        const choixDil = trancherDecisionIA(
+          d, curPlayers, aiTitanProfilesRef.current[d.defenderId], aiTitanProfilesRef.current[d.attackerId]
+        );
+        if (!choixDil) continue;
+        if (choixDil.paie) {
           defender.adrenaline -= 1;
           if (attacker) attacker.adrenaline = (attacker.adrenaline || 0) + 1;
-          setActionLog((prev) => [...prev, `DIL IA↔IA (${d.cardLabel}) : T${d.defenderId} préfère donner 1 Adrénaline à T${d.attackerId} plutôt que de perdre ${defChoice.color} (${defChoice.defVal} pts en jeu).`]);
+          setActionLog((prev) => [...prev, `DIL IA↔IA (${d.cardLabel}) : T${d.defenderId} préfère donner 1 Adrénaline à T${d.attackerId} plutôt que de perdre ${choixDil.option} (${choixDil.valeur} pts en jeu).`]);
           continue;
         }
-        const suffixe = acheminerBlocPerdu(d, defender, attacker, defChoice.color);
-        const seulChoix = offered.length === 1 ? " (seul choix)" : ` (valeur marginale ${defChoice.defVal})`;
-        setActionLog((prev) => [...prev, `DIL IA↔IA (${d.cardLabel}) : T${d.defenderId} perd ${defChoice.color}${seulChoix}${suffixe}`]);
+        const suffixe = acheminerBlocPerdu(d, defender, attacker, choixDil.option);
+        const seulChoix = choixDil.seulChoix ? " (seul choix)" : ` (valeur marginale ${choixDil.valeur})`;
+        setActionLog((prev) => [...prev, `DIL IA↔IA (${d.cardLabel}) : T${d.defenderId} perd ${choixDil.option}${seulChoix}${suffixe}`]);
         continue;
       }
 
       if (atkIsIa && !defIsIa) {
-        // Attaquant IA choisit seul ses 2 options (la valeur la plus haute
-        // pour lui), puis la décision est poussée à la queue humaine DÉJÀ au
+        // Attaquant IA choisit seul ses 2 options (même règle qu'entre deux
+        // IA), puis la décision est poussée à la queue humaine DÉJÀ au
         // stade DEFENDER_PICK — le défenseur humain choisit laquelle des 2 il
         // perd (via resolveDilDefenderPick, inchangé).
-        if (optionsDil.length < 1) continue;
-        const ranked = optionsDil
-          .map((color) => ({ color, atkVal: valeurOptionDil(color, defender, attacker, curPlayers, d) }))
-          .sort((a, b) => b.atkVal - a.atkVal);
-        const offered = [...new Set(ranked.slice(0, Math.min(2, ranked.length)).map((o) => o.color))];
+        const offered = optionsDesigneesIA(d, curPlayers, aiTitanProfilesRef.current[d.attackerId]);
+        if (offered.length === 0) continue;
         needHuman.push({ ...d, presetAttackerChoices: offered });
         continue;
       }
@@ -3795,7 +3618,7 @@ export function useBoardGeneratorController() {
            répondre. Quand la cible est une IA, on reste au stade attaquant avec
            les deux options déjà cochées : il valide, et c'est l'IA qui décide
            ensuite ce qu'elle lâche ou si elle paie (cf.
-           `dilValidateAttackerPick` et `defenseurPaieAdrenaline`). */
+           `dilValidateAttackerPick` et `reponseCibleIA`). */
         const defenseurHumain = !d.defenderIsAi;
         return {
           ...d,
@@ -3820,71 +3643,18 @@ export function useBoardGeneratorController() {
     if (!liste || liste.length === 0) return;
     const modes = aiTitanModesRef.current;
     const profils = aiTitanProfilesRef.current;
-    const aTrancher = [];
-
-    /* ── UN MÊME ÉLÉMENT NE SE PLACE QU'UNE FOIS ──
-       Bug remonté par Nikola sur la Manche 3 de la graine 3144532881 :
-       « j'étais en F3, j'ai fait Graouhhh, j'aurais dû déplacer 1 Titan puis
-       1 autre — j'ai dû déplacer 2 fois le même. »
-
-       Le journal de ce rapport le montre noir sur blanc, deux lignes de
-       suite :
-         « Titan 4 arrêté faute de puissance → posé en I4 au lieu de H3 »
-         « Titan 4 arrêté faute de puissance → posé en H2 au lieu de H3 »
-       Même Titan, même case de repli par défaut : ce sont DEUX demandes pour
-       UN SEUL arrêt. Elles naissent quand un Titan est touché directement
-       PUIS repercuté par la chaîne au même endroit — `projectInDirection`
-       dépose alors un repli à chacun des deux passages, sans savoir que
-       l'autre existe.
-
-       Le joueur se retrouvait à placer deux fois le même Titan, et le second
-       choix écrasait le premier : le premier n'avait donc servi à rien.
-
-       On dédoublonne sur (Titan, case par défaut) : deux demandes qui
-       désignent le même élément arrêté au même endroit sont le même
-       événement physique, et une seule décision doit être posée au joueur.
-       Deux poussées RÉELLEMENT distinctes ont des cases d'arrêt
-       différentes — elles passent toutes les deux, comme avant. */
-    const dejaVu = new Set();
-
-    for (const r of liste) {
-      if (r.cases.length <= 1) continue;
-      /* DEUX CLÉS, ET LA SECONDE VIENT DU 2026-08-28. La première dit « même
-         élément, même case d'arrêt ». Elle laissait passer le cas que Nikola a
-         décrit — « quand on m'a demandé la 2e case, c'étaient les mêmes que la
-         première » : deux arrêts à des cases DIFFÉRENTES dont les voisines
-         libres coïncident.
-
-         Du point de vue du joueur, deux demandes qui offrent exactement les
-         mêmes destinations pour le même élément sont indiscernables, et
-         répondre à la seconde ne peut qu'écraser la première. On dédoublonne
-         donc aussi sur l'ensemble des cases offertes. */
-      const signature = `${r.titanId ?? "debris"}@${r.defaut}`;
-      const signatureCases = `${r.titanId ?? "debris"}#${[...r.cases].sort().join(",")}`;
-      if (dejaVu.has(signature) || dejaVu.has(signatureCases)) continue;
-      dejaVu.add(signature);
-      dejaVu.add(signatureCases);
-      if (modes[r.initiatorId] !== "ia") { aTrancher.push(r); continue; }
-
-      const etat = {
-        board: aiStateRef.current.board,
-        looseBlocks: aiLooseBlocksRef.current,
-        titans: aiTitanStateRef.current.players,
-      };
-      const choix = choisirRepliIA(r, etat, profils[r.initiatorId]);
-      if (choix && choix !== r.defaut) {
-        // `appliquerRepli` remonte désormais son propre journal : depuis le
-        // ruling du 2026-08-18, poser l'élément peut chasser un Titan et
-        // rapporter une Bagarre. Sans ça, l'IA marquait un point que rien
-        // n'expliquait dans le journal d'actions.
-        const journal = appliquerRepli(r, choix, etat) || [];
-        setActionLog((prev) => [
-          ...prev,
-          `🤖 Titan ${r.initiatorId} (IA) pose l'élément arrêté en ${choix} plutôt qu'en ${r.defaut}.`,
-          ...journal,
-        ]);
-      }
-    }
+    const etat = {
+      board: aiStateRef.current.board,
+      looseBlocks: aiLooseBlocksRef.current,
+      titans: aiTitanStateRef.current.players,
+    };
+    /* Le dédoublonnage et le choix de l'IA vivent dans le domaine
+       (`trancherReplisIA`, aiPlanner.js) : le simulateur appliquait chaque
+       demande sans dédoublonner, il appelle désormais le même code. */
+    const { humains: aTrancher, journal } = trancherReplisIA(
+      liste, etat, (id) => profils[id], (id) => modes[id] === "ia"
+    );
+    if (journal.length > 0) setActionLog((prev) => [...prev, ...journal]);
 
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
@@ -3940,14 +3710,9 @@ export function useBoardGeneratorController() {
 
     for (const f of liste) {
       if (modes[f.targetId] !== "ia") { aTrancher.push(f); continue; }
-      /* L'IA paie quand la carte lui coûte plus que le jeton. La Force d'une
-         carte est le seul étalon dont on dispose côté cartes — le décompte
-         final ne les compte pas — et elle dit assez bien ce qu'on perd : une
-         Faut Pas Me Chauffer à 3 pèse plus qu'un Tout Casser à 1. */
-      const cible = joueurs.find((t) => t.id === f.targetId);
-      const marginale = valeurMarginaleAdrenaline(Math.max(0, (cible?.adrenaline || 0) - 1));
-      const valeurCarte = CARD_FORCE[f.cardId] || 0;
-      if (valeurCarte > marginale) {
+      // La règle de l'IA vit dans le domaine (`iaRefuseFatigue`), commune
+      // avec le simulateur.
+      if (iaRefuseFatigue(f, joueurs)) {
         const res = refuserFatigue(f.attackerId, f.targetId, f.cardId, joueurs);
         if (res.ok) setActionLog((prev) => [...prev, `${res.log} (décision automatique)`]);
       }
@@ -4062,13 +3827,10 @@ export function useBoardGeneratorController() {
     // valeur marginale lui coûte le moins.
     const defender = titanState.players.find((t) => t.id === cur.defenderId);
     if (defender) {
-      const defValued = cur.attackerChoices.map((color) => ({
-        color,
-        // `coutOptionDil` sait traiter l'option Socle, dont le coût est
-        // l'espérance de valeur (le tirage étant au sort).
-        defVal: coutOptionDil(color, defender, titanState.players),
-      }));
-      const defChoice = defValued.reduce((best, curr) => (curr.defVal < best.defVal ? curr : best));
+      // `reponseCibleIA` : la même règle que le défenseur IA d'un Dilemme
+      // entre deux IA, qui sait aussi traiter l'option Socle (tirée au sort).
+      const reponse = reponseCibleIA(cur, titanState.players, cur.attackerChoices, aiTitanProfilesRef.current[cur.defenderId]);
+      const defChoice = { color: reponse.option, defVal: reponse.valeur };
       const attacker = titanState.players.find((t) => t.id === cur.attackerId);
 
       /* PAYER OU ENCAISSER — demande de Nikola du 2026-08-17 : « c'est l'IA
@@ -4078,16 +3840,15 @@ export function useBoardGeneratorController() {
          1 Adrénaline à l'attaquant.
 
          L'arbitrage se fait au vrai barème, sans table de poids, et il vit
-         désormais dans `defenseurPaieAdrenaline` — partagé avec la
-         résolution IA contre IA, qui ne l'avait pas. Il chiffrait « 3 points,
-         6 en différentiel » en dur, deux nombres qui ne correspondaient déjà
-         plus au forfait de 2 et qui n'ont plus de sens du tout depuis que le
+         dans `reponseCibleIA` (aiPlanner.js) — partagé avec la résolution IA
+         contre IA et avec le simulateur. Il chiffrait « 3 points, 6 en
+         différentiel » en dur, deux nombres qui ne correspondaient déjà plus
+         au forfait de 2 et qui n'ont plus de sens du tout depuis que le
          barème est progressif : c'est la valeur MARGINALE de la réserve du
          défenseur qui décide. Elle paie quand le bloc menacé lui coûte
          davantage — typiquement un Socle de valeur, ou une couleur qui casse
          une paire d'Orange. */
-      const voitAdversaires = FORCE_SETTINGS[aiTitanProfilesRef.current[cur.defenderId]?.force]?.voitAdversaires;
-      if (defenseurPaieAdrenaline(defender, defChoice.defVal, voitAdversaires)) {
+      if (reponse.paie) {
         defender.adrenaline -= 1;
         if (attacker) attacker.adrenaline = (attacker.adrenaline || 0) + 1;
         setActionLog((prevLog) => [...prevLog, `DIL (${cur.cardLabel}) : Titan ${cur.defenderId} (IA) préfère donner 1 Adrénaline à Titan ${cur.attackerId} plutôt que de perdre ${defChoice.color} (${defChoice.defVal} pts en jeu).`]);

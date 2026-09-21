@@ -20,27 +20,31 @@
    FIDÉLITÉ AU JEU RÉEL — À LIRE AVANT D'EXPLOITER DES CHIFFRES
 
    Le simulateur appelle les VRAIS résolveurs du moteur et le VRAI barème.
-   Il ne réimplémente pas les règles. Il partage même sa fonction de coup
-   avec l'IA (`appliquerCoup`), pour qu'il ne puisse exister aucune
-   divergence entre ce que l'IA croit jouer et ce qui se produit.
+   Il ne réimplémente pas les règles. La carte d'une IA passe par la même
+   fonction que dans sa recherche (`appliquerCoup`), et ses DÉCISIONS —
+   Dilemme, RAGE, Fatigue, repli, placement des Verts — par les mêmes
+   fonctions que dans le contrôleur, dans le même ordre (cf. le tour
+   ci-dessous). C'est la condition pour que `npm run duel` mesure l'IA
+   qu'affronte un joueur.
 
-   Il s'en écarte sur quatre points, tous assumés et tous documentés ici :
+   Ça n'a pas toujours été vrai. Jusqu'au 2026-09-21, les décisions étaient
+   résolues par le MODÈLE de l'IA : une RAGE de Tout Casser donnait son bloc
+   à l'attaquant (la table le pose au sol), un bloc de Dilemme « au sol »
+   disparaissait, aucune Fatigue n'était jamais refusée, et chaque Titan
+   plaçait ses Verts en voyant ceux des précédents. Le simulateur mesurait un
+   jeu où les prévisions de l'IA tombaient toujours juste.
 
-   1. DIL et RAGE sont résolus en valeur attendue (chaque camp joue son
-      intérêt) et non par la file de décisions de l'application. Contre
-      un humain imprévisible, la réalité s'en écarte.
-   2. Les cartes Événements sont désactivées. Elles n'ont aujourd'hui
+   Il s'écarte encore de la table sur trois points, assumés :
+
+   1. Les cartes Événements sont désactivées. Elles n'ont aujourd'hui
       aucun effet mécanique dans le moteur — décision de Nikola de les
       traiter en extension plus tard. Toute statistique produite ici
       décrit donc le jeu SANS Événements.
-   3. Le sens du Vol de Phase Repos est tiré au sort au lieu d'être
-      choisi par le Détonateur, faute de règle de décision pour l'IA.
-   4. Sur Faut Pas Me Chauffer, les deux camps misent 0 Adrénaline : la
-      mise cachée n'a pas de règle de décision pour l'IA. Le reste de la
-      carte — comparaison des sommes, projection de la cible, Bagarre,
-      DIL/RAGE — est bien joué par le vrai résolveur depuis le scan du
-      2026-08-15. Auparavant la carte n'avait AUCUN effet physique ici,
-      et cet écart-là n'était pas documenté.
+   2. Le sens du Vol de Phase Repos est tiré au sort. C'est aussi ce que
+      fait une IA Détonateur à la table : le point ne diverge que face à
+      un Détonateur humain.
+   3. Tout le monde est une IA. Face à un humain, les décisions qui lui
+      reviennent ne suivent évidemment aucune de ces règles.
 
    Deux écarts ont disparu au scan du 2026-08-15, ils sont notés pour
    mémoire : le simulateur n'évaluait aucun déclencheur de fin de partie
@@ -68,6 +72,7 @@ import {
   nextDetonateur,
   placeTitans,
   programCards,
+  refuserFatigue,
   rentrerEnJeu,
   resolveFreeMovement,
   resolveRecuperation,
@@ -77,20 +82,23 @@ import {
 import {
   FORCES,
   TEMPERAMENTS,
-  bestVertAssignments,
+  bestVertAssignment,
   gagnantArcEnCiel,
   makeProfile,
   profileLabel,
   reglagesDe,
 } from "./aiEvaluation.js";
 import {
+  acheminerPerte,
   appliquerCoup,
+  iaRefuseFatigue,
   planCardPlay,
   planMovement,
   planProgrammation,
   planProgrammationSequentielle,
   planRecuperation,
   planTour,
+  trancherDecisionIA,
 } from "./aiPlanner.js";
 import { pick, setSeed } from "./rng.js";
 import { verifierHygiene, verifierInvariants } from "./invariants.js";
@@ -168,6 +176,37 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
   }
 
   const profilsUtilises = profils ?? profilsAleatoires(nbJoueurs);
+
+  /* ── LES DÉCISIONS D'UN COUP, TRANCHÉES COMME À LA TABLE ──
+     Mêmes règles que `autoResolveIaDecisions` dans le contrôleur, par le même
+     code (`trancherDecisionIA`, `acheminerPerte`) : la cible d'un Dilemme
+     décide avec SON profil, le bloc perdu suit la destination de la carte, un
+     Socle part au hasard. Jusqu'au 2026-09-21, ces décisions étaient résolues
+     par le MODÈLE de l'IA — celui-là même qui lui sert à prévoir —, si bien
+     que ses prévisions tombaient toujours juste ici et jamais tout à fait à
+     la table. */
+  function trancherDecisions(decisions) {
+    for (const d of decisions || []) {
+      const choix = trancherDecisionIA(d, etat.titans, profilsUtilises[d.defenderId], profilsUtilises[d.attackerId]);
+      if (!choix) continue;
+      const defenseur = etat.titans.find((t) => t.id === d.defenderId);
+      const attaquant = etat.titans.find((t) => t.id === d.attackerId);
+      if (choix.paie) {
+        defenseur.adrenaline -= 1;
+        attaquant.adrenaline = (attaquant.adrenaline || 0) + 1;
+      } else {
+        acheminerPerte(d, defenseur, attaquant, choix.option, etat.looseBlocks);
+      }
+    }
+  }
+  // Même règle que `enqueueFatigues` : la cible paie si la carte vaut plus
+  // que son jeton. Personne ne refusait jamais une Fatigue ici.
+  function trancherFatigues(fatigues) {
+    for (const f of fatigues || []) {
+      if (iaRefuseFatigue(f, etat.titans)) refuserFatigue(f.attackerId, f.targetId, f.cardId, etat.titans);
+    }
+  }
+
   const detonateurInitial = titanState.detonateur;
   const positionsDepart = Object.fromEntries(titanState.players.map((t) => [t.id, t.cell]));
 
@@ -274,7 +313,22 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
         const coup = tour ? tour.coup : planCardPlay(id, etat, profil, manche);
         const cardId = coup?.cardId ?? titan.programmed[0];
         if (coup) {
-          appliquerCoup(coup, id, etat, manche, profil);
+          const res = appliquerCoup(coup, id, etat, manche, profil);
+          /* DANS L'ORDRE DU CONTRÔLEUR (`jouerCarte`), et tout AVANT la
+             Récupération. Graouhhh tranche ses Dilemmes Titan par Titan
+             pendant la carte (`advanceGraouhhhLoop`), chaque Fatigue après le
+             Dilemme de sa cible ; les autres cartes posent leurs Fatigues puis
+             tranchent leurs Dilemmes. L'IA ramasse ensuite, comme un joueur
+             humain — le contrôleur la faisait ramasser AVANT ses Dilemmes
+             jusqu'au 2026-09-21, et le duel a chiffré ce que ça lui coûtait :
+             1,22 point par partie. */
+          if (cardId === "graouhhh") {
+            trancherDecisions(res?.decisions);
+            trancherFatigues(res?.fatigues);
+          } else {
+            trancherFatigues(res?.fatigues);
+            trancherDecisions(res?.decisions);
+          }
           controler(`carte:${cardId}`, manche, round, id);
           cartesJouees[cardId] = (cartesJouees[cardId] || 0) + 1;
         } else {
@@ -329,7 +383,14 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
   // ── DÉCOMPTE ──
   // Placement des Verts en mode EXACT : c'est la vraie décision de fin de
   // partie, elle n'est calculée qu'une fois, elle doit être juste.
-  const verts = bestVertAssignments(etat.titans, { exact: true });
+  /* Chacun sur les pré-scores PUBLICS, comme le contrôleur depuis le
+     2026-08-27 (`autres: {}`) : le placement est secret et simultané.
+     `bestVertAssignments` faisait voir à chaque Titan les Verts déjà posés
+     par ceux d'avant — le dernier servi était le mieux renseigné, et cet
+     avantage dépendait du numéro de siège, ce que le duel à sièges croisés
+     ne compense qu'à moitié. */
+  const verts = {};
+  for (const t of etat.titans) verts[t.id] = bestVertAssignment(t.id, etat.titans, { exact: true, autres: {} });
   /* Le trophée Arc-en-ciel valait `null` ici, donc les 5 points n'étaient
      JAMAIS attribués en campagne : le simulateur notait une partie que le
      jeu réel ne note pas, et toute mesure d'équilibrage était faussée

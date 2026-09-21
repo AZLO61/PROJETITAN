@@ -3262,6 +3262,10 @@ function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
   }
 
   const decisions = [];
+  // Les Fatigues refusables remontent, comme dans `advanceGraouhhh` : ce
+  // wrapper les jetait, et le simulateur ne voyait donc jamais une cible
+  // refuser la sienne (2026-09-21).
+  const fatigues = [];
   let bagarreIds = [];
   for (let i = scan.touched.length - 1; i >= 0; i--) {
     const t = scan.touched[i];
@@ -3271,12 +3275,13 @@ function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
     const step = resolveGraouhhhMoveTitan(titanId, t.id, gameState, dr, dc, scan.reculDistance, mancheNumber);
     log.push(...step.log);
     bagarreIds.push(...step.bagarreIds);
+    fatigues.push(...step.fatigues);
   }
 
   const fin = finalizeGraouhhh(titanId, gameState, bagarreIds, scan.touched.length);
   log.push(...fin.log);
 
-  return { log, titansTouches: scan.touched.map((t) => t.id), decisions };
+  return { log, titansTouches: scan.touched.map((t) => t.id), decisions, fatigues };
 }
 
 /* ============================================================

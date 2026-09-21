@@ -202,9 +202,11 @@ describe("sabotage — l'IA sait faire perdre des points sans en gagner", () => 
     expect(choix.cardId).toBe("faut_pas_me_chauffer");
   });
 
+  // Ces RAGE portent `destination: "repaire"` : le modèle suit la route du
+  // moteur depuis le 2026-09-21, et une RAGE sans carte tomberait au sol.
   it("appliquerDecisions : un RAGE transfère bien la ressource", () => {
     const titans = [titan(1), titan(2, { repaire: ["rouge", "bleu"] })];
-    appliquerDecisions([{ type: "RAGE", attackerId: 1, defenderId: 2 }], etat(titans));
+    appliquerDecisions([{ type: "RAGE", attackerId: 1, defenderId: 2, destination: "repaire" }], etat(titans));
     expect(titans[0].repaire).toHaveLength(1);
     expect(titans[1].repaire).toHaveLength(1);
   });
@@ -212,14 +214,14 @@ describe("sabotage — l'IA sait faire perdre des points sans en gagner", () => 
   it("appliquerDecisions : un RAGE sur une cible à 1 seul bloc fonctionne", () => {
     // Le ruling de Nikola est explicite : RAGE est possible dès 1 ressource.
     const titans = [titan(1), titan(2, { repaire: ["rouge"] })];
-    appliquerDecisions([{ type: "RAGE", attackerId: 1, defenderId: 2 }], etat(titans));
+    appliquerDecisions([{ type: "RAGE", attackerId: 1, defenderId: 2, destination: "repaire" }], etat(titans));
     expect(titans[1].repaire).toHaveLength(0);
     expect(titans[0].repaire).toEqual(["rouge"]);
   });
 
   it("appliquerDecisions : à court de blocs, RAGE prend l'Adrénaline (FAQ #5)", () => {
     const titans = [titan(1), titan(2, { repaire: [], adrenaline: 2 })];
-    appliquerDecisions([{ type: "RAGE", attackerId: 1, defenderId: 2 }], etat(titans));
+    appliquerDecisions([{ type: "RAGE", attackerId: 1, defenderId: 2, destination: "repaire" }], etat(titans));
     expect(titans[1].adrenaline).toBe(1);
     expect(titans[0].adrenaline).toBe(1);
   });

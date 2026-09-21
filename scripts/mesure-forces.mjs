@@ -17,10 +17,15 @@
  * Usage : node scripts/mesure-forces.mjs [parties]
  *
  * (Remplace `mesure-novice.mjs`, qui ne savait mesurer qu'une force.)
+ *
+ * Les parties sont réparties sur les cœurs de la machine depuis le
+ * 2026-09-21 (cf. `parallele.mjs`) : 3 forces × 8 graines × 60 parties
+ * tenaient plus de deux heures sur un seul. Chiffres identiques, chaque
+ * partie étant fixée par sa graine.
  */
-import { lancerCampagne } from "../src/domain/simulation.js";
+import { agreger } from "../src/domain/simulation.js";
 import { FORCES, TEMPERAMENTS, makeProfile } from "../src/domain/aiEvaluation.js";
-import { setSeed } from "../src/domain/rng.js";
+import { jouerParties } from "./parallele.mjs";
 
 const PARTIES = Number(process.argv[2] || 40);
 
@@ -70,33 +75,43 @@ if (!Object.values(FORCES).includes(REFERENCE)) {
   process.exit(1);
 }
 
-function mesurer(force, graine) {
-  // La reference garde le MEME temperament que la force mesuree : sinon
-  // l'ecart melangerait force et temperament, et ne mesurerait plus rien.
+// Les trois barreaux du dessous, face a la reference. L'echelle tient si et
+// seulement si chacun reste sous 100 %, et si les ratios montent avec le
+// niveau (cf. FORCE_SETTINGS, ecrit du haut vers le bas).
+const FORCES_MESUREES = Object.values(FORCES).filter((f) => f !== REFERENCE);
+
+// La reference garde le MEME temperament que la force mesuree : sinon
+// l'ecart melangerait force et temperament, et ne mesurerait plus rien.
+// Une serie = PARTIES parties aux graines `graine`, `graine + 1`, …, comme
+// `lancerCampagne` les enchaînait.
+const taches = [];
+for (const force of FORCES_MESUREES) {
   const profils = {
     1: makeProfile(REFERENCE, TEMPERAMENT),
     2: makeProfile(force, TEMPERAMENT),
     3: makeProfile(force, TEMPERAMENT),
     4: makeProfile(force, TEMPERAMENT),
   };
-  // Graine du générateur remise à la même valeur avant chaque campagne :
-  // deux mesures ne diffèrent que par le réglage testé, jamais par le tirage.
-  setSeed(20260817);
-  const { stats } = lancerCampagne({ parties: PARTIES, nbJoueurs: 4, seed: graine, profils });
-  return { mesure: stats.parForce[force], reference: stats.parForce[REFERENCE] };
+  for (const graine of SERIES) {
+    for (let i = 0; i < PARTIES; i++) taches.push({ nbJoueurs: 4, seed: graine + i, profils });
+  }
+}
+const resultats = await jouerParties(taches);
+let lu = 0;
+function mesurer(force) {
+  const { parForce } = agreger(resultats.slice(lu, lu + PARTIES));
+  lu += PARTIES;
+  return { mesure: parForce[force], reference: parForce[REFERENCE] };
 }
 
 console.log(`parties par serie   ${PARTIES}`);
 console.log(`temperament         ${TEMPERAMENT}`);
-// Les trois barreaux du dessous, face a la reference. L'echelle tient si et
-// seulement si chacun reste sous 100 %, et si les ratios montent avec le
-// niveau (cf. FORCE_SETTINGS, ecrit du haut vers le bas).
-for (const force of Object.values(FORCES).filter((f) => f !== REFERENCE)) {
+for (const force of FORCES_MESUREES) {
   console.log("");
   console.log(`── ${force.toUpperCase()} face a un ${REFERENCE.toUpperCase()} ──`);
   let cumul = 0;
   for (const graine of SERIES) {
-    const { mesure, reference } = mesurer(force, graine);
+    const { mesure, reference } = mesurer(force);
     cumul += mesure.scoreMoyen;
     console.log(
       `graine ${String(graine).padEnd(4)} ${force} ${mesure.scoreMoyen.toFixed(2).padStart(6)}` +
