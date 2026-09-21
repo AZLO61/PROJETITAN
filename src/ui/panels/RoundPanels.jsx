@@ -1121,6 +1121,52 @@ export default function RoundPanels({ vm }) {
                     const hasSocle = stack.some(isSocleMarker);
                     const total = stack.length;
                     const preview = stack.slice(-2); // 2 derniers
+                    /* ── LES DEUX BADGES DU SOL SE MESURENT À LA CASE ──
+                       Nikola, 2026-09-19 : « sur mobile la zone de valeur de
+                       quantité de bloc sur le sol (pas sur un bâtiment) ou
+                       socle + un autre socle ne sont pas à la bonne taille ».
+
+                       Les deux badges étaient dimensionnés en `--fs-micro`
+                       (0,84 rem, soit 13,4 px) avec 10 px de rembourrage, sur
+                       une case que la feuille de style réduit à 26 px sous
+                       560 px de large, et 24 px sous 380. Le compteur de
+                       débris passait à un chiffre et débordait à deux ; le
+                       Socle, qui porte en plus son image de 11 px, débordait
+                       dès un seul — et « 3+4 », deux Socles sur la même case,
+                       sortait franchement sur la case voisine.
+
+                       Le bâtiment n'a pas ce défaut, et c'est pour cela que
+                       Nikola l'exclut : son compteur est du texte nu, sans
+                       cadre ni image, posé dans le coin.
+
+                       Les badges du sol gardent leur cadre — il les détache du
+                       débris dessiné dessous, ce dont le bâtiment n'a pas
+                       besoin — mais se mesurent désormais à la case : 9 px de
+                       texte, 2 px de rembourrage, une image de Socle à 8 px.
+                       Et au-delà d'UN Socle, la somme des valeurs cède la
+                       place au nombre (« ×2 ») : c'est la seule forme dont la
+                       largeur ne dépend pas des valeurs tirées, donc la seule
+                       qui tienne à coup sûr. Les valeurs restent dans
+                       l'infobulle, et le clic sur la case les détaille — même
+                       arbitrage que la bande de ressources, qui montre déjà
+                       COMBIEN de Socles plutôt que COMBIEN de points.
+
+                       Mesuré dans le navigateur, en pixels, pour une case de
+                       26 px (et 24 px sous 380) :
+
+                         compteur, 1 chiffre    17,5 →  9,4
+                         compteur, 2 chiffres   25,1 → 14,8
+                         Socle seul             26,5 → 16,4   (débordait)
+                         deux Socles            42,2 → 22,2   (débordait de 62 %)
+
+                       Le Socle garde un rembourrage plus serré que le
+                       compteur : il porte une image en plus du texte, c'est
+                       le seul des deux qui ne rentrait pas même à un
+                       exemplaire. */
+                    const badgeSol = ecranEtroit
+                      ? { police: "9px", padding: "0 2px", paddingSocle: "0 1px", socleImg: 8, gap: 1 }
+                      : { police: "var(--fs-micro)", padding: "2px 5px", paddingSocle: "1px 3px", socleImg: 11, gap: 2 };
+                    const valeursSocles = stack.filter(isSocleMarker).map(socleValue);
                     return (
                       <>
                         {/* Badge : nombre de blocs libres, et valeur du Socle
@@ -1160,11 +1206,11 @@ export default function RoundPanels({ vm }) {
                             style={{
                               position: "absolute", top: 1, left: 2, zIndex: 5,
                               background: "rgba(0,0,0,.65)", borderRadius: 3,
-                              border: "none", padding: "2px 5px", cursor: "pointer",
+                              border: "none", padding: badgeSol.padding, cursor: "pointer",
                               display: "flex", alignItems: "center", gap: 3, lineHeight: 1,
                             }}
                           >
-                            <span style={{ fontSize: "var(--fs-micro)", fontWeight: 700, color: "#FFD93D", lineHeight: 1 }}>
+                            <span style={{ fontSize: badgeSol.police, fontWeight: 700, color: "#FFD93D", lineHeight: 1 }}>
                               {colorBlocks.length}
                             </span>
                           </button>
@@ -1193,19 +1239,21 @@ export default function RoundPanels({ vm }) {
                             bas. */}
                         {hasSocle && (
                           <div
-                            title={`Socle de valeur ${stack.filter(isSocleMarker).map(socleValue).join(" + ")} — autant que d'étages qu'avait le bâtiment à sa construction`}
+                            title={`Socle de valeur ${valeursSocles.join(" + ")} — autant que d'étages qu'avait le bâtiment à sa construction`}
                             style={{
                               position: "absolute", bottom: 1, right: 2, zIndex: 4,
-                              display: "flex", alignItems: "center", gap: 2,
+                              display: "flex", alignItems: "center", gap: badgeSol.gap,
                               background: "rgba(0,0,0,.65)", borderRadius: 3,
-                              padding: "1px 3px", cursor: "help",
+                              padding: badgeSol.paddingSocle, cursor: "help",
                             }}
                           >
                             <img src={`${import.meta.env.BASE_URL}assets/rules/socle.png`}
                               alt="" aria-hidden="true"
-                              style={{ width: 11, height: 11, objectFit: "contain", filter: "brightness(1.3)", display: "block" }} />
-                            <span style={{ fontSize: "var(--fs-micro)", fontWeight: 700, color: "#fff", lineHeight: 1 }}>
-                              {stack.filter(isSocleMarker).map(socleValue).join("+")}
+                              style={{ width: badgeSol.socleImg, height: badgeSol.socleImg, objectFit: "contain", filter: "brightness(1.3)", display: "block" }} />
+                            <span style={{ fontSize: badgeSol.police, fontWeight: 700, color: "#fff", lineHeight: 1 }}>
+                              {ecranEtroit && valeursSocles.length > 1
+                                ? `×${valeursSocles.length}`
+                                : valeursSocles.join("+")}
                             </span>
                           </div>
                         )}

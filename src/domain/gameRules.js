@@ -2224,6 +2224,69 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
     });
   }
 
+  /* ── RÈGLE EN ESSAI : LE DÉBRIS PART AVEC LE TITAN QU'ON POUSSE ──
+     Nikola, 2026-09-19 : « si je charge un Titan qui est sur une case avec un
+     bloc, les 2 bougent à même distance (on tente mais c'est pas sûr) ».
+
+     ⚠️ WIP ASSUMÉ. Le « c'est pas sûr » est repris tel quel : la règle est
+     posée ici et nulle part ailleurs, `BLOC_SUIT_LE_TITAN` à `false` rend
+     exactement le comportement d'avant. Elle n'est PAS encore écrite dans le
+     livret, la page Règles ni le tutoriel — délibérément, tant qu'elle n'est
+     pas tranchée. C'est aussi pour cela qu'elle vit à UN seul endroit.
+
+     CE QUE FAISAIT LE MOTEUR AVANT. Un Titan debout sur un débris et projeté
+     partait seul ; le débris restait sur la case de départ. Dans Tête en
+     Avant, le chargeur venait alors se poser dessus — d'où la case « Titan +
+     débris » que Nikola a sous les yeux quand il pose la question.
+
+     POURQUOI ICI ET NON DANS `resolveTeteEnAvant`. La charge n'est qu'une des
+     cinq cartes qui projettent un Titan : Graouhhh, Tout Casser, Boing Boing
+     et Faut Pas Me Chauffer le font aussi, et toutes passent par cette
+     fonction avec `movingTitanId`. Une règle posée dans la charge seule
+     divergerait des quatre autres dès la première partie — c'est exactement
+     le défaut que le dépôt a déjà payé plusieurs fois (le sens de projection
+     des gravats, corrigé à contre-sens dans deux résolveurs sur trois).
+
+     TROIS GARDES, ET CHACUN RÉPOND À UNE QUESTION OUVERTE :
+
+     · UN SEUL ÉLÉMENT. Nikola dit « un bloc », au singulier, et c'est la
+       seule configuration sans ambiguïté. À deux débris ou plus la case porte
+       un AMAS, et le jeu a déjà une règle pour ça : la tour bascule et se
+       répartit autour (`basculerToursSousTitans`). Emporter une tour entière
+       serait une seconde règle qui contredit la première.
+
+     · PAS D'ÉJECTION. Le `return` de la sortie de ring, plus haut, ne passe
+       pas par ici : un Titan poussé hors de BIG CITY laisse donc son débris
+       sur place. Emporter un bloc hors du plateau reviendrait à le retirer de
+       la partie, ce qui déclenche la Pénurie — une fin de partie, pour une
+       règle de confort.
+
+     · PAS DE REPLI EN ATTENTE. Quand un repli est proposé, la case d'arrivée
+       du Titan n'est pas encore connue : c'est le joueur qui tranchera.
+       Poser le débris sur `arrivee` maintenant le désolidariserait du Titan,
+       soit exactement l'inverse de ce que la règle demande.
+
+     Le débris arrive par `poserDebrisAuSol`, donc il peut former un amas sous
+     le Titan sur la case d'arrivée — et cette tour-là basculera, puisqu'il y
+     est arrivé projeté. Les deux règles s'enchaînent sans se contredire. */
+  if (BLOC_SUIT_LE_TITAN && ctx.movingTitanId != null && !repliOptions) {
+    const depart = chemin[0];
+    const pile = looseBlocks[depart];
+    // Le quatrième garde, ajouté après l'arbitrage : le débris doit avoir été
+    // là AVANT la carte. Sans ça, le bloc lâché par un Dilemme et le gravat
+    // d'un écroulement — tous deux posés sur la case juste avant la poussée —
+    // partiraient eux aussi, contre deux rulings déjà tranchés.
+    const etaitLaAvant = looseBlocks[MARQUE_AVANT_CARTE]?.has(depart) ?? false;
+    if (etaitLaAvant && depart !== arrivee && Array.isArray(pile) && pile.length === 1) {
+      const emporte = pile.pop();
+      retirerPileVide(looseBlocks, depart);
+      poserDebrisAuSol(looseBlocks, arrivee, emporte);
+      log.push(
+        `${depart} : ${isSocleMarker(emporte) ? `Socle (valeur ${socleValue(emporte)})` : `bloc ${emporte}`} emporté par Titan ${ctx.movingTitanId} → ${arrivee}.`
+      );
+    }
+  }
+
   return { row: rowFromIndex(r), col: c, energyLeft: remaining, hasBounced, log, repliOptions, repliBloquant };
 }
 
@@ -2645,6 +2708,7 @@ function resolveToutCasserCase(titanId, cible, gameState, percussion, bagarreSet
    même s'il est touché deux fois (FAQ #12). C'est la seule chose que les
    quatre sous-cas partageaient et qu'il fallait garder. */
 function resolveToutCasser(titanId, gameState, adrenalineBonus = 0) {
+  marquerDebutDeCarte(gameState.looseBlocks);
   const percussion = releverPercussion(titanId, gameState, adrenalineBonus);
   const bagarreSet = new Set();
   const cibles = listerCiblesToutCasser(titanId, gameState, percussion);
@@ -2693,6 +2757,7 @@ function computeEnergieParDistance(portee, adrenalineUtilisee, distance) {
 const PORTEE_TETE_EN_AVANT = 3;
 
 function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
+  marquerDebutDeCarte(gameState.looseBlocks);
   // Rulings confirmés Nikola :
   // 1) Bâtiment touché mais pas totalement détruit → Titan s'arrête sur la
   //    case PRÉCÉDENTE (superposition Titan+Bâtiment interdite). Si le coup
@@ -2986,6 +3051,7 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
 // les Titans un par un (DIL tranché → déplacement → Titan suivant) au lieu
 // de tout déplacer d'un bloc avant d'afficher la moindre décision.
 function scanGraouhhhAxis(titanId, gameState, dr, dc) {
+  marquerDebutDeCarte(gameState.looseBlocks);
   const { board, titans } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   const titansByCell = indexerTitans(titans);
@@ -3186,6 +3252,7 @@ function advanceGraouhhh(gameState, payload) {
 // finalizeGraouhhh sans jamais attendre de décision : comportement
 // observable identique à l'ancienne version monolithique.
 function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
+  marquerDebutDeCarte(gameState.looseBlocks);
   const scan = scanGraouhhhAxis(titanId, gameState, dr, dc);
   const log = [...scan.log];
 
@@ -3604,6 +3671,7 @@ function boingBoingStepCost(fromKey, toKey, fromIsOrigin, { board, looseBlocks =
 }
 
 function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameState) {
+  marquerDebutDeCarte(gameState.looseBlocks);
   const { board, titans, looseBlocks, replis, trajectoires, chemin } = gameState;
   const titan = titans.find((t) => t.id === titanId);
   /* ── LA DIRECTION DU CHOC EST CELLE DU DERNIER BOND ──
@@ -4372,6 +4440,70 @@ function getActiveTeleporterCells(board) {
    referent desormais. C'est le piege classique de ce projet — une regle
    recopiee, dont on ne corrige qu'un exemplaire. */
 const TAILLE_AMAS = 2;
+
+/* L'INTERRUPTEUR DE LA RÈGLE EN ESSAI DU 2026-09-19 — cf. la fin de
+   `projectInDirection`, seul endroit qui le lit. À `false`, un Titan projeté
+   laisse derrière lui le débris sur lequel il se tenait, ce qui est le
+   comportement de toutes les versions antérieures.
+
+   ⚠️ LAISSÉ À `false` EN ATTENDANT UN ARBITRAGE (2026-09-19). Allumé, il fait
+   tomber trois tests qui encodent deux rulings déjà tranchés, et la cause est
+   la même dans les trois : la fonction ne sait pas distinguer
+
+     · le débris qui était DÉJÀ AU SOL quand le Titan s'y tenait
+       — c'est celui dont parle Nikola, et lui devrait suivre ;
+     · le débris qui ARRIVE sur sa case À CAUSE du choc — le bloc lâché par un
+       Dilemme, le gravat d'un écroulement — et qui, lui, doit rester.
+
+   Les deux se ressemblent au moment de la projection : la pile de la case de
+   départ contient un débris, et rien ne dit lequel des deux c'est. Les
+   résolveurs déposent le second AVANT de pousser le Titan (« E6 : écroulement
+   — bloc bleu posé en E7 », puis la poussée), donc un instantané pris ici
+   arrive trop tard.
+
+   Les rulings en cause, tous deux confirmés :
+   · 2026-08-17, redit le 2026-09-07 après un retour de Nikola — « quand un
+     Titan doit perdre un bloc sans qu'il soit pris par le Titan initiateur, il
+     le perd sur la case où il est, et ensuite il est déplacé si besoin ».
+     Cf. `cellAtImpact` et `tests/application/graouhhh-sequencage.test.jsx`.
+   · l'écroulement d'amas — « un débris posé sur un Titan le pousse [...] le
+     débris, lui, reste ». Cf. `tests/domain/corrections-scan.test.js`.
+
+   ── TRANCHÉ PAR NIKOLA LE 2026-09-19 : ON DISTINGUE LES DEUX ──
+   « Un titan QUI EST sur une case AVEC un bloc » : le bloc était là avant.
+   Un bloc qui n'existait pas encore au moment où la carte a été jouée n'a
+   donc aucune raison de partir avec lui, et les deux rulings ci-dessus
+   tiennent tels quels. C'est `MARQUE_AVANT_CARTE` qui porte la distinction. */
+const BLOC_SUIT_LE_TITAN = true;
+
+/* ── QUELS DÉBRIS ÉTAIENT LÀ AVANT QUE LA CARTE SOIT JOUÉE ──
+   La question ne peut pas se répondre au moment de la projection : quand le
+   Titan part, sa case porte peut-être un débris posé une milliseconde plus
+   tôt PAR la carte elle-même. Il faut donc un relevé pris AVANT le premier
+   effet, et les six résolveurs de tête le posent en première ligne — aucun
+   n'a encore rien modifié à cet instant.
+
+   POURQUOI UN SYMBOLE, ET PAS UNE CLÉ NORMALE. Le relevé voyage avec
+   `looseBlocks` parce que c'est le seul objet que `projectInDirection` reçoit
+   déjà, et qui survit à la chaîne d'appels récursifs. Mais `looseBlocks` est
+   un dictionnaire DE CASES : une quinzaine d'endroits font `Object.keys`
+   dessus — le rendu du plateau, le décompte, la détection de Pénurie — et une
+   clé ordinaire s'y lirait comme une case de plus. Un symbole est invisible à
+   `Object.keys`, à `for...in` et à `JSON.stringify` : ni le plateau, ni le
+   score, ni le protocole distant ne le voient passer.
+
+   Aucun relevé (appel direct depuis un test, chemin non migré) = ensemble
+   vide = la règle ne s'applique pas. Le défaut est donc l'ancien
+   comportement, jamais une projection surprise. */
+const MARQUE_AVANT_CARTE = Symbol("debrisPresentsAvantLaCarte");
+
+function marquerDebutDeCarte(looseBlocks) {
+  if (!looseBlocks) return looseBlocks;
+  looseBlocks[MARQUE_AVANT_CARTE] = new Set(
+    Object.keys(looseBlocks).filter((cle) => (looseBlocks[cle] || []).length > 0)
+  );
+  return looseBlocks;
+}
 
 function estAmas(looseStack) {
   return Array.isArray(looseStack) && looseStack.length >= TAILLE_AMAS;
@@ -5274,6 +5406,7 @@ function getFPMCTargets(titanId, gameState) {
    sont LUES ici, jamais débitées — la déduction reste à l'appelant.
 ============================================================ */
 function resolveFautPasMeChauffer(attackerId, defenderId, nTargets, gameState, { attackerBid = 0, defenderBid = 0 } = {}) {
+  marquerDebutDeCarte(gameState.looseBlocks);
   const { board, titans, looseBlocks, replis, trajectoires } = gameState;
   const attacker = titans.find((t) => t.id === attackerId);
   const defender = titans.find((t) => t.id === defenderId);
@@ -5709,6 +5842,8 @@ export {
   resolveToutCasser,
   computeEnergieParDistance,
   PORTEE_TETE_EN_AVANT,
+  BLOC_SUIT_LE_TITAN,
+  marquerDebutDeCarte,
   resolveTeteEnAvant,
   resolveGraouhhh,
   scanGraouhhhAxis,

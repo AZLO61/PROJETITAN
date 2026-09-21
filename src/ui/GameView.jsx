@@ -21,7 +21,7 @@ import TitanBandPanel from "./panels/TitanBandPanel.jsx";
 import Superposition from "./panels/Superposition.jsx";
 import PodiumFinal from "./panels/PodiumFinal.jsx";
 import RainbowCelebration from "./panels/RainbowCelebration.jsx";
-import { T, marquee, readout, label } from "./theme.js";
+import { T, TON_DE_PHASE, marquee, readout, label } from "./theme.js";
 import { cancelBtn } from "./styles.js";
 import Icon from "./icons.jsx";
 
@@ -341,21 +341,13 @@ export default function GameView(vm) {
      Il porte maintenant l'information : on sait où on en est dans la Manche
      sans lire, à la couleur seule, depuis l'autre bout de la table.
 
-     Les couleurs ne sont pas décoratives, elles reprennent le sens que le
-     signal a déjà partout ailleurs dans le jeu : le cyan du passif pour la
-     Programmation, qui prépare ; le jaune du tour pour l'Action, où l'on
-     joue ; le violet du téléporteur pour l'Événement, qui vient de dehors ;
-     le vert du disponible pour le Repos, qui rend les cartes ; le rouge du
-     blocage quand la partie est finie. */
-  const PHASES = {
-    programmation: { mot: "Programmation", couleur: T.move },
-    action: { mot: "Action", couleur: T.you },
-    evenement: { mot: "Événement", couleur: T.tele },
-    repos: { mot: "Repos", couleur: T.go },
-  };
+     La table est passée dans `theme.js` le 2026-09-19 : le tutoriel en tenait
+     une seconde copie, décalée d'un cran, et enseignait donc un code couleur
+     que cet écran-ci démentait. Le rouge de la partie terminée reste ici, lui
+     — ce n'est pas une phase de la Manche, c'est son absence. */
   const phaseCourante = vm.gameOver
     ? { mot: "Terminée", couleur: T.stop }
-    : PHASES[vm.phase] || { mot: vm.phase, couleur: T.dim };
+    : TON_DE_PHASE[vm.phase] || { mot: vm.phase, couleur: T.dim };
   const detonateurNom = vm.titanState?.detonateur
     ? vm.titanDisplayName(vm.titanState.detonateur)
     : null;

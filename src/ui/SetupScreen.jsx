@@ -88,10 +88,19 @@ function useEcranEtroit(requete = "(max-width: 639px)") {
 
    Le défilement seul choisit : un `scroll` débattu (`requestAnimationFrame`)
    repère la carte la plus proche du centre et règle `difficulte` dessus.
-   Taper une carte aperçue, ou une flèche, recentre EXPLICITEMENT via
-   `scrollIntoView` — sans quoi le clic changerait le réglage sans que l'œil
-   voie bouger la carte qui vient de devenir active. Les flèches restent : un
-   clavier ou un trackpad sans geste tactile doivent pouvoir choisir aussi. */
+   Taper une carte aperçue recentre EXPLICITEMENT via `scrollIntoView` — sans
+   quoi le clic changerait le réglage sans que l'œil voie bouger la carte qui
+   vient de devenir active.
+
+   ── PLUS DE FLÈCHES (Nikola, 2026-09-19 : « enlever les flèches du swipe
+   mais garder la fonctionnalité swipe ») ──
+   Deux boutons de 40 px encadraient le rail et mangeaient 96 px des 375 d'un
+   téléphone, pour redire ce que le doigt fait déjà. Rien n'est perdu côté
+   clavier : le rail est un `listbox` dont chaque carte est un `option`
+   focusable, donc Tab y entre et Entrée choisit — c'est exactement ce que les
+   flèches offraient, sans occuper la largeur. Les cartes voisines restent
+   visibles et cliquables de part et d'autre : le geste « je tape celle d'à
+   côté » remplace le clic sur la flèche, au même endroit de l'écran. */
 function DifficulteCarrousel({ difficulte, setDifficulte }) {
   const railRef = React.useRef(null);
   const cartesRef = React.useRef([]);
@@ -132,21 +141,8 @@ function DifficulteCarrousel({ difficulte, setDifficulte }) {
     });
   };
 
-  const fleche = {
-    background: "transparent", border: `2px solid ${T.rule}`, borderRadius: T.rChip,
-    color: T.dim, width: 40, flexShrink: 0, cursor: "pointer",
-    fontFamily: T.ui, fontWeight: 800, fontSize: "1.1rem", lineHeight: 1,
-  };
-
   return (
-    <div style={{ display: "flex", alignItems: "stretch", gap: 8 }}>
-      <button
-        onClick={() => choisir((index - 1 + NIVEAUX.length) % NIVEAUX.length)}
-        aria-label="Niveau de difficulté précédent"
-        style={fleche}
-      >
-        ‹
-      </button>
+    <div style={{ display: "flex", alignItems: "stretch" }}>
       <div
         ref={railRef}
         onScroll={surDefilement}
@@ -196,13 +192,6 @@ function DifficulteCarrousel({ difficulte, setDifficulte }) {
           );
         })}
       </div>
-      <button
-        onClick={() => choisir((index + 1) % NIVEAUX.length)}
-        aria-label="Niveau de difficulté suivant"
-        style={fleche}
-      >
-        ›
-      </button>
       {/* `scrollbar-width` couvre Firefox ; les navigateurs WebKit/Blink ont
           besoin du pseudo-élément. Portée au rail seul via une classe, pour ne
           rien changer ailleurs sur la page. */}
@@ -804,8 +793,17 @@ export default function SetupScreen({
             replié, il montre quand même les valeurs en cours — les mêmes
             jetons compacts que l'écran d'un invité affiche en lecture seule
             un peu plus haut — donc rien n'est masqué, seulement resserré.
-            Sur grand écran, rien ne change : la grille reste ouverte. */}
-        <Reglage titre="Réglages de partie">
+            Sur grand écran, rien ne change : la grille reste ouverte.
+
+            ── « DÉTAIL DE PARTIE » SUR TÉLÉPHONE (Nikola, 2026-09-19) ──
+            Replié, ce bloc ne montre plus des réglages : il montre l'état de
+            la table. « Réglages de partie » promettait donc des leviers au-
+            dessus d'un résumé en lecture, juste sous un autre titre qui dit
+            déjà « Réglage ». « Détail de partie » dit ce qu'on voit sans
+            l'ouvrir ; les leviers sont derrière « Modifier », qui les annonce
+            très bien tout seul. Sur grand écran la grille est ouverte en
+            permanence, ce sont bien des réglages : le titre y reste. */}
+        <Reglage titre={ecranEtroit ? "Détail de partie" : "Réglages de partie"}>
           {ecranEtroit ? (
             <details style={{ border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "2px 13px" }}>
               <summary
@@ -816,10 +814,17 @@ export default function SetupScreen({
                 }}
               >
                 Modifier
+                {/* PAS DE TYPE DE VOL ICI (Nikola, 2026-09-19 : « ne pas
+                    afficher le type de vol à côté de Modifier »). C'était le
+                    seul jeton TOUJOURS présent — les deux autres ne se montrent
+                    que lorsqu'on s'écarte du défaut. Il collait donc « Emprunt »
+                    ou « Mise au repos » à côté du mot « Modifier » sur toutes
+                    les tables, y compris celles qui n'y avaient pas touché, et
+                    la ligne se lisait comme un bouton à deux libellés. Le
+                    réglage reste évidemment là, un cran plus bas. */}
                 <span style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: "auto" }}>
                   {[
                     eventsEnabled ? "Événements ✓" : null,
-                    modeVolRepos === "main" ? "Emprunt" : "Mise au repos",
                     egalitesLanterneRouge ? null : "Égalités ✗",
                   ].filter(Boolean).map((puce) => (
                     <span

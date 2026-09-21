@@ -140,10 +140,27 @@ function cloneEtat(gameState) {
   // distance du seuil d'Apocalypse se trouve le plateau qu'on lui montre, et
   // ne pourrait pas juger si ce coup rapproche la fin (cf.
   // `valeurFinDePartie`).
+  /* `egalitesLanterneRouge` traverse lui aussi, et il a manqué (audit du
+     2026-09-20). C'est un RÉGLAGE DE TABLE, pas un état de plateau : le
+     clone n'a donc rien à en recalculer, mais il a tout à le transporter,
+     parce que `isLanterneRouge` le lit et retombe sur `true` quand il est
+     absent.
+
+     Ce qui arrivait, option décochée et Titan à égalité au minimum :
+     `planTour` clone, le clone oublie le réglage, `candidatsPourCarte`
+     proposait Je Ne Partage Pas sur TROIS cases — puis le contrôleur
+     résolvait sur l'état réel, où le compte attendu est deux, et
+     `resolveJeNePartagePas` refusait la sélection entière. La carte était
+     perdue pour rien, sans que rien ne le signale.
+
+     Règle générale de cette fonction : tout champ que les résolveurs lisent
+     doit être ici. Les seuls autres (`replis`, `trajectoires`) sont des
+     collecteurs facultatifs, et leur absence est voulue. */
   return {
     board, looseBlocks, titans,
     aJouerEncore: gameState.aJouerEncore,
     finDePartie: gameState.finDePartie,
+    egalitesLanterneRouge: gameState.egalitesLanterneRouge,
   };
 }
 
@@ -665,6 +682,12 @@ export function appliquerDecisions(decisions, etat, profile = makeProfile()) {
          version au barème ne savait pas les distinguer. */
       if (meilleurMinimum > valeurAdrenalinePour(defenseur) && (defenseur.adrenaline || 0) >= 1) {
         defenseur.adrenaline -= 1;
+        /* Et elle passe chez l'attaquant : c'est ce que fait le moteur
+           (`autoResolveIaDecisions`, comme la file humaine), ce modèle-ci
+           l'effaçait purement et simplement. L'IA croyait donc qu'un Dilemme
+           refusé ne lui rapportait RIEN, et sous-estimait d'autant toutes ses
+           cartes offensives — celles-là mêmes que Nikola dit sous-jouées. */
+        attaquant.adrenaline = (attaquant.adrenaline || 0) + 1;
         continue;
       }
       if (couleurPerdue === OPTION_SOCLE) {

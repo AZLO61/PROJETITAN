@@ -747,6 +747,61 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
                       {titanState.players.map((t) => <td key={t.id} style={{ padding: "3px 8px", textAlign: "center" }}>{fn(t)}</td>)}
                     </tr>
                   ))}
+                  {/* ── CE QUE LES VERTS ONT CHANGÉ ──────────────────
+                      Nikola, 2026-09-19 : « si on revient sur le tableau de
+                      scoring il faut voir le score avant le placement des
+                      Verts et le score final total, c'est intéressant de
+                      pouvoir comprendre c'est quoi qui a fait la
+                      différence ».
+
+                      Le pré-score existait déjà — il s'affiche au-dessus
+                      PENDANT le placement — mais il disparaissait à la
+                      révélation, remplacé par ce tableau-ci. On voyait donc
+                      le avant, puis le après, jamais les deux ensemble : la
+                      seule chose qu'on cherche en rouvrant le décompte une
+                      fois la partie finie, c'est justement l'écart entre les
+                      deux, et il fallait l'avoir retenu de tête.
+
+                      La ligne se lit juste au-dessus du TOTAL, avec le delta
+                      en petit à côté : la soustraction est faite. Elle ne
+                      révèle rien d'interdit — à ce stade tous les Verts sont
+                      posés et le tableau au-dessus détaille déjà chaque
+                      barème, Verts compris.
+
+                      `preScoreSansVerts` est recalculé à chaque rendu tant
+                      que le décompte est ouvert (cf. le contrôleur) : c'est
+                      le même décompte avec des affectations de Verts vides,
+                      donc il reste disponible après la révélation sans qu'on
+                      ait à mémoriser quoi que ce soit. */}
+                  {preScoreSansVerts && (
+                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,.06)" }}>
+                      <td style={{ padding: "3px 8px", color: "rgba(255,255,255,.6)" }}>
+                        Avant les Verts
+                      </td>
+                      {titanState.players.map((t) => {
+                        const avant = preScoreSansVerts.totals[t.id].total;
+                        const apport = finalScoreResult.totals[t.id].total - avant;
+                        return (
+                          <td
+                            key={t.id}
+                            title={apport > 0
+                              ? `${avant} pts avant placement — ses Verts lui ont rapporté ${apport} pt(s)`
+                              : `${avant} pts avant placement — ses Verts n'ont rien changé à son total`}
+                            style={{ padding: "3px 8px", textAlign: "center", cursor: "help" }}
+                          >
+                            <span style={{ fontVariantNumeric: "tabular-nums" }}>{avant}</span>
+                            <span style={{
+                              marginLeft: 5, fontSize: ".85em",
+                              color: apport > 0 ? "#7ef2a8" : "rgba(255,255,255,.35)",
+                              fontVariantNumeric: "tabular-nums",
+                            }}>
+                              {apport > 0 ? `+${apport}` : "—"}
+                            </span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )}
                   <tr style={{ background: "rgba(255,217,61,.1)", fontWeight: 700 }}>
                     <td style={{ padding: "5px 8px", color: "#FFD93D" }}>TOTAL</td>
                     {(() => {

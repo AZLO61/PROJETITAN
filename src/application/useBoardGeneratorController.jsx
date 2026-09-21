@@ -46,21 +46,46 @@ const {
    rendu : `coutOptionDil` servait de dépendance à `autoResolveIaDecisions`,
    qui perdait sa mémoïsation à chaque frappe. Elles ne lisent que leurs
    arguments et le barème du domaine, elles n'ont rien à faire là-dedans. */
-function marginalValue(color, currentRepaire, allPlayers, selfId) {
+export function marginalValue(color, currentRepaire, allPlayers, selfId) {
   const counts = {};
   currentRepaire.forEach((c) => { counts[c] = (counts[c] || 0) + 1; });
   const before = scoreBareme(color, counts[color] || 0);
   const after = scoreBareme(color, (counts[color] || 0) + 1);
   let delta = after - before;
   if (color === "rose") {
-    const selfRose = (counts["rose"] || 0) + 1;
+    /* ── LE BONUS ROSE EST UN ÉCART, PAS UN FORFAIT (audit du 2026-09-20) ──
+       Il était ajouté à CHAQUE Rose : une IA déjà en tête se créditait +10
+       sur son quatrième comme sur celui qui lui avait donné la tête. Mesuré
+       face à un rival à 2 Roses, un Titan qui en a déjà 3 chiffrait le
+       suivant à 12 points alors qu'il en vaut 2 — il surpayait donc tout vol
+       de Rose de dix points, et le défenseur payait une Adrénaline pour
+       protéger un bonus qu'il ne pouvait plus perdre.
+
+       On chiffre ce que le bonus vaut AVANT et APRÈS, et on garde la
+       différence : seul le bloc qui fait basculer le classement la porte. */
     const maxOthers = Math.max(0, ...allPlayers
       .filter((p) => p.id !== selfId)
       .map((p) => p.repaire.filter((c) => c === "rose").length));
-    if (selfRose > maxOthers) delta += 10;
-    else if (selfRose === maxOthers) delta += 5;
+    const bonus = (n) => {
+      if (n > maxOthers) return 10;
+      return n > 0 && n === maxOthers ? 5 : 0;
+    };
+    const avant = counts["rose"] || 0;
+    delta += bonus(avant + 1) - bonus(avant);
   }
-  if (color === "orange" && ((counts["orange"] || 0) % 2 === 1)) delta = 0;
+  /* ── L'ORANGE NE MARQUE QUE PAR PAIRES, ET `scoreBareme` LE SAIT DÉJÀ ──
+     Ici vivait `if (counts.orange % 2 === 1) delta = 0`, la condition à
+     l'envers : `counts` est le compte AVANT ajout, donc impair veut dire que
+     le bloc COMPLÈTE la paire — le seul cas où il vaut quelque chose. La
+     garde annulait exactement ce qu'elle devait protéger, et l'Orange
+     ressortait à 0 pour TOUS les comptes (mesuré : 0, 0, 0, 0, 0 de 0 à
+     5 blocs, contre 0, 5, 0, 6, 0, 7 au barème réel).
+
+     Conséquence, sur le barème le plus raide du jeu (5/11/18/26 la paire) :
+     aucune IA ne volait un Orange en RAGE, n'en proposait un en Dilemme, ni
+     ne payait une Adrénaline pour garder une paire.
+
+     Rien ne la remplace : `after - before` rend déjà 0 sur le bloc impair. */
   return delta;
 }
 
@@ -3132,7 +3157,12 @@ export function useBoardGeneratorController() {
       // lisent pour allonger la portée mais ne la débitent pas, c'est
       // l'application qui s'en charge (même contrat que pour un humain,
       // cf. les appels jouerToutCasser et consorts).
-      if (mise > 0) curTitan2.adrenaline = Math.max(0, (curTitan2.adrenaline || 0) - mise);
+      // Faut Pas Me Chauffer fait exception : sa mise est engagée duel par
+      // duel dans sa propre branche (cf. plus bas), la retrancher ici la
+      // compterait deux fois. Même partage qu'en simulation (`simulerCarte`).
+      if (mise > 0 && cardId !== "faut_pas_me_chauffer") {
+        curTitan2.adrenaline = Math.max(0, (curTitan2.adrenaline || 0) - mise);
+      }
 
       let newLog = [];
       let newDecisions = [];
@@ -3209,12 +3239,35 @@ export function useBoardGeneratorController() {
           newLog = [`FPMC (IA T${playerId}) : aucune cible.`];
         } else {
           newLog = [`FPMC (IA T${playerId}) vs ${targets.length} cible(s)`];
+          /* ── LA MISE CACHÉE DE L'IA EST ENFIN JOUÉE (audit du 2026-09-20) ──
+             `candidatsPourCarte` cherche la mise duel par duel depuis le
+             2026-09-07 et la porte dans `coup.miseFpmc` ; ce chemin-ci
+             l'ignorait et appelait le résolveur sans `attackerBid` — alors
+             que la déduction d'Adrénaline plus haut, elle, la PAYAIT. L'IA
+             brûlait donc jusqu'à trois Adrénaline pour arriver au duel les
+             mains vides, et perdait des comparaisons qu'elle avait payé pour
+             gagner.
+
+             Le simulateur, lui, passe bien la mise (`appliquerCoup` →
+             `simulerCarte`) : les campagnes mesuraient une carte que la table
+             ne voyait jamais. FPMC est jouée 3,7 fois par partie (mesure du
+             2026-09-20, 40 parties de 4 Experts, 8,2 % des cartes).
+
+             Même mécanique qu'en simulation : la mise est engagée sur CHAQUE
+             cible tant que le stock suit, un duel ne se partage pas. */
+          let stockFpmc = curTitan2.adrenaline || 0;
+          const miseFpmcVoulue = move?.miseFpmc ?? 0;
           targets.forEach((defId) => {
-            const res = resolveFautPasMeChauffer(playerId, defId, targets.length, jeu2);
+            const miseIA = Math.min(miseFpmcVoulue, stockFpmc);
+            stockFpmc -= miseIA;
+            const res = resolveFautPasMeChauffer(playerId, defId, targets.length, jeu2, { attackerBid: miseIA });
+            if (miseIA > 0) newLog.push(`Mise cachée de Titan ${playerId} : ${miseIA} 💉.`);
             newLog.push(...res.log);
             newDecisions.push(...(res.decisions || []));
           });
+          curTitan2.adrenaline = Math.max(0, stockFpmc);
           setState((p) => ({ ...p })); setLooseBlocks((p) => ({ ...p }));
+          setTitanState((p) => ({ ...p, players: [...p.players] }));
         }
       } else {
         newLog = [`IA T${playerId} : carte inconnue (${cardId}), défausse.`];
@@ -3544,26 +3597,49 @@ export function useBoardGeneratorController() {
         // l'ancien seuil, une cible possédant exactement 1 bloc et aucune
         // Adrénaline ne perdait RIEN face à un attaquant IA : le RAGE
         // était purement et simplement annulé.
-        if (defender.repaire.length >= 1) {
-          let bestIdx = 0, bestScore = -Infinity;
-          defender.repaire.forEach((color, idx) => {
-            const val = marginalValue(color, attacker.repaire, curPlayers, d.attackerId);
-            if (val > bestScore) { bestScore = val; bestIdx = idx; }
-          });
-          // Ce chemin poussait systématiquement le bloc dans le Repaire de
-          // l'attaquant. C'est juste pour Tête en Avant et Faut Pas Me
-          // Chauffer, faux pour la RAGE de Tout Casser, que Nikola a tranchée
-          // « au sol » le 2026-08-17.
-          const couleur = defender.repaire[bestIdx];
-          const suffixe = acheminerBlocPerdu(d, defender, attacker, couleur);
-          setActionLog((prev) => [...prev, `RAGE IA (T${d.attackerId} attaquant, ${d.cardLabel}) : arrache ${couleur} (+${bestScore}pts) à T${d.defenderId}${suffixe}`]);
-        } else if (defender.adrenaline >= 1) {
+        /* ── L'ADRÉNALINE EST UNE OPTION À PART ENTIÈRE (audit du 2026-09-20) ──
+           Elle n'était prise que si le Repaire était VIDE — un pis-aller.
+           Or la FAQ #5 la rend ciblable librement, et arracher la dernière
+           Adrénaline de qui s'apprête à annuler un Dilemme vaut souvent mieux
+           qu'un bloc de plus : c'est un des « vols de points » que Nikola
+           signale depuis le 2026-08-28.
+
+           Le correctif avait été écrit, mais dans `appliquerDecisions`
+           seulement, c'est-à-dire dans le MODÈLE que l'IA consulte pour
+           choisir son coup. Le moteur qui résout ensuite était resté à
+           l'ancienne règle : la recherche prévoyait l'Adrénaline, la partie
+           prenait un bloc. Les deux arbitrent désormais sur la même liste.
+
+           L'arbitrage reste celui d'ici — le gain de l'attaquant — et non
+           celui du modèle, qui pèse aussi la perte adverse à demi. Les unifier
+           vraiment demande de faire appeler `appliquerDecisions` par ce
+           chemin : c'est un autre chantier, pas ce correctif-ci. */
+        let meilleur = null;
+        defender.repaire.forEach((color, idx) => {
+          const val = marginalValue(color, attacker.repaire, curPlayers, d.attackerId);
+          if (!meilleur || val > meilleur.val) meilleur = { val, idx, color };
+        });
+        if ((defender.adrenaline || 0) >= 1) {
+          // Ce que la PROCHAINE Adrénaline rapporte à l'attaquant, au barème
+          // progressif — jamais un forfait (cf. valeurMarginaleAdrenaline).
+          const val = valeurMarginaleAdrenaline(attacker.adrenaline || 0);
+          if (!meilleur || val > meilleur.val) meilleur = { val, adrenaline: true };
+        }
+        if (!meilleur) continue;
+        if (meilleur.adrenaline) {
           // FAQ #5. Une Adrénaline ne se pose pas au sol : elle va toujours
           // à l'attaquant, quelle que soit la ligne du tableau des
-          // destinations. Elle n'était créditée nulle part.
+          // destinations.
           defender.adrenaline -= 1;
           attacker.adrenaline = (attacker.adrenaline || 0) + 1;
           setActionLog((prev) => [...prev, `RAGE IA (T${d.attackerId} attaquant, FAQ#5) : prend 1 Adrénaline à T${d.defenderId}.`]);
+        } else {
+          // Le bloc arraché va au sol ou au Repaire selon la carte : c'est
+          // juste pour Tête en Avant et Faut Pas Me Chauffer, faux pour la
+          // RAGE de Tout Casser, que Nikola a tranchée « au sol » le
+          // 2026-08-17 (cf. acheminerBlocPerdu).
+          const suffixe = acheminerBlocPerdu(d, defender, attacker, meilleur.color);
+          setActionLog((prev) => [...prev, `RAGE IA (T${d.attackerId} attaquant, ${d.cardLabel}) : arrache ${meilleur.color} (+${meilleur.val}pts) à T${d.defenderId}${suffixe}`]);
         }
         continue;
       }

@@ -285,3 +285,27 @@ export function eclaircirNombre(num, facteur) {
     Math.min(255, Math.round(((num >> decalage) & 0xff) * facteur));
   return (canal(16) << 16) | (canal(8) << 8) | canal(0);
 }
+
+/* ── LE TON DE CHAQUE PHASE DE LA MANCHE ───────────────────
+   Il vivait dans `GameView`, en `const` local reconstruit à chaque rendu, et
+   le tutoriel en gardait une SECONDE copie — décalée d'un cran sur les trois
+   phases (Nikola, 2026-09-19 : « dans la prise en main certaines icônes ne
+   correspondent pas aux vraies icônes »). Le joueur apprenait donc un code
+   couleur que la partie contredisait dès le premier écran.
+
+   Les couleurs ne sont pas décoratives : elles reprennent le sens que le
+   signal a déjà partout ailleurs. Cyan du passif pour la Programmation, qui
+   prépare ; jaune du tour pour l'Action, où l'on joue ; violet du
+   Téléporteur pour l'Événement, qui vient de dehors ; vert du disponible
+   pour le Repos, qui rend les cartes.
+
+   Ici et pas dans `GameView`, parce que le tutoriel est chargé en `lazy` :
+   l'importer depuis `GameView` tirerait tout son graphe dans le fragment du
+   tutoriel. `theme.js` n'importe rien, c'est le bon endroit pour une donnée
+   que deux écrans doivent lire à l'identique. */
+export const TON_DE_PHASE = Object.freeze({
+  programmation: { mot: "Programmation", couleur: T.move },
+  action: { mot: "Action", couleur: T.you },
+  evenement: { mot: "Événement", couleur: T.tele },
+  repos: { mot: "Repos", couleur: T.go },
+});

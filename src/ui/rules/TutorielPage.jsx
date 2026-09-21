@@ -3,7 +3,7 @@ import CardVisual from "../cards/CardVisual.jsx";
 import { CARD_EFFECT } from "../cards/cardEffects.js";
 import BlockIcon from "../BlockIcon.jsx";
 import Icon, { AdrenalineIcon, RainbowIcon } from "../icons.jsx";
-import { T, marquee, label, prose, readout } from "../theme.js";
+import { T, TON_DE_PHASE, marquee, label, prose, readout } from "../theme.js";
 import { CARD_LABEL, CARD_FORCE } from "../../domain/index.js";
 
 /* ============================================================
@@ -85,7 +85,15 @@ function EcranBut() {
         Vous démolissez la ville, et vous ramassez les morceaux.
       </p>
       <Plaque accent={T.you} style={{ marginBottom: 12 }}>
-        <Point icone={<Icon name="smash" size={16} />} titre="Casser">
+        {/* `wreck`, PAS `smash` (Nikola, 2026-09-19 : « dans la prise en main
+            certaines icônes ne correspondent pas aux vraies icônes »).
+            `smash` est l'icône DE LA CARTE Tout Casser — c'est ce que dit
+            `ICON_BY_CARD` — et le joueur la reverra sur cette carte-là, pas
+            sur l'idée générale de casser. `wreck` est le signe que le jeu
+            emploie réellement pour « un bloc arraché à un bâtiment » : la
+            piste Destruction le porte dans la bande de ressources et dans les
+            deux tableaux de décompte. */}
+        <Point icone={<Icon name="wreck" size={16} />} titre="Casser">
           Les bâtiments sont des piles de blocs de couleur. Vos cartes les font tomber,
           et les blocs se retrouvent au sol.
         </Point>
@@ -108,11 +116,33 @@ function EcranBut() {
 }
 
 function EcranManche() {
+  /* ── LES TROIS PHASES SE DISENT COMME DANS LA PARTIE ──
+     Nikola, 2026-09-19 : « dans la prise en main certaines icônes ne
+     correspondent pas aux vraies icônes ».
+
+     PAS D'ICÔNE, parce que la partie n'en met aucune sur ses phases : le
+     bandeau du haut (`GameView`, table `PHASES`) affiche un MOT COLORÉ, rien
+     d'autre. Les trois qui étaient ici ne venaient donc pas du jeu, et deux
+     d'entre elles étaient déjà prises ailleurs dans la même rangée de
+     commandes que le joueur a sous les yeux : `card` est le bouton Règles,
+     `bolt` est le bouton Tutoriel. On apprenait « éclair = phase Action » en
+     face d'un éclair qui ouvre le tutoriel.
+
+     ET LES BONNES COULEURS, qui sont l'information vraie. Elles étaient
+     recopiées ici, et décalées d'un cran sur les trois phases — la
+     Programmation portait le jaune de l'Action, l'Action le vert du Repos, le
+     Repos le violet du Téléporteur. Le tutoriel enseignait donc un code
+     couleur que le bandeau de la partie dément au premier écran.
+
+     Le nom et la couleur viennent maintenant de `TON_DE_PHASE` (theme.js),
+     que le bandeau lit aussi : il n'existe plus de seconde copie à décaler.
+     C'est la seule correction qui tienne — la précédente était déjà une
+     recopie à la main de valeurs justes. */
   const phases = [
-    { nom: "Programmation", icone: "card", ton: T.you, texte: "Chacun choisit SECRÈTEMENT 3 cartes parmi les 6 de sa main. Ce seront ses trois coups de la Manche, dans l'ordre qu'il voudra." },
-    { nom: "Action", icone: "bolt", ton: T.go, texte: "Chacun joue UNE carte par round, à son tour, en commençant par le Détonateur. Trois rounds, donc trois cartes." },
-    { nom: "Repos", icone: "lock", ton: T.tele, texte: "Chacun pioche à l'aveugle une carte chez son voisin. Elle lui est retirée pour la Manche suivante." },
-  ];
+    { cle: "programmation", texte: "Chacun choisit SECRÈTEMENT 3 cartes parmi les 6 de sa main. Ce seront ses trois coups de la Manche, dans l'ordre qu'il voudra." },
+    { cle: "action", texte: "Chacun joue UNE carte par round, à son tour, en commençant par le Détonateur. Trois rounds, donc trois cartes." },
+    { cle: "repos", texte: "Chacun pioche à l'aveugle une carte chez son voisin. Elle lui est retirée pour la Manche suivante." },
+  ].map(({ cle, texte }) => ({ ...TON_DE_PHASE[cle], texte }));
   return (
     <>
       <p style={{ ...prose(T.text, T.body), lineHeight: 1.5, marginTop: 0 }}>
@@ -121,13 +151,12 @@ function EcranManche() {
       </p>
       <div style={{ display: "grid", gap: 9, marginBottom: 12 }}>
         {phases.map((p, i) => (
-          <Plaque key={p.nom} accent={p.ton}>
+          <Plaque key={p.mot} accent={p.couleur}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-              <span style={{ ...readout(T.micro, "#0f0826"), background: p.ton, width: 22, height: 22, display: "grid", placeItems: "center", flexShrink: 0 }}>
+              <span style={{ ...readout(T.micro, "#0f0826"), background: p.couleur, width: 22, height: 22, display: "grid", placeItems: "center", flexShrink: 0 }}>
                 {i + 1}
               </span>
-              <Icon name={p.icone} size={15} style={{ color: p.ton }} />
-              <span style={label(p.ton, T.small)}>{p.nom}</span>
+              <span style={label(p.couleur, T.small)}>{p.mot}</span>
             </div>
             <div style={{ ...prose(T.dim, T.micro), lineHeight: 1.45 }}>{p.texte}</div>
           </Plaque>
