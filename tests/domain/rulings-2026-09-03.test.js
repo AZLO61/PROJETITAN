@@ -89,9 +89,15 @@ describe("« Graouhhh sur 3 Titans : seul le plus proche a perdu un élément »
      Nikola a confirmé la règle le 2026-09-03, en l'assouplissant d'un cran :
      l'Adrénaline compte désormais comme une option (bloc suivant). Les deux
      cibles de ce scénario n'en avaient aucune, la conclusion ne bouge donc
-     pas — et c'est exactement ce que ce test vérifie. */
+     pas — et c'est exactement ce que ce test vérifie.
 
-  it("les trois cibles reculent et subissent une Fatigue, une seule subit un Dilemme", () => {
+     ⚠️ RETOURNÉ LE 2026-09-23. Même incident, remonté une seconde fois (« il
+     n'a rien perdu sur sa case, il n'avait qu'un bloc »), et cette fois Nikola
+     change la règle : sur un Dilemme au sol, la cible à une seule option la
+     laisse tomber (cf. rulings-2026-09-23.test.js). Les trois cibles subissent
+     donc désormais leur Dilemme. */
+
+  it("les trois cibles reculent, subissent une Fatigue et un Dilemme", () => {
     const main = () => ["tout_casser", "tete_en_avant", "boing_boing"];
     const titans = [
       t(1, "A1", { repaire: ["bleu", "rose"] }),
@@ -101,9 +107,9 @@ describe("« Graouhhh sur 3 Titans : seul le plus proche a perdu un élément »
     ];
     const gameState = { board: {}, titans, looseBlocks: {}, replis: [], trajectoires: [] };
 
-    expect(canDil(2, gameState)).toBe(true);
-    expect(canDil(3, gameState)).toBe(false);
-    expect(canDil(4, gameState)).toBe(false);
+    expect(canDil(2, gameState, "Graouhhh")).toBe(true);
+    expect(canDil(3, gameState, "Graouhhh")).toBe(true);
+    expect(canDil(4, gameState, "Graouhhh")).toBe(true);
 
     const scan = scanGraouhhhAxis(1, gameState, 0, 1);
     expect(scan.touched.map((x) => x.id)).toEqual([2, 3, 4]);
@@ -122,8 +128,8 @@ describe("« Graouhhh sur 3 Titans : seul le plus proche a perdu un élément »
       cont = res.continuation;
     }
 
-    // Un seul Dilemme, et c'est bien la cible la plus proche.
-    expect(dilemmes).toEqual([2]);
+    // Un Dilemme par cible, Titan par Titan, du plus loin au plus proche.
+    expect(dilemmes).toEqual([4, 3, 2]);
     // Mais les trois ont reculé de 4 cases…
     expect(titans.map((x) => x.cell)).toEqual(["A1", "A6", "A7", "A8"]);
     // …les trois ont perdu une carte à la Fatigue…

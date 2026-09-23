@@ -42,14 +42,36 @@ async function partieHumaine() {
 describe("Décisions devenues impossibles avant d'être affichées", () => {
   afterEach(() => { cleanup(); vmCourant = null; });
 
-  it("n'enfile pas un DIL dont la cible n'a plus 2 options", async () => {
+  /* Depuis le 2026-09-23, une seule option suffit aux Dilemmes au sol : le
+     cas « moins de 2 options » ne bloque plus que Faut Pas Me Chauffer, dont
+     la perte part chez l'attaquant. */
+  it("n'enfile pas un DIL de Faut Pas Me Chauffer dont la cible n'a plus 2 options", async () => {
     const [atk, def] = await partieHumaine();
     act(() => {
       const d = vmCourant.titanState.players.find((t) => t.id === def);
       d.repaire = ["bleu"];       // une seule couleur
       d.socles = [];              // aucun Socle
-      d.adrenaline = 0;           // et aucune Adrénaline (option depuis le 2026-09-03)
-                                  // → 1 seule option, le Dilemme est impossible
+      d.adrenaline = 0;
+      vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
+    });
+
+    act(() => {
+      vmCourant.enqueueDecisions([{
+        type: "DIL", attackerId: atk, defenderId: def,
+        cardLabel: "Faut Pas Me Chauffer", cellAtImpact: "B2", destination: "repaire",
+      }]);
+    });
+
+    expect(vmCourant.decisionQueue).toHaveLength(0);
+    expect(vmCourant.actionLog.join("\n")).toMatch(/sans effet sur Titan/);
+  });
+
+  it("n'enfile pas un DIL au sol contre un Repaire vide", async () => {
+    const [atk, def] = await partieHumaine();
+    act(() => {
+      const d = vmCourant.titanState.players.find((t) => t.id === def);
+      d.repaire = [];
+      d.socles = [];
       vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
     });
 
@@ -61,7 +83,27 @@ describe("Décisions devenues impossibles avant d'être affichées", () => {
     });
 
     expect(vmCourant.decisionQueue).toHaveLength(0);
-    expect(vmCourant.actionLog.join("\n")).toMatch(/sans effet sur Titan/);
+  });
+
+  it("enfile un DIL au sol à une seule option, sans étape pour l'attaquant", async () => {
+    const [atk, def] = await partieHumaine();
+    act(() => {
+      const d = vmCourant.titanState.players.find((t) => t.id === def);
+      d.repaire = ["bleu"];
+      d.socles = [];
+      vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
+    });
+
+    act(() => {
+      vmCourant.enqueueDecisions([{
+        type: "DIL", attackerId: atk, defenderId: def,
+        cardLabel: "Graouhhh", cellAtImpact: "B2", destination: "sol",
+      }]);
+    });
+
+    expect(vmCourant.decisionQueue).toHaveLength(1);
+    // La cible (humaine) répond tout de suite : lâcher son bleu, ou payer.
+    expect(vmCourant.decisionQueue[0]).toMatchObject({ stage: "DEFENDER_PICK", attackerChoices: ["bleu"] });
   });
 
   it("n'enfile pas une RAGE dont la cible n'a plus rien à prendre", async () => {

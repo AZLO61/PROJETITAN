@@ -1,5 +1,5 @@
 import React from "react";
-import { COLOR_HEX, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions } from "../../domain/index.js";
+import { COLOR_HEX, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions, optionsADesigner } from "../../domain/index.js";
 import { smallBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
 import { AdrenalineIcon } from "../icons.jsx";
@@ -112,11 +112,15 @@ export default function DilRageBanner({ vm }) {
         const defender = titanState.players.find((t) => t.id === currentDecision.defenderId);
         // Couleurs du Repaire + « un Socle tiré au sort » si la cible en a.
         const options = getDilOptions(currentDecision.defenderId, { titans: titanState.players });
+        // Deux options, ou la seule qu'elle possède (Dilemme au sol, 2026-09-23).
+        const requis = optionsADesigner(currentDecision.defenderId, { titans: titanState.players });
         return (
           <div>
             <p style={{ margin: "0 0 6px", color: "rgba(255,255,255,.75)", fontSize: ".8rem" }}>
               {currentDecision.autoAttackerPick
-                ? "Tu n'as pas le choix : ce sont ses 2 seules options. C'est elle qui décidera ce qu'elle lâche — ou si elle préfère payer 1 Adrénaline."
+                ? (requis === 1
+                  ? "Tu n'as pas le choix : c'est sa seule option. Elle la laisse tomber sur sa case — sauf si elle préfère payer 1 Adrénaline."
+                  : "Tu n'as pas le choix : ce sont ses 2 seules options. C'est elle qui décidera ce qu'elle lâche — ou si elle préfère payer 1 Adrénaline.")
                 : "Désigne 2 options à lui faire perdre :"}
             </p>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
@@ -157,9 +161,9 @@ export default function DilRageBanner({ vm }) {
                 🗿 L'option Socle est tirée au sort : tu ne choisis pas lequel, et personne n'en connaît la valeur avant le tirage.
               </p>
             )}
-            <button onClick={dilValidateAttackerPick} disabled={currentDecision.attackerChoices.length !== 2}
-              style={smallBtn(currentDecision.attackerChoices.length === 2, "#2D8DF5", "#1E3A8A")}>
-              Valider ({currentDecision.attackerChoices.length}/2)
+            <button onClick={dilValidateAttackerPick} disabled={requis === 0 || currentDecision.attackerChoices.length !== requis}
+              style={smallBtn(requis > 0 && currentDecision.attackerChoices.length === requis, "#2D8DF5", "#1E3A8A")}>
+              Valider ({currentDecision.attackerChoices.length}/{requis})
             </button>
           </div>
         );
@@ -171,10 +175,12 @@ export default function DilRageBanner({ vm }) {
         return (
           <div>
             <p style={{ margin: "0 0 6px", color: "rgba(255,255,255,.75)", fontSize: ".8rem" }}>
-              Laquelle perdre ?
+              {currentDecision.attackerChoices.length === 1 ? "La laisser tomber sur ta case ?" : "Laquelle perdre ?"}
               {currentDecision.autoAttackerPick && (
                 <span style={{ color: "rgba(255,255,255,.55)", fontSize: "var(--fs-micro)" }}>
-                  {" "}— l'attaquant n'avait pas le choix, ce sont les 2 seules options de ton Repaire.
+                  {currentDecision.attackerChoices.length === 1
+                    ? " — c'est la seule option de ton Repaire."
+                    : " — l'attaquant n'avait pas le choix, ce sont les 2 seules options de ton Repaire."}
                 </span>
               )}
             </p>

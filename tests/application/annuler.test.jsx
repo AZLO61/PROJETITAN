@@ -108,6 +108,41 @@ describe("Annuler restaure l'état complet du jeu", () => {
   });
 });
 
+/* Nikola, 2026-09-22 : « j'ai pris un téléporteur, j'ai joué Charge, j'ai
+   annulé, je voulais changer mon déplacement ». C'est « Annuler » qui s'en
+   charge (2026-09-23 : « Annuler est suffisant ») : une fois la carte
+   défaite, l'instantané suivant est celui du déplacement. */
+describe("Annuler une carte puis le déplacement qui la précédait", () => {
+  afterEach(() => { cleanup(); vmCourant = null; });
+
+  it("rend le déplacement passif, téléporteur compris", async () => {
+    await lancerUnePartie();
+    const id = vmCourant.titanState.ordreJeu[0];
+    act(() => { vmCourant.setPhase("action"); vmCourant.setActivePlayerId(id); vmCourant.setSelectedTitanId(id); });
+    act(() => {
+      vmCourant.titanState.players.find((p) => p.id === id).programmed = ["tete_en_avant", "tout_casser", "graouhhh"];
+      vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
+    });
+    const moi = () => vmCourant.titanState.players.find((p) => p.id === id);
+    const depart = moi().cell;
+    const dest = [...vmCourant.moveTeleport][0] || [...vmCourant.moveClassic][0];
+
+    act(() => vmCourant.toggleMoveMode());
+    act(() => vmCourant.jouerMouvementGratuit(dest));
+    act(() => vmCourant.toggleTeaMode());
+    act(() => vmCourant.jouerTeteEnAvant([...vmCourant.teaTargets.keys()][0]));
+    expect(vmCourant.undoStack).toHaveLength(2);
+
+    act(() => vmCourant.handleUndo()); // défait la Charge
+    expect(moi().cell).toBe(dest);
+    expect(vmCourant.canUseMovePassif(id)).toBe(false);
+
+    act(() => vmCourant.handleUndo()); // défait le déplacement
+    expect(moi().cell).toBe(depart);
+    expect(vmCourant.canUseMovePassif(id)).toBe(true);
+  });
+});
+
 describe("Une seule décision bloquante à l'écran", () => {
   afterEach(() => { cleanup(); vmCourant = null; });
 

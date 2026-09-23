@@ -66,7 +66,7 @@ describe("Fatigue", () => {
   it("chez la cible : la carte et le choix", () => {
     render(<FatigueBanner vm={vmDe([2], fatigue)} />);
     expect(screen.getAllByText(new RegExp(CARD_LABEL.tout_casser)).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: /Encaisser/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Laisser faire/ })).toBeTruthy();
   });
 
   it("chez un autre : ni la carte, ni les boutons", () => {

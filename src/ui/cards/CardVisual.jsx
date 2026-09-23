@@ -39,7 +39,11 @@ export default function CardVisual({
 
   const isSmall = size === "small";
   const w = isSmall ? 84 : 112;
-  const h = isSmall ? 112 : 150;
+  /* 132 et non 150 (2026-09-22) : le pictogramme et le nom tiennent sans
+     changer, seul le vide autour d'eux rétrécit — et ces 18 px sont ceux qui
+     faisaient déborder la colonne des Titans sous la fenêtre pendant le choix
+     de la carte. */
+  const h = isSmall ? 112 : 132;
   const indisponible = played || inRepos;
   const cliquable = selectable !== false && !played;
 

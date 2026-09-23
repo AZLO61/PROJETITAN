@@ -31,14 +31,17 @@ export default function PlacementBanner({ vm }) {
       background: "rgba(255,217,61,.16)",
       border: `2.5px solid ${T.you}`,
       boxShadow: "0 12px 32px rgba(0,0,0,.55)",
-      borderRadius: 12, padding: "9px 13px", marginBottom: 9, fontSize: ".85rem",
+      borderRadius: 12, padding: "5px 12px", marginBottom: 6, fontSize: ".85rem",
+      /* UNE SEULE LIGNE (Nikola, 2026-09-23 : « le bandeau est encore trop
+         épais ») : titre et consigne côte à côte. */
+      display: "flex", alignItems: "center", columnGap: 12, rowGap: 2, flexWrap: "wrap",
     }}>
       {/* Compacté le 2026-08-28 : « le panneau est trop gros, ça décale trop le
           plateau ». Le titre et la consigne tiennent sur deux lignes au lieu de
           quatre, et l'icône du Titan remplace la répétition de son nom. */}
       <div style={{
         ...marquee(".92rem", T.you),
-        marginBottom: 5, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap",
+        display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap",
       }}>
         <span aria-hidden="true">📍</span>
         <TitanIcon titanId={titanId} size={17} />
@@ -53,7 +56,7 @@ export default function PlacementBanner({ vm }) {
           plus à un écran qui doit tout montrer sans défiler, et rien ne les
           séparait vraiment : l'une dit quoi faire, l'autre pourquoi c'est à ce
           moment-là. Elles se lisent ensemble. */}
-      <div style={{ margin: 0, display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ margin: 0, display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", flex: "1 1 320px", minWidth: 0 }}>
         {estIa ? (
           <span style={{ color: T.tele, fontWeight: 700 }}>
             🤖 {nom} est une IA — elle choisit elle-même…

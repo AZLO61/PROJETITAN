@@ -3,17 +3,41 @@
    ============================================================
    Aucun fichier audio dans ce dépôt (Nikola, 2026-09-17 : pas de fichier
    sous la main). Le jingle est composé en Web Audio, quelques notes
-   d'arcade jouées à la volée plutôt qu'un asset à charger. Une préférence
-   « son coupé » vit dans localStorage et gate tout ce qui joue ici. */
+   d'arcade jouées à la volée plutôt qu'un asset à charger. Le volume vit dans
+   localStorage et gate tout ce qui joue ici. */
 
+/* ── QUATRE PALIERS DE VOLUME ──
+   Nikola, 2026-09-22 : « une icône haut-parleur avec 3 ondes ; on peut gérer
+   le volume de 0 à 100 — à 100 il y a 3 ondes, à 67 % 2 ondes, à 33 % 1 onde,
+   à 0 le haut-parleur est barré ». Un clic sur l'icône passe au palier
+   suivant, dans cet ordre. L'ancienne préférence « son coupé » est reprise :
+   un joueur qui avait coupé le son le retrouve coupé. */
+const CLE_VOLUME = "titan.son.volume";
 const CLE_MUET = "titan.son.coupe";
+const PALIERS = [100, 67, 33, 0];
 
-export function sonCoupe() {
-  try { return window.localStorage.getItem(CLE_MUET) === "1"; } catch { return false; }
+export function volumeSon() {
+  try {
+    const brut = window.localStorage.getItem(CLE_VOLUME);
+    if (brut !== null && PALIERS.includes(Number(brut))) return Number(brut);
+    return window.localStorage.getItem(CLE_MUET) === "1" ? 0 : 100;
+  } catch { return 100; }
 }
 
-export function definirSonCoupe(coupe) {
-  try { window.localStorage.setItem(CLE_MUET, coupe ? "1" : "0"); } catch { /* tant pis */ }
+export function definirVolumeSon(v) {
+  try { window.localStorage.setItem(CLE_VOLUME, String(v)); } catch { /* tant pis */ }
+}
+
+/** Le palier qui suit `v` dans le cycle du clic : 100 → 67 → 33 → 0 → 100. */
+export function palierSuivant(v) {
+  const i = PALIERS.indexOf(v);
+  return PALIERS[(i + 1) % PALIERS.length];
+}
+
+/** Nombre d'ondes à dessiner pour un volume : 3, 2, 1, ou 0 (barré). */
+export function ondesPourVolume(v) {
+  if (v <= 0) return 0;
+  return v <= 33 ? 1 : v <= 67 ? 2 : 3;
 }
 
 let contexteAudio = null;
@@ -23,6 +47,27 @@ function contexte() {
   if (!Ctor) return null;
   if (!contexteAudio) contexteAudio = new Ctor();
   return contexteAudio;
+}
+
+/* ── LE SON DÉVERROUILLÉ AU PREMIER GESTE ──
+   Nikola, 2026-09-22 : « avec une partie 100 % IA aussi il faut le son de
+   victoire à la fin ».
+
+   Le jingle part d'un effet React, pas d'un clic. Un navigateur n'autorise un
+   contexte audio qu'après un geste de l'utilisateur, et Safari exige qu'il
+   soit créé ou relancé PENDANT ce geste : une partie où les IA jouent seules
+   finissait donc souvent en silence. Le contexte est créé et relancé au
+   premier geste de la page — le clic « Lancer la partie » suffit — pour être
+   prêt quand la fin arrive. */
+if (typeof window !== "undefined") {
+  const gestes = ["pointerdown", "keydown", "touchend"];
+  const deverrouiller = () => {
+    const ctx = contexte();
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume();
+    gestes.forEach((g) => window.removeEventListener(g, deverrouiller, true));
+  };
+  gestes.forEach((g) => window.addEventListener(g, deverrouiller, true));
 }
 
 /* ── UNE NOTE, ET POURQUOI ELLE NE CLAQUE PLUS ──────────────
@@ -50,76 +95,93 @@ function contexte() {
       détente propre au-delà de leur durée rythmique, et se recouvrent : c'est
       ce recouvrement qui fait entendre une phrase plutôt qu'une suite de
       bips. */
-function jouerNote(ctx, sortie, freq, debut, duree, volume, forme = "triangle") {
-  const DETENTE = 0.26; // la queue qui déborde sur la note suivante
+function jouerNote(ctx, sortie, freq, debut, duree, volume, forme = "triangle", detente = 0.26) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   osc.type = forme;
   osc.frequency.value = freq;
   gain.gain.setValueAtTime(0.0001, debut);
-  gain.gain.exponentialRampToValueAtTime(volume, debut + 0.02);
+  // Attaque à 40 ms : sous 20 ms, l'oreille entend un « tic » au départ.
+  gain.gain.exponentialRampToValueAtTime(volume, debut + 0.04);
   gain.gain.setValueAtTime(volume, debut + duree * 0.6);
-  gain.gain.exponentialRampToValueAtTime(0.0001, debut + duree + DETENTE);
+  gain.gain.exponentialRampToValueAtTime(0.0001, debut + duree + detente);
   osc.connect(gain);
   gain.connect(sortie);
   osc.start(debut);
-  osc.stop(debut + duree + DETENTE);
+  osc.stop(debut + duree + detente);
 }
 
-/* ── LA PETITE MUSIQUE DE TRIOMPHE ──────────────────────────
-   L'ancienne fanfare était un arpège de Do majeur en quatre croches égales,
-   0,64 s en tout. Quatre notes à intervalle constant ne font pas une phrase :
-   il n'y a ni élan ni arrivée, ça monte et ça s'arrête.
+/* ── LA PETITE MUSIQUE DE TRIOMPHE, SECONDE VERSION ─────────
+   Nikola, 2026-09-22, même demande qu'au 19/09 : « le son plus doux et un peu
+   plus long ». La première correction avait changé le timbre (carré →
+   triangle) et l'enveloppe, mais gardé le REGISTRE : la phrase montait
+   jusqu'au Do6 (1046 Hz) et y tenait sa note la plus longue. C'est là que
+   l'oreille est la plus sensible, et c'est là qu'on la laissait.
 
-   Celle-ci en fait une, sur le patron le plus reconnaissable du genre — trois
-   croches d'élan, une tenue, une sensible, puis la tonique tenue à l'octave :
+   Cette version descend d'une quarte, ralentit d'environ 40 %, et finit sur un
+   ACCORD tenu plutôt qu'une note seule :
 
-     Do5 · Mi5 · Sol5   l'élan, trois croches serrées sur l'accord de tonique
-     Do6                première arrivée, deux fois plus longue
-     Si5                la sensible, la seule note hors de l'accord — c'est
-                        elle qui donne envie que ça se résolve
-     Do6                la résolution, tenue le double du reste
+     Sol4 · Do5 · Mi5   l'élan, trois croches
+     Sol5               la première arrivée, tenue
+     Mi5                le petit retour
+     Sol5               l'arrivée finale, la plus longue, portée par un accord
+                        de Do (Do4 · Mi4 en sinusoïdes) et le Do grave
 
-   ≈ 1,9 s avec la détente de la dernière note, contre 0,64 s : « un peu plus
-   long » sans jamais retenir l'écran, puisque le podium s'ouvre par-dessus
-   pendant que ça sonne.
-
-   LA BASSE FAIT LE TRIOMPHE, PAS LE VOLUME. Une sinusoïde à l'octave basse
-   tenue sous toute la phrase donne le corps qu'un arpège nu n'a pas, à un
-   tiers du niveau de la mélodie : c'est ce qui permet de baisser le volume
-   d'ensemble de 0,16 à 0,10 tout en s'entendant MIEUX. Une sinusoïde n'a
-   aucune harmonique, elle ne peut donc pas rendre l'aigu plus dur — elle ne
-   fait que poser le fond.
-
-   Le tout passe par un gain de sortie unique : six notes qui se recouvrent
-   s'additionnent, et sans ce plafond commun les tenues finales saturaient. */
+   Sommet à 784 Hz au lieu de 1046, ≈ 3,2 s au lieu de 1,9 avec la détente
+   de l'accord final (0,7 s), volume de sortie abaissé de 0,10 à 0,08. */
+const CROCHE = 0.18;
 const PHRASE_TRIOMPHE = [
-  { freq: 523.25, debut: 0.00, duree: 0.13 },  // Do5  — croche
-  { freq: 659.25, debut: 0.13, duree: 0.13 },  // Mi5  — croche
-  { freq: 783.99, debut: 0.26, duree: 0.13 },  // Sol5 — croche
-  { freq: 1046.50, debut: 0.39, duree: 0.26 }, // Do6  — première arrivée, 2 croches
-  { freq: 987.77, debut: 0.65, duree: 0.13 },  // Si5  — la sensible, une croche
-  { freq: 1046.50, debut: 0.78, duree: 0.65 }, // Do6  — la résolution, 5 croches
+  { freq: 392.00, debut: 0, duree: CROCHE },                 // Sol4
+  { freq: 523.25, debut: CROCHE, duree: CROCHE },            // Do5
+  { freq: 659.25, debut: 2 * CROCHE, duree: CROCHE },        // Mi5
+  { freq: 783.99, debut: 3 * CROCHE, duree: 3 * CROCHE },    // Sol5 — première arrivée
+  { freq: 659.25, debut: 6 * CROCHE, duree: CROCHE },        // Mi5
+  { freq: 783.99, debut: 7 * CROCHE, duree: 7 * CROCHE },    // Sol5 — l'arrivée
 ];
 
+/* Le gain de sortie à 100 % : c'est le plafond que la seconde version du
+   jingle a fixé (0,08), les paliers ne font que le réduire. */
+const GAIN_PLEIN = 0.08;
+
+function sortieAuVolume(ctx, volume) {
+  const sortie = ctx.createGain();
+  sortie.gain.value = GAIN_PLEIN * (volume / 100);
+  sortie.connect(ctx.destination);
+  return sortie;
+}
+
 export function jouerJingleFin() {
-  if (sonCoupe()) return;
+  const volume = volumeSon();
+  if (volume === 0) return;
   const ctx = contexte();
   if (!ctx) return;
   if (ctx.state === "suspended") ctx.resume();
   const t0 = ctx.currentTime;
 
-  const sortie = ctx.createGain();
-  sortie.gain.value = 0.10;
-  sortie.connect(ctx.destination);
+  const sortie = sortieAuVolume(ctx, volume);
 
+  const fin = PHRASE_TRIOMPHE[PHRASE_TRIOMPHE.length - 1];
   PHRASE_TRIOMPHE.forEach(({ freq, debut, duree }) => {
-    jouerNote(ctx, sortie, freq, t0 + debut, duree, 1);
+    jouerNote(ctx, sortie, freq, t0 + debut, duree, 1, "triangle", debut === fin.debut ? 0.7 : 0.26);
   });
 
+  // L'accord de Do sous l'arrivée finale : c'est lui qui dit « gagné ».
+  [261.63, 329.63].forEach((freq) => {
+    jouerNote(ctx, sortie, freq, t0 + fin.debut, fin.duree, 0.4, "sine", 0.7);
+  });
   // Le Do grave sous toute la phrase — le fond, pas une note de plus.
-  const fin = PHRASE_TRIOMPHE[PHRASE_TRIOMPHE.length - 1];
-  jouerNote(ctx, sortie, 261.63, t0, fin.debut + fin.duree, 0.34, "sine");
+  jouerNote(ctx, sortie, 130.81, t0, fin.debut + fin.duree, 0.3, "sine", 0.7);
+}
+
+/* Un Do tenu au nouveau volume, joué au clic sur l'icône : on entend le
+   palier qu'on vient de choisir au lieu de le découvrir à la fin de la partie.
+   Rien à 0 — le haut-parleur barré dit déjà tout. */
+export function jouerApercuVolume(volume) {
+  if (volume === 0) return;
+  const ctx = contexte();
+  if (!ctx) return;
+  if (ctx.state === "suspended") ctx.resume();
+  jouerNote(ctx, sortieAuVolume(ctx, volume), 523.25, ctx.currentTime, 0.18, 1, "triangle", 0.3);
 }
 
 /* Vérification minimale de la phrase : elle doit se lire dans l'ordre, sans

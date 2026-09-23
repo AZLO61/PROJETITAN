@@ -148,14 +148,14 @@ export default function BlockStockBar({ board, looseBlocks, orientation = "ligne
     </>
   );
 
-  /* Dans la rangée de commandes : pas de cadre, pas de fond, pas de marge — il
-     ne doit rien coûter en hauteur. `marginLeft: auto` le pousse à droite, dans
-     la moitié vide de la rangée. */
+  /* En ligne : pas de cadre, pas de fond, pas de marge — il ne doit rien
+     coûter en hauteur. Depuis le 2026-09-22 il vit dans la ligne d'infos
+     au-dessus du plateau (cf. `InfosPlateau`), qui le centre elle-même. */
   if (dansLaRangee) {
     return (
       <div
         title="Béton encore sur le plateau, couleur par couleur"
-        style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto", flexWrap: "wrap" }}
+        style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}
       >
         {jauges}
       </div>

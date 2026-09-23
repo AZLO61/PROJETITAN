@@ -89,6 +89,33 @@ export default function RepoVolBanner({ vm }) {
     );
   };
 
+  /* CE QUE CHACUN PEUT PIOCHER, SELON LE SENS — Nikola, 2026-09-22 : « au
+     moment de la phase de vol, faut que je sache ce que je peux voler en
+     fonction de la cible ».
+
+     Le vol tire à l'aveugle dans les cartes JOUÉES de la victime et ses
+     défausses face cachée (`resolveVolPhaseRepos`). Les premières sont
+     publiques, on les nomme ; les secondes ne le sont pas, on n'en donne que
+     le nombre. Une ligne par Titan humain : c'est lui qui a besoin de savoir,
+     les IA n'ont rien à lire. */
+  const victimeDe = (cle, voleurId) => {
+    const ordre = titanState.ordreJeu || [];
+    const parcours = cle === "gauche" ? [...ordre].reverse() : [...ordre];
+    return parcours[(parcours.indexOf(voleurId) + 1) % parcours.length];
+  };
+  const butin = (victimeId) => {
+    const v = titanState.players.find((t) => t.id === victimeId);
+    if (!v) return "—";
+    const visibles = (v.playedThisManche || []).map((c) => CARD_LABEL[c] ?? c);
+    const cachees = (v.discardedHidden || []).length;
+    if (visibles.length === 0 && cachees === 0) return "rien à voler";
+    return [
+      ...visibles,
+      ...(cachees > 0 ? [`${cachees} face cachée${cachees > 1 ? "s" : ""}`] : []),
+    ].join(" · ");
+  };
+  const humains = (titanState.ordreJeu || []).filter((id) => titanModes?.[id] !== "ia");
+
   return (
     <div style={{
       background: "rgba(227,35,71,.18)",
@@ -145,6 +172,21 @@ export default function RepoVolBanner({ vm }) {
                 <span style={{ fontSize: "var(--fs-micro)", opacity: .85, fontWeight: 400 }}>
                   {chaine(sens.cle)}
                 </span>
+                {humains.map((id) => {
+                  const victime = victimeDe(sens.cle, id);
+                  return (
+                    <span
+                      key={id}
+                      style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", fontSize: "var(--fs-micro)", fontWeight: 400 }}
+                    >
+                      <TitanIcon titanId={id} size={14} variant="plain" />
+                      <span style={{ opacity: .7 }}>pioche chez</span>
+                      <TitanIcon titanId={victime} size={14} variant="plain" />
+                      <span style={{ opacity: .7 }}>:</span>
+                      <strong style={{ color: "#FFD93D" }}>{butin(victime)}</strong>
+                    </span>
+                  );
+                })}
               </button>
             ))}
           </div>

@@ -413,7 +413,7 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
               et emboîtait deux bordures pour rien. */}
           {!enSuperposition && (
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
-              <Icon name="lantern" size={19} style={{ color: T.you }} />
+              <Icon name="trophy" size={19} style={{ color: T.you }} />
               <h2 style={marquee(T.h3, T.you)}>
                 {gameOver ? "Décompte final" : "Décompte — aperçu"}
               </h2>
@@ -823,6 +823,13 @@ export default function DecisionPanels({ vm, vue = "tout" }) {
                   </tr>
                 </tbody>
               </table>
+              {/* LE DÉPARTAGE, DIT EN CLAIR (Nikola, 2026-09-23). Même ordre
+                  que `classementFinal` (gameRules). */}
+              <p style={{ margin: "8px 0 0", fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.6)", lineHeight: 1.5 }}>
+                <strong style={{ color: "#FFD93D" }}>Égalité au total ?</strong> On départage par, dans l'ordre :
+                {" "}1. le plus d'Adrénaline restante · 2. le Socle de plus haute valeur · 3. la Force totale des cartes non jouées.
+                {" "}Si tout est égal, les Titans restent ex aequo.
+              </p>
             </div>
           )}
 

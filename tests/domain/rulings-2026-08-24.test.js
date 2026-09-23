@@ -96,7 +96,10 @@ describe("Tête en Avant : en percutant un Titan, l'attaquant prend sa place", (
     // comporter pareil.
     const titans = [
       t(1, "E4"),
-      t(2, "E5", { repaire: ["bleu"] }), // 1 seule couleur : pas de DIL possible, aucune décision à trancher
+      // 1 seule couleur : depuis le 2026-09-23 elle ouvre un Dilemme (perte au
+      // sol, cf. rulings-2026-09-23), mais ce test ne tranche aucune décision —
+      // seul le déplacement compte ici.
+      t(2, "E5", { repaire: ["bleu"] }),
     ];
     resolveTeteEnAvant(1, 0, 1, 0, { board: {}, titans, looseBlocks: {}, replis: [] });
 

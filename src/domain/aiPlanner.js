@@ -53,6 +53,7 @@ import {
   ADRENALINE_OPTION,
   CARD_FORCE,
   SOCLE_OPTION,
+  seuilOptionsDil,
   retirerSocleAuSort,
   socleMarker,
   PORTEE_BOING_BOING,
@@ -733,7 +734,12 @@ function paireSelonModele(ev, d) {
   // l'oublier ferait renoncer l'IA à un Dilemme légal.
   if (presentes.length === 0 && compteCouleur(defenseur.repaire, "vert") > 0) presentes.push("vert");
   if ((defenseur.socles || []).length > 0) presentes.push(OPTION_SOCLE);
-  if (presentes.length < 2) return null; // DIL structurellement impossible
+  // DIL structurellement impossible sous le seuil de la carte (2 pour Faut Pas
+  // Me Chauffer, 1 pour les Dilemmes au sol depuis le 2026-09-23).
+  if (presentes.length < seuilOptionsDil(d.cardLabel)) return null;
+  // Une seule option : rien à désigner, c'est elle (la cible peut encore
+  // payer, cf. `reponseSelonModele`, qui lit une paire d'un seul élément).
+  if (presentes.length === 1) return [presentes[0]];
 
   const gagneAttaquant = d.destination === "repaire";
   let paire = null;
@@ -997,8 +1003,15 @@ export function trancherReplisIA(liste, etat, profilDe, estIA) {
        mêmes destinations pour le même élément sont indiscernables, et
        répondre à la seconde ne peut qu'écraser la première. On dédoublonne
        donc aussi sur l'ensemble des cases offertes. */
-    const signature = `${r.titanId ?? "debris"}@${r.defaut}`;
-    const signatureCases = `${r.titanId ?? "debris"}#${[...r.cases].sort().join(",")}`;
+    /* L'ÉLÉMENT, PAS SA NATURE (Nikola, 2026-09-22). Un débris se nommait
+       « debris » tout court : deux blocs DISTINCTS arrêtés sur la même case
+       se confondaient, et une tour de 3 percutée contre un bâtiment ne
+       laissait placer qu'un seul de ses débris. Un débris est désormais
+       identifié par son vol (`eltId`, cf. `nouvelIdElement`). Sans identité
+       — une demande construite ailleurs — on garde l'ancienne clé. */
+    const element = r.titanId != null ? `titan${r.titanId}` : `debris${r.eltId ?? ""}`;
+    const signature = `${element}@${r.defaut}`;
+    const signatureCases = `${element}#${[...r.cases].sort().join(",")}`;
     if (dejaVu.has(signature) || dejaVu.has(signatureCases)) continue;
     dejaVu.add(signature);
     dejaVu.add(signatureCases);

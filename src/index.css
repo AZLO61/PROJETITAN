@@ -132,6 +132,11 @@ body {
      colonne et ne pas danser quand un score passe de 9 à 10. */
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
+  /* Le navigateur ne décale plus la page tout seul quand un bandeau s'ouvre
+     au-dessus de ce qu'on regarde : c'est le jeu qui tient sa mise en page
+     (Nikola, 2026-09-23 : « dès que quelque chose apparaît ou disparaît, ça
+     bouge l'écran »). */
+  overflow-anchor: none;
 }
 
 #root {
@@ -305,7 +310,7 @@ button {
 @media (max-width: 560px) {
   .titan-grid {
     grid-template-columns: 14px 14px repeat(9, minmax(26px, 1fr)) 14px !important;
-    grid-template-rows: 14px 14px repeat(9, auto) 14px !important;
+    grid-template-rows: 14px repeat(9, auto) 14px 14px !important;
     gap: 1px !important;
   }
 }
@@ -313,14 +318,23 @@ button {
 @media (max-width: 380px) {
   .titan-grid {
     grid-template-columns: 11px 11px repeat(9, minmax(24px, 1fr)) 11px !important;
-    grid-template-rows: 11px 11px repeat(9, auto) 11px !important;
+    grid-template-rows: 11px repeat(9, auto) 11px 11px !important;
   }
 }
 
 @media (min-width: 561px) and (max-width: 900px) {
   .titan-grid {
     grid-template-columns: 18px 16px repeat(9, minmax(30px, 1fr)) 18px !important;
-    grid-template-rows: 16px 18px repeat(9, auto) 18px !important;
+    grid-template-rows: 18px repeat(9, auto) 18px 16px !important;
+  }
+}
+
+/* Sous 900 px, les gouttières sont figées ci-dessus, symétriques : le plateau
+   est carré, l'écart que RoundPanels corrige quand une gouttière s'ouvre
+   n'existe pas. */
+@media (max-width: 900px) {
+  .titan-plateau-borne {
+    --ecart-gouttieres: 0px !important;
   }
 }
 
@@ -385,7 +399,11 @@ button {
        reprend donc la part que la bande lui prenait. La colonne de droite
        garde son plancher de 360 px : c'est la largeur en dessous de laquelle
        une carte jouable devient trop étroite pour être lue. */
-    grid-template-columns: minmax(0, 1.7fr) minmax(360px, 0.75fr);
+    /* 1,6 / 0,8 depuis le 2026-09-22 (au lieu de 1,7 / 0,75) : le plateau est
+       désormais borné par la HAUTEUR de la fenêtre, pas par cette colonne. Ce
+       qu'elle cède au-delà ne lui coûtait rien, et rend à la colonne des
+       Titans les 30 px qui faisaient passer « Annuler » à la ligne. */
+    grid-template-columns: minmax(0, 1.6fr) minmax(360px, 0.8fr);
     align-items: start;
     gap: var(--sp-5);
   }
@@ -415,5 +433,21 @@ button {
   .titan-layout__aside {
     align-self: start;
     padding-right: var(--sp-1);
+  }
+}
+
+/* ── LA RANGÉE DU HAUT ──────────────────────────────────────
+   Nikola, 2026-09-22 : titre et commandes au-dessus du plateau, Phase et vues
+   au-dessus des Titans. Elle reprend la grille de `.titan-layout` (la classe
+   est posée sur le même élément), mais aligne ses deux moitiés sur leur
+   ligne de base commune au lieu du haut, et se serre quand elle s'empile. */
+.titan-entete {
+  align-items: end;
+  row-gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+@media (min-width: 1100px) {
+  .titan-entete {
+    align-items: end;
   }
 }

@@ -328,7 +328,7 @@ export default function TitanResourceBand({
                  Titan avait changé de couleur. */
               border: `${T.edgeW} solid ${isSelected || isActive ? tc.accent : T.edge}`,
               borderRadius: T.rPlate,
-              padding: `${T.s1} 9px 8px`,
+              padding: `${T.s1} 9px 6px`,
               /* LE SEUL ÉLÉMENT EN RELIEF DE L'ÉCRAN. */
               boxShadow: isActive
                 ? `0 5px 0 -1px ${T.edge}, 0 10px 20px rgba(0,0,0,.5)`
@@ -359,7 +359,7 @@ export default function TitanResourceBand({
             />
 
             {/* ── Identité ── */}
-            <div style={{ display: "flex", alignItems: "center", gap: T.s2, marginTop: 6, marginBottom: T.s2 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: T.s2, marginTop: 5, marginBottom: 5 }}>
               <TitanIcon titanId={t.id} size={30} variant="plain" />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div
@@ -463,7 +463,11 @@ export default function TitanResourceBand({
               )}
             </div>
 
-            <hr style={{ height: 1, background: T.rule, border: "none", margin: `${T.s2} 0` }} />
+            {/* 5 px et non 8 de part et d'autre (2026-09-22), comme les autres
+                marges de la plaque : quatre plaques en deux rangées, et la
+                colonne doit laisser la place au panneau du tour sous elles,
+                dans la hauteur de la fenêtre. */}
+            <hr style={{ height: 1, background: T.rule, border: "none", margin: "5px 0" }} />
 
             {/* ── Les deux pistes, comparées à la table ── */}
             <div style={{ display: "grid", gap: 5 }}>
@@ -483,7 +487,7 @@ export default function TitanResourceBand({
             <div
               style={{
                 display: "flex", gap: T.s2, flexWrap: "wrap", alignItems: "center",
-                marginTop: T.s2, minHeight: 20,
+                marginTop: 5, minHeight: 20,
               }}
             >
               {/* Cartes de la Manche : 3 rectangles, pleins au départ, qui se

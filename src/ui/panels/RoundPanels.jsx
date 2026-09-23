@@ -75,7 +75,7 @@ function eclatBloc(couleur) {
   return BLOC_SANS_RETOUCHE.has(couleur) ? hex : eclaircir(hex, ECLAT_2D);
 }
 
-export default function RoundPanels({ vm }) {
+export default function RoundPanels({ vm, entete = null }) {
   // Bug remonté : quand une case cumule 2 débris DIFFÉRENTS (ex. bloc rose
   // + socle, ou bloc bleu + bloc rouge), cliquer "Ramasser" prenait
   // toujours le dernier empilé sans jamais laisser le joueur choisir.
@@ -119,6 +119,20 @@ export default function RoundPanels({ vm }) {
      débris on dessine par case, et à quelle taille l'icône d'un Titan en
      attente tient dans sa gouttière. Deux réglages, une seule mesure. */
   const ecranEtroit = useEcranEtroit();
+  /* La ligne d'infos passe sur deux lignes quand le plateau est étroit : sa
+     hauteur réelle entre dans le calcul de la place du plateau (cf. plus bas,
+     `largeurMax`). Une valeur supposée le faisait déborder de 5 px. */
+  const infosRef = React.useRef(null);
+  const [infosH, setInfosH] = React.useState(28);
+  React.useLayoutEffect(() => {
+    const el = infosRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const mesurer = () => setInfosH(Math.ceil(el.getBoundingClientRect().height));
+    mesurer();
+    const ro = new ResizeObserver(mesurer);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [vm.show3D]);
   const DEBRIS_DESSINES = ecranEtroit ? 2 : 3;
   const TAILLE_DEBRIS = ecranEtroit ? 15 : 17;
   /* Une seconde d'arret volontaire avant que la fiche d'un batiment ne
@@ -459,6 +473,7 @@ export default function RoundPanels({ vm }) {
 
 
       {/* ── VUE 3D ── */}
+      {show3D && entete && <div style={{ marginBottom: 6 }}>{entete}</div>}
       {show3D && (
         <div style={{ marginBottom: 14 }}>
           <Suspense fallback={
@@ -720,9 +735,42 @@ export default function RoundPanels({ vm }) {
            quand même : sous 1100 px la grille redevient une pile, et
            `minmax(30px, 1fr)` laisse la case rétrécir librement — 68 est un
            plafond, jamais une largeur imposée. */
-        const CASE_MAX = 68;
+        /* PLAFOND RELEVÉ À 84 PX, ET BORNÉ PAR LA HAUTEUR — Nikola, 2026-09-22 :
+           « grandis le plateau un peu, mais que tout soit lisible en pleine page
+           à partir du dessous de la ligne qui sépare le titre ».
+
+           Le plateau est carré à quelques pixels près (mêmes pistes de repères
+           et de gouttières sur les deux axes) : sa largeur maximale vaut donc
+           aussi sa hauteur. On la borne par ce qui reste de la fenêtre, moins
+           la zone des bandeaux (`--bandeau-h`, mesurée par GameView) et
+           `RESERVE_BAS` : la ligne d'infos (mesurée, `infosH`), son écart au
+           plateau (6), l'écart laissé sous la ligne de la rangée du haut (4)
+           et le rembourrage bas du meuble (12). Sur un écran assez haut, c'est
+           le plafond de 84 px qui décide ; sur un écran bas, c'est la fenêtre.
+
+           La rangée du haut n'est PLUS retranchée (Nikola, 2026-09-23 : « que
+           le reste soit ajusté au maximum de l'écran ») : elle est cachée
+           au-dessus de l'écran, la place qu'on lui gardait restait vide sous
+           le plateau.
+
+           UN TITAN HORS DU PLATEAU NE DOIT RIEN COUPER (Nikola, 2026-09-23).
+           « Carré à quelques pixels près » cessait d'être vrai dès qu'une
+           gouttière s'ouvrait : un Titan qui attend EN BAS ajoute 22 px à la
+           HAUTEUR sans rien changer à la largeur, et c'est la largeur qu'on
+           borne — la ligne des numéros passait sous le bord de l'écran. Les
+           deux axes ont le même nombre de pistes et d'écarts, donc
+           hauteur = largeur − (gauche + droite) + (haut + bas) : l'écart est
+           corrigé ici (`--ecart-gouttieres`). Sous 900 px, la feuille de
+           style fige des gouttières symétriques et remet cet écart à zéro. */
+        const CASE_MAX = 84;
+        const RESERVE_BAS = infosH + 22;
+        const ecartGouttieres = piste("gauche") + piste("droite") - piste("haut") - piste("bas");
+        const largeurMax = `min(${piste("gauche") + 18 + piste("droite") + 9 * CASE_MAX + 12 * 2}px, calc(100dvh - var(--bandeau-h, 0px) - ${RESERVE_BAS}px + var(--ecart-gouttieres)))`;
         return (
-      <div className="titan-grid" style={{
+      <>
+      {entete && <div ref={infosRef} className="titan-plateau-borne" style={{ "--ecart-gouttieres": `${ecartGouttieres}px`, maxWidth: largeurMax, margin: "0 auto 6px" }}>{entete}</div>}
+      <div className="titan-grid titan-plateau-borne" style={{
+        "--ecart-gouttieres": `${ecartGouttieres}px`,
         display: "grid",
         /* REPÈRES SYMÉTRIQUES — Nikola, 2026-08-28 : « soit ABCDEFGHI est trop
            collé au plateau, soit les chiffres sont trop éloignés ». Les deux, en
@@ -733,18 +781,12 @@ export default function RoundPanels({ vm }) {
            des deux côtés : même écart au plateau, quelle que soit l'axe. */
         gridTemplateColumns: `18px ${piste("gauche")}px repeat(9, minmax(30px, 1fr)) ${piste("droite")}px`,
         gridAutoRows: "auto",
-        gridTemplateRows: `18px ${piste("haut")}px repeat(9, auto) ${piste("bas")}px`,
-        gap: 2, marginBottom: 14,
-        maxWidth: piste("gauche") + 18 + piste("droite") + 9 * CASE_MAX + 12 * 2,
+        gridTemplateRows: `${piste("haut")}px repeat(9, auto) ${piste("bas")}px 18px`,
+        gap: 2, marginBottom: 0,
+        maxWidth: largeurMax,
         marginLeft: "auto", marginRight: "auto",
         overflowX: "auto",
       }}>
-        {/* Ligne des numéros de colonne */}
-        <div /><div />
-        {[1,2,3,4,5,6,7,8,9].map((c) => (
-          <div key={c} style={{ display: "grid", placeItems: "center", ...readout(T.micro, T.dim) }}>{c}</div>
-        ))}
-        <div />
         {/* Gouttière haute : attente au-dessus de la ligne A */}
         <div /><div />
         {[1,2,3,4,5,6,7,8,9].map((c) => <Gouttiere key={`haut${c}`} cle={`A${c}`} zone="haut" />)}
@@ -1072,14 +1114,21 @@ export default function RoundPanels({ vm }) {
                   {moveIsTeleport && (
                     <span style={{ position: "absolute", top: 1, right: 2, fontSize: "8px", opacity: .8 }}>🌀</span>
                   )}
+                  {/* EN HAUT AU CENTRE (Nikola, 2026-09-23) : en haut à
+                      gauche, la pastille recouvrait le nombre de débris au
+                      sol. Les quatre coins sont pris (débris, traînée, Socle
+                      ou étages, tas dessiné) ; le milieu du haut est libre.
+                      Grossie le même jour (« grossis un peu les numéros des
+                      cases de saut ») : 13 → 19 px, sauf sur téléphone où la
+                      case n'en fait que 26. */}
                   {bbNumeroSaut > 0 && (
                     <span
                       title={`Saut ${bbNumeroSaut} sur ${bbMaxRange}`}
                       style={{
-                        position: "absolute", top: 1, left: 2,
-                        minWidth: 13, height: 13, borderRadius: "50%",
+                        position: "absolute", top: 1, left: "50%", transform: "translateX(-50%)", zIndex: 6,
+                        minWidth: ecranEtroit ? 14 : 19, height: ecranEtroit ? 14 : 19, borderRadius: "50%",
                         background: "#16E08C", color: "#04240f",
-                        fontSize: "9px", fontWeight: 900, lineHeight: "13px",
+                        fontSize: ecranEtroit ? "10px" : "13px", fontWeight: 900, lineHeight: ecranEtroit ? "14px" : "19px",
                         textAlign: "center", padding: "0 2px",
                         boxShadow: "none",
                       }}
@@ -1400,7 +1449,15 @@ export default function RoundPanels({ vm }) {
         <div /><div />
         {[1,2,3,4,5,6,7,8,9].map((c) => <Gouttiere key={`bas${c}`} cle={`I${c}`} zone="bas" />)}
         <div />
+        {/* Ligne des numéros de colonne, SOUS le plateau (Nikola, 2026-09-22) :
+            au-dessus, elle creusait un vide sous la zone des cartes. */}
+        <div /><div />
+        {[1,2,3,4,5,6,7,8,9].map((c) => (
+          <div key={c} style={{ display: "grid", placeItems: "center", ...readout(T.micro, T.dim) }}>{c}</div>
+        ))}
+        <div />
       </div>
+      </>
         );
       })()}
 

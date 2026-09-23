@@ -319,6 +319,12 @@ function countColorOnBoard(color, board, looseBlocks) {
   return total;
 }
 
+// Pénurie : la partie s'arrête quand une couleur tombe à ce nombre de blocs
+// ou moins sur le plateau (bâtiments + sol). 0 = la règle du livret V36.2.
+// Nikola, 21/09 : la Pénurie ne mord presque jamais (masquée par la dernière
+// Manche) — seuil à 2 en cours de mesure, NON adopté.
+const SEUIL_PENURIE = 0;
+
 function countActiveTeleporters(board) {
   return Object.values(board).filter((b) => b.isTeleporter && b.blocks.length > 0).length;
 }
@@ -342,7 +348,7 @@ function checkEndGameTriggers(board, looseBlocks, apocalypseThreshold, mancheNum
     reasons.push(`🏙️ Apocalypse Urbaine : ${standing} bâtiment(s) encore debout (seuil ${apocalypseThreshold}).`);
   }
   COULEURS.forEach((color) => {
-    if (countColorOnBoard(color, board, looseBlocks) === 0) {
+    if (countColorOnBoard(color, board, looseBlocks) <= SEUIL_PENURIE) {
       reasons.push(`📦 Pénurie : plus aucun bloc ${color} disponible sur le plateau.`);
     }
   });
@@ -1277,24 +1283,58 @@ function basculerAmasDansLAxe(cellKey, dr, dc, ctx) {
   const ejectes = [...pile];
   delete looseBlocks[cellKey];
 
+  /* ── LA TOUR TOMBE D'UN SEUL COUP ──
+     Nikola, 2026-09-22 : une tour de 3 percutée contre un bâtiment, « 2 débris
+     sont restés collés alors que j'aurais dû avoir le choix de placement ».
+
+     Chaque débris était POSÉ avant que le suivant ne parte. Le sommet, arrêté
+     par le bâtiment en F4, y attendait donc le débris d'en dessous — qui s'y
+     empilait (« le béton s'empile ») sans jamais atteindre le mur, et donc
+     sans le choix de repli que le mur lui aurait donné. Les débris d'une même
+     tour ne se rencontrent pas en tombant : on calcule toutes les
+     trajectoires, PUIS on pose.
+
+     La pose se fait du bas de la tour vers le haut : un repli déplace le
+     débris au SOMMET de sa case par défaut (`appliquerReplElement`), et la
+     file les sert dans l'ordre où ils ont été déposés, sommet d'abord. */
+  const arrivees = [];
   for (let i = ejectes.length - 1; i >= 0; i--) {
     const bloc = ejectes[i];
     const hauteur = i + 1;
     const landing = projectInDirection(row, col, dr, dc, hauteur, { ...ctx, movingTitanId: null });
-    const landingKey = landing.row + landing.col;
-    poserDebrisAuSol(looseBlocks, landingKey, bloc);
+    arrivees[i] = landing.row + landing.col;
     log.push(
-      `${cellKey} : le tas bascule dans l'axe — bloc ${bloc} (hauteur ${hauteur}) part vers ${landingKey}` +
+      `${cellKey} : le tas bascule dans l'axe — bloc ${bloc} (hauteur ${hauteur}) part vers ${arrivees[i]}` +
         (landing.hasBounced ? " (après rebond)" : "")
     );
   }
+  ejectes.forEach((bloc, i) => poserDebrisAuSol(looseBlocks, arrivees[i], bloc));
   return true;
 }
+
+/* ── CHAQUE ÉLÉMENT EN VOL A UNE IDENTITÉ ──
+   Nikola, 2026-09-22 : une tour de 3 débris percutée contre un bâtiment ne
+   lui laissait placer qu'UN débris, « 2 sont restés collés ». Les deux
+   débris arrêtés déposaient chacun leur repli, mais la file les dédoublonne
+   par élément (`trancherReplisIA`) — et un débris n'avait pas d'autre nom que
+   « debris ». Deux blocs distincts arrêtés sur la même case étaient donc pris
+   pour un seul élément compté deux fois.
+
+   Un appel de `projectInDirection` = le vol d'UN élément : il reçoit ici son
+   identité, que portent tous les replis qu'il dépose. Seul le ricochet la
+   choisit à l'avance, pour que le repli qu'il dépose et celui de la
+   trajectoire du bloc cassé désignent bien le même bloc. */
+let compteurElements = 0;
+const nouvelIdElement = () => ++compteurElements;
 
 function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
   // ctx = { board, looseBlocks, titans, log? } — log est optionnel : si
   // fourni (tableau du resolver appelant), les messages de chaîne s'y
   // ajoutent directement ; sinon un tableau jetable est utilisé.
+  const eltId = ctx.eltId ?? nouvelIdElement();
+  // Les vols déclenchés depuis celui-ci sont d'autres éléments : l'identité
+  // ne se transmet pas par le `{ ...ctx }` des réactions en chaîne.
+  ctx = { ...ctx, eltId: undefined };
   const { board, looseBlocks, titans } = ctx;
   const log = ctx.log || [];
 
@@ -1578,7 +1618,10 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
         // movingTitanId, sans quoi l'identité de l'élément projeté par
         // l'appel parent fuiterait dans la chaîne et ferait disparaître ce
         // Titan de la carte des obstacles pour toute la réaction.
-        const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remaining - 1, { ...ctx, movingTitanId: null, enChaine });
+        // Le bloc cassé est UN élément : son vol et le repli déposé plus bas
+        // partagent son identité (cf. `nouvelIdElement`).
+        const idBrise = nouvelIdElement();
+        const pushed = projectInDirection(rowFromIndex(nr), nc, curDr, curDc, remaining - 1, { ...ctx, movingTitanId: null, enChaine, eltId: idBrise });
         const pushedKey = pushed.row + pushed.col;
         poserDebrisAuSol(looseBlocks, pushedKey, broken);
 
@@ -1616,6 +1659,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
           if (choix.length > 1) {
             ctx.replis.push({
               titanId: null,
+              eltId: idBrise,
               defaut: pushedKey,
               cases: choix,
               cible: impactKey,
@@ -2185,6 +2229,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
   if (repliOptions && Array.isArray(ctx.replis)) {
     const depose = {
       titanId: ctx.movingTitanId ?? null,
+      eltId,
       defaut: arrivee,
       cases: repliOptions.cases,
       cible: repliOptions.cible,
@@ -2526,10 +2571,10 @@ function resolveToutCasserTitans(titanId, gameState, adrenalineBonus = 0, percus
        celle-ci. */
     if (!seuil4) {
       log.push(`${key} : Titan ${targetId} bousculé (énergie ${energie} < Seuil 4) — déplacement et Bagarre, aucun vol.`);
-    } else if (canDil(targetId, gameState)) {
+    } else if (canDil(targetId, gameState, "Tout Casser")) {
       decisions.push(makeDecisionRequest("DIL", titanId, targetId, "Tout Casser", caseAvant));
     } else {
-      log.push(`${key} : DIL impossible sur Titan ${targetId} (< 2 options distinctes en Repaire).`);
+      log.push(`${key} : DIL impossible sur Titan ${targetId} (rien à lui faire perdre).`);
     }
 
     // Plus de RAGE sur cette carte : au-dessus du seuil c'est un Dilemme, en
@@ -2867,10 +2912,10 @@ function resolveTeteEnAvant(titanId, dr, dc, useAdrenaline, gameState) {
         } else {
           log.push(`${key} : RAGE sans effet sur Titan ${occupantId} (aucune ressource à prendre).`);
         }
-      } else if (canDil(occupantId, gameState)) {
+      } else if (canDil(occupantId, gameState, "Tête en Avant")) {
         decisions.push(makeDecisionRequest("DIL", titanId, occupantId, "Tête en Avant", key));
       } else {
-        log.push(`${key} : DIL impossible sur Titan ${occupantId} (< 2 couleurs différentes en Repaire).`);
+        log.push(`${key} : DIL impossible sur Titan ${occupantId} (rien à lui faire perdre).`);
       }
       log.push(`${key} : Titan ${occupantId} percuté (${mode}, énergie ${energie}).`);
       // Ruling Nikola (2026-08-15) : une bagarre qui n'est pas remportée ne
@@ -3102,7 +3147,7 @@ function resolveGraouhhhMoveTitan(titanId, targetId, gameState, dr, dc, reculDis
   // plus dans le calcul (cf. resolveToutCasserTitans).
   bagarreSet.add(targetId);
   const fatigue = resolveFatigue(titanId, targetId, mancheNumber, titans);
-  const dilOk = canDil(targetId, gameState);
+  const dilOk = canDil(targetId, gameState, "Graouhhh");
   /* La Fatigue remonte à l'appelant dès qu'elle est REFUSABLE : c'est la cible
      qui décide si elle paie 1 Adrénaline pour récupérer sa carte (ruling du
      2026-08-28), et le résolveur n'a personne à qui demander. */
@@ -3110,7 +3155,7 @@ function resolveGraouhhhMoveTitan(titanId, targetId, gameState, dr, dc, reculDis
     ? [{ attackerId: titanId, targetId, cardId: fatigue.cardId, cardLabel: "Graouhhh" }]
     : [];
   log.push(
-    `Titan ${targetId} touché → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${dilOk ? "DIL en attente" : "DIL impossible (< 2 couleurs différentes en Repaire)"} · recule de ${reculDistance} case(s) → ${occupant.cell}` +
+    `Titan ${targetId} touché → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${dilOk ? "DIL en attente" : "DIL impossible (rien à lui faire perdre)"} · recule de ${reculDistance} case(s) → ${occupant.cell}` +
       (landing.hasBounced ? " (après rebond)" : "")
   );
   return { log, bagarreIds: [...bagarreSet], fatigues };
@@ -3213,7 +3258,7 @@ function advanceGraouhhh(gameState, payload) {
   while (remaining.length > 0) {
     const targetId = remaining[0];
     const rest = remaining.slice(1);
-    const dilOk = canDil(targetId, gameState);
+    const dilOk = canDil(targetId, gameState, "Graouhhh");
     if (dilOk) {
       const caseAvant = gameState.titans.find((x) => x.id === targetId).cell;
       return {
@@ -3270,7 +3315,7 @@ function resolveGraouhhh(titanId, dr, dc, mancheNumber, gameState) {
   for (let i = scan.touched.length - 1; i >= 0; i--) {
     const t = scan.touched[i];
     const caseAvant = gameState.titans.find((x) => x.id === t.id).cell;
-    const dilOk = canDil(t.id, gameState);
+    const dilOk = canDil(t.id, gameState, "Graouhhh");
     if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, t.id, "Graouhhh", caseAvant));
     const step = resolveGraouhhhMoveTitan(titanId, t.id, gameState, dr, dc, scan.reculDistance, mancheNumber);
     log.push(...step.log);
@@ -3884,7 +3929,7 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
        à 2 cases en RAGE en demande 2, à 3 cases en demande 3. La carte ne
        devient forte que si on la paie. */
     const rageOk = seuil4 && canRage(occupantId, gameState);
-    const dilOk = !seuil4 && canDil(occupantId, gameState);
+    const dilOk = !seuil4 && canDil(occupantId, gameState, "Boing Boing");
     if (rageOk) decisions.push(makeDecisionRequest("RAGE", titanId, occupantId, "Boing Boing", destKey));
     else if (dilOk) decisions.push(makeDecisionRequest("DIL", titanId, occupantId, "Boing Boing", destKey));
     const fatigue = resolveFatigue(titanId, occupantId, mancheNumber, titans);
@@ -3895,7 +3940,7 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
     titan.bagarre += bagarreSet.size;
     const verdict = seuil4
       ? (rageOk ? "RAGE en attente" : "RAGE sans effet (aucune ressource à prendre)")
-      : (dilOk ? "DIL en attente" : "DIL impossible (< 2 couleurs différentes en Repaire)");
+      : (dilOk ? "DIL en attente" : "DIL impossible (rien à lui faire perdre)");
     log.push(
       `${destKey} : Titan ${occupantId} percuté (énergie ${energie}${seuil4 ? ", Seuil 4" : ""}) → ${fatigue.ok ? fatigue.log : `Fatigue impossible (${fatigue.reason})`} · ${verdict} · +${bagarreSet.size} Bagarre (Titan ${titanId} → ${titan.bagarre}, FAQ #12) · projeté de ${sautRestant} case(s), le saut restant, vers ${target.cell}` +
         (landing.hasBounced ? " (après rebond)" : "")
@@ -4215,6 +4260,9 @@ function canRage(defenderId, gameState) {
 // quand DIL est impossible » : il n'y en a pas. Quand la cible n'a pas
 // 2 couleurs différentes en Repaire, l'action est simplement notée au
 // journal et ne produit aucun effet. Le point est clos.
+// ⚠️ Rouvert le 2026-09-23 pour les Dilemmes au sol : une seule option suffit
+// désormais (cf. `seuilOptionsDil`). Le « sans effet » ne vaut plus que pour
+// une cible qui n'a RIEN, ou pour Faut Pas Me Chauffer sous deux options.
 /* ============================================================
    OPTIONS D'UN DILEMME — couleurs ET socle
    ============================================================
@@ -4295,9 +4343,10 @@ function getDilOptions(defenderId, gameState) {
      faisait croire à un arbitrage qui n'en était pas un.
 
      Ce que la règle du 2026-09-03 cherchait à corriger — une cible à
-     1 couleur qui ne perdait jamais rien — reste ouvert et se referme par
-     l'autre bout : l'Adrénaline sert de DÉFENSE, une cible qui en a une s'en
-     sort en la payant, une cible qui n'en a pas subit le Dilemme.
+     1 couleur qui ne perdait jamais rien — est refermé le 2026-09-23 par
+     `seuilOptionsDil` : sur un Dilemme au sol, cette cible lâche sa seule
+     option, sauf à payer 1 Adrénaline. L'Adrénaline reste une DÉFENSE, pas
+     une option.
 
      La RAGE, elle, garde l'Adrénaline pour cible : FAQ #5, « une RAGE peut
      prendre une Adrénaline plutôt qu'un bloc ». C'est justement l'écart qui la
@@ -4306,11 +4355,41 @@ function getDilOptions(defenderId, gameState) {
   return options;
 }
 
-function canDil(defenderId, gameState) {
+/* ── UN SEUL ÉLÉMENT SUFFIT QUAND LA PERTE TOMBE AU SOL ──
+   Ruling Nikola du 2026-09-23, qui referme le point laissé ouvert le
+   2026-09-07 (« une cible à 1 couleur ne perdait jamais rien ») : « comme
+   c'est une perte sur sa case, oui, il le laisse tomber au DIL ». Portée
+   tranchée le même jour : TOUS les Dilemmes dont la perte tombe au sol —
+   Tout Casser, Tête en Avant, Graouhhh, Boing Boing. La cible qui n'a qu'une
+   option la lâche sur sa case ; l'attaquant n'a rien à désigner, et elle
+   garde sa défense : payer 1 Adrénaline à la place.
+
+   Faut Pas Me Chauffer n'en est pas : son Dilemme envoie la perte dans le
+   Repaire de l'attaquant (cf. DESTINATION_BLOC_PERDU), ce n'est pas une
+   perte « sur sa case ». Il garde ses deux options minimum.
+
+   Le seuil suit donc la destination de la carte, et pas une liste de noms :
+   une carte qui passerait un jour son Dilemme au sol en hériterait seule.
+   Sans carte nommée, c'est l'ancien seuil qui tient : `destinationBlocPerdu`
+   répond « sol » par défaut, et un appelant qui oublierait la carte
+   ouvrirait sinon des Dilemmes que FPMC n'autorise pas. */
+function seuilOptionsDil(cardLabel) {
+  if (!cardLabel) return 2;
+  return destinationBlocPerdu(cardLabel, "DIL") === "sol" ? 1 : 2;
+}
+
+function canDil(defenderId, gameState, cardLabel) {
   // Anciennement `new Set(t.repaire).size >= 2` : ni les Socles (2026-08-17)
   // ni l'Adrénaline (2026-09-03) n'entraient dans le compte, donc une cible
   // « 1 couleur + autre chose » était immunisée à tort.
-  return getDilOptions(defenderId, gameState).length >= 2;
+  return getDilOptions(defenderId, gameState).length >= seuilOptionsDil(cardLabel);
+}
+
+/* Combien d'options l'attaquant désigne : deux, ou la seule que la cible
+   possède (Dilemme au sol, 2026-09-23). Lu par le contrôleur ET par le
+   bandeau, pour que « Valider » s'active exactement quand le moteur accepte. */
+function optionsADesigner(defenderId, gameState) {
+  return Math.min(2, getDilOptions(defenderId, gameState).length);
 }
 
 /* Retire un Socle AU HASARD du Repaire de la cible et le renvoie sous forme
@@ -5457,10 +5536,10 @@ function resolveFautPasMeChauffer(attackerId, defenderId, nTargets, gameState, {
     } else {
       log.push(`RAGE sans effet sur Titan ${defenderId} (aucune ressource à prendre).`);
     }
-  } else if (canDil(defenderId, gameState)) {
+  } else if (canDil(defenderId, gameState, "Faut Pas Me Chauffer")) {
     decisions.push(makeDecisionRequest("DIL", attackerId, defenderId, "Faut Pas Me Chauffer", caseAvant));
   } else {
-    log.push(`DIL impossible sur Titan ${defenderId} (< 2 couleurs différentes en Repaire).`);
+    log.push(`DIL impossible sur Titan ${defenderId} (< 2 options distinctes en Repaire).`);
   }
 
   log.push(
@@ -5814,6 +5893,7 @@ export {
   isBuildingCell,
   countStandingBuildings,
   countColorOnBoard,
+  SEUIL_PENURIE,
   countActiveTeleporters,
   checkEndGameTriggers,
   manchesMax,
@@ -5868,6 +5948,8 @@ export {
   resolveEcroulementAmas,
   canRage,
   canDil,
+  seuilOptionsDil,
+  optionsADesigner,
   SOCLE_OPTION,
   ADRENALINE_OPTION,
   getDilOptions,

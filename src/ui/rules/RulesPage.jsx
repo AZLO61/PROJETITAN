@@ -47,7 +47,7 @@ const SECTIONS = [
   { id: "cartes", label: "Les 6 Cartes Actions", icon: "card" },
   { id: "transversales", label: "Règles transversales", icon: "smash" },
   { id: "lexique", label: "Lexique", icon: "eye" },
-  { id: "scoring", label: "Scoring final", icon: "lantern" },
+  { id: "scoring", label: "Scoring final", icon: "trophy" },
   { id: "fin", label: "Fin de partie", icon: "alert" },
 ];
 
@@ -102,7 +102,7 @@ function Badge({ code, color }) {
   );
 }
 
-export default function RulesPage({ onClose }) {
+export default function RulesPage({ onClose, onOuvrirTutoriel = null }) {
   const [section, setSection] = useState("essentiel");
 
   // Échap ferme la page, et le fond ne défile plus derrière la superposition.
@@ -189,6 +189,29 @@ export default function RulesPage({ onClose }) {
               </button>
             );
           })}
+          {/* LE TUTORIEL, EN BAS DU SOMMAIRE (Nikola, 2026-09-22). Il a quitté
+              la rangée de commandes du jeu : c'est ici qu'on vient apprendre,
+              et c'est donc ici qu'on doit trouver la porte courte, sous la
+              longue. Un filet le sépare des sections : il ouvre un autre écran,
+              il ne fait pas défiler celui-ci. */}
+          {onOuvrirTutoriel && (
+            <button
+              onClick={onOuvrirTutoriel}
+              title="Les principes du jeu et les six cartes, en sept écrans"
+              style={{
+                display: "flex", alignItems: "center", gap: 10, width: "100%",
+                background: "transparent",
+                border: "2px solid transparent", borderTop: `2px solid ${T.rule}`,
+                borderRadius: 0,
+                padding: "12px 11px 10px", marginTop: 8, cursor: "pointer",
+                textAlign: "left",
+                ...label(C.muted, T.micro),
+              }}
+            >
+              <Icon name="bolt" size={16} />
+              <span className="rules-nav-label">Tutoriel</span>
+            </button>
+          )}
         </nav>
 
         {/* ── CONTENU ── */}
@@ -422,7 +445,8 @@ function SectionTransversales() {
         <div style={{ marginTop: 10 }}>
           À <strong style={{ color: C.m1 }}>4 ou plus</strong>, tu passes le{" "}
           <strong style={{ color: C.m1 }}>Seuil 4</strong> : c'est lui qui débloque les effets les plus
-          forts (RAGE, Patatras, Écroulement, et la casse d'un bâtiment par ricochet).
+          forts : la RAGE, et la casse d'un bâtiment par ricochet. Un tas de débris, lui, bascule
+          ou s'écroule quelle que soit l'énergie.
         </div>
         <div style={{ marginTop: 10, fontSize: ".85rem", color: C.muted }}>
           1 Adrénaline dépensée peut faire basculer le Seuil au moment décisif.

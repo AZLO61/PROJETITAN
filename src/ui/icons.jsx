@@ -26,12 +26,14 @@ const COULEURS_BLOC = COLOR_HEX;
 
 const P = {
   /* ── Le tour ─────────────────────────────────────────── */
-  // Déplacement : un pas d'une case à l'autre, sur la grille.
+  /* Déplacement : la croix à quatre flèches, le signe universel de « bouger
+     dans n'importe quel sens » — c'est ce que fait le Mouvement gratuit sur la
+     grille. Les deux coins reliés d'avant se lisaient comme « agrandir »
+     (Nikola, 2026-09-23 : « ça ne veut rien dire »). */
   move: (
     <>
-      <path d="M3 20h6v-6" />
-      <path d="M21 4h-6v6" />
-      <path d="M9 14 21 4" />
+      <path d="M12 3v18M3 12h18" />
+      <path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />
     </>
   ),
   // Carte d'action : la carte programmée, coin corné.
@@ -42,11 +44,14 @@ const P = {
       <path d="M9 13h6M9 17h4" />
     </>
   ),
-  // Ramassage : la pince du Titan qui referme sur un bloc au sol.
+  /* Ramassage : la pince de la borne à peluches — câble, tête, deux mâchoires
+     refermées sur un bloc. Les deux traits et le carré d'avant ne se lisaient
+     pas comme une pince (Nikola, 2026-09-23 : « ne ressemble à rien »). */
   grab: (
     <>
-      <path d="M4 4v6l4 3M20 4v6l-4 3" />
-      <rect x="9" y="14" width="6" height="6" />
+      <path d="M12 2v5M7 7h10" />
+      <path d="M8 7l-3 5 3 5M16 7l3 5-3 5" />
+      <rect x="9.5" y="12" width="5" height="5" />
     </>
   ),
 
@@ -139,6 +144,15 @@ const P = {
       <rect x="5" y="8" width="14" height="11" />
       <path d="M12 4v4M9 13h.01M15 13h.01M9 16h6" />
       <path d="M2 12h3M19 12h3" />
+    </>
+  ),
+  /* Trophée : la coupe, pour le décompte. La lanterne y passait pour une
+     poubelle (Nikola, 2026-09-23). */
+  trophy: (
+    <>
+      <path d="M7 3h10v6a5 5 0 0 1-10 0z" />
+      <path d="M7 5H3v1a4 4 0 0 0 4 4M17 5h4v1a4 4 0 0 1-4 4" />
+      <path d="M12 14v4M8 18h8v3H8z" />
     </>
   ),
   // Lanterne Rouge : le fanal de queue de convoi.
@@ -263,6 +277,32 @@ export default function Icon({ name, size = 18, strokeWidth, style, title }) {
     >
       {title ? <title>{title}</title> : null}
       {d}
+    </svg>
+  );
+}
+
+/** Le haut-parleur du volume : 3, 2 ou 1 onde selon le palier, barré de
+ *  rouge à 0 (Nikola, 2026-09-22). Même trait que le reste du jeu : les ondes
+ *  sont des arcs centrés sur la bouche du haut-parleur, à 40° de part et
+ *  d'autre de l'axe. La barre porte la couleur d'arrêt, pas `currentColor` :
+ *  c'est elle qui dit « muet » d'un coup d'œil. */
+const ONDES = [
+  "M13.7 9.75a3.5 3.5 0 0 1 0 4.5",
+  "M16 7.8a6.5 6.5 0 0 1 0 8.4",
+  "M18.3 5.9a9.5 9.5 0 0 1 0 12.2",
+];
+export function SonIcon({ ondes = 3, size = 18, style }) {
+  const trait = size <= 13 ? 2.6 : size <= 16 ? 2.25 : 2;
+  return (
+    <svg
+      viewBox="0 0 24 24" width={size} height={size} fill="none"
+      stroke="currentColor" strokeWidth={trait} strokeLinecap="square" strokeLinejoin="miter"
+      aria-hidden="true" focusable="false"
+      style={{ flexShrink: 0, display: "block", ...style }}
+    >
+      <path d="M3 9h3l5-4v14l-5-4H3z" />
+      {ONDES.slice(0, ondes).map((d) => <path key={d} d={d} />)}
+      {ondes === 0 && <path d="M3 3l18 18" stroke="var(--sig-stop)" />}
     </svg>
   );
 }

@@ -1,5 +1,31 @@
 # Changelog
 
+## Non publié — retours de table du 2026-09-23 (deux règles, un écran qui ne bouge plus)
+
+### Deux règles
+
+- **Dilemme à une seule option.** « Il n'a rien perdu sur sa case, il n'avait
+  qu'un bloc » : le Dilemme exigeait deux options, une cible à une seule
+  couleur y échappait. Tranché le jour même : sur les quatre cartes dont la
+  perte tombe au sol (Tout Casser, Tête en Avant, Graouhhh, Boing Boing), la
+  cible lâche sa seule option sur sa case — l'attaquant n'a rien à désigner,
+  et elle peut toujours payer 1 Adrénaline à la place. Faut Pas Me Chauffer,
+  dont la perte part chez l'attaquant, garde deux options minimum. Moteur
+  (`seuilOptionsDil`), IA, bandeau, règles de l'application, livret et tests.
+- **Graouhhh ne prend pas d'Adrénaline**, ni en plus ni en moins : le doseur
+  ajouté le 2026-09-01 au panneau humain est retiré. Le moteur, l'IA et le
+  livret l'interdisaient déjà.
+
+### L'écran ne bouge plus à chaque bandeau
+
+Le plateau se dimensionne sur la hauteur de la fenêtre, sous une zone de
+bandeaux tenue pendant toute une séquence de décisions : elle grandit au
+premier bandeau qui ne tient pas, et ne revient qu'une fois toutes les
+décisions tranchées. Un Titan hors du plateau ne coupe plus la ligne des
+numéros (la borne supposait le plateau carré, ce qu'une gouttière ouverte
+démentait). La barre de liaison d'une partie à distance vit dans la même zone
+et ne pousse plus le plateau hors de l'écran.
+
 ## Non publié — trente-quatrième passe du 2026-09-21 (le duel mesure la table, l'IA n'a plus qu'un cerveau)
 
 « J'aimerais encore améliorer le script de test pour que les IA soient encore

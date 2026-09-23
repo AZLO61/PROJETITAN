@@ -25,7 +25,7 @@ const {
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, releverPercussion, listerCiblesToutCasser, resolveToutCasserCase, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
   scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, getJeNePartagePasCount, resolveJeNePartagePasElement, deplacerSiDerniereCaseLibre, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
   appliquerReplElement,
-  canRage, canDil, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
+  canRage, canDil, optionsADesigner, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
   getRecuperationPool, resolveRecuperation, retirerPileVide, programCards, ensureProgrammableHand, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
   resolveFatigue, refuserFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, resolveFautPasMeChauffer, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS,
@@ -590,7 +590,7 @@ export function useBoardGeneratorController() {
     setPassifUsed({});
     setMoveMode(false);
     setRecupMode(false);
-    setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0); setGraouAdrenaline(0);
+    setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0);
     setVolDirection(null); // Phase Repos suivante : le nouveau Détonateur devra rechoisir un sens
     return true; // la partie continue
     // Dépendance sur `state` et non `state.board` : les résolveurs mutent le
@@ -1004,13 +1004,9 @@ export function useBoardGeneratorController() {
   const [jnpNbToPickFrozen, setJnpNbToPickFrozen] = useState(2);
   const [bbMode, setBbMode] = useState(false);
   const [bbAdrenaline, setBbAdrenaline] = useState(0);
-  /* GRAOUHHH SE DOSE COMME LES AUTRES (Nikola, 2026-09-01 : « on peut
-     augmenter de +1 par Adrénaline la projection des Titans avec Graouhhh »).
-     Elle était la seule carte offensive sans doseur : son recul valait
-     « nombre de Titans touchés + 1 », point. Chaque Adrénaline dépensée
-     allonge désormais ce recul d'une case, pour TOUS les Titans de l'axe —
-     c'est une seule poussée, elle a une seule puissance. */
-  const [graouAdrenaline, setGraouAdrenaline] = useState(0);
+  /* GRAOUHHH NE SE DOSE PAS (Nikola, 2026-09-23 : « Graouh ne peut pas avoir
+     de + ou - »). Retour au livret V36 : le recul vaut « Titans touchés + 1 »,
+     sans Adrénaline. Le doseur du 2026-09-01 est retiré. */
   // Chemin cliqué case par case (demande Nikola, 2026-08-18 : « je dois
   // indiquer par plusieurs clics mon chemin »). `bbDest` — la case où la
   // carte atterrit — n'est plus qu'un dérivé : la dernière case du chemin.
@@ -1572,7 +1568,7 @@ export function useBoardGeneratorController() {
     if (reinitialiserInterface) {
       setTeaMode(false);
       setPendingCardConfirm(null);
-      setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0); setGraouAdrenaline(0);
+      setMoveAdrenaline(0); setTeaAdrenaline(0); setTcAdrenaline(0); setBbAdrenaline(0);
       setAnimating(false); setAnimLabel("");
     }
     /* Cf. le commentaire de `instantaneCourant` : inerte pour l'annulation (on
@@ -1748,7 +1744,6 @@ export function useBoardGeneratorController() {
       moveAdrenaline: entier(setMoveAdrenaline),
       teaAdrenaline: entier(setTeaAdrenaline),
       tcAdrenaline: entier(setTcAdrenaline),
-      graouAdrenaline: entier(setGraouAdrenaline),
       progSelection: (v) => {
         if (Array.isArray(v) && v.length <= 3
           && v.every((c) => c && Number.isInteger(c.idx) && typeof c.cardId === "string")) setProgSelection(v);
@@ -2508,7 +2503,6 @@ export function useBoardGeneratorController() {
     setTeaAdrenaline(0);
     setTcAdrenaline(0);
     setBbAdrenaline(0);
-    setGraouAdrenaline(0);
   }, [activePlayerId]);
 
   // ── RETOUR EN JEU D'UN TITAN ÉJECTÉ ──
@@ -3560,7 +3554,7 @@ export function useBoardGeneratorController() {
     const jeuCourant = { titans: curPlayers };
     const impossibles = [];
     const jouables = humanDecisions.filter((d) => {
-      const ok = d.type === "RAGE" ? canRage(d.defenderId, jeuCourant) : canDil(d.defenderId, jeuCourant);
+      const ok = d.type === "RAGE" ? canRage(d.defenderId, jeuCourant) : canDil(d.defenderId, jeuCourant, d.cardLabel);
       if (!ok) impossibles.push(d);
       return ok;
     });
@@ -3588,14 +3582,15 @@ export function useBoardGeneratorController() {
         // distinctes en Repaire, l'attaquant n'a aucun choix à faire — les
         // 2 couleurs qu'il doit désigner sont forcément celles-là. On saute
         // son étape plutôt que de lui faire cliquer une seule option
-        // possible.
+        // possible. Même chose, depuis le 2026-09-23, pour la cible qui n'a
+        // qu'UNE option sur un Dilemme au sol (cf. `seuilOptionsDil`).
         if (!preset && d.type === "DIL") {
           // Options = couleurs du Repaire + « un Socle tiré au sort » le cas
           // échéant. Lire `repaire` seul ratait la combinaison unique
           // « 1 couleur + 1 Socle », et faisait cliquer l'attaquant sur une
           // liste d'un seul élément qu'il ne pouvait pas valider.
           const options = getDilOptions(d.defenderId, { titans: aiTitanStateRef.current.players });
-          if (options.length === 2) preset = options;
+          if (options.length >= 1 && options.length <= 2) preset = options;
         }
 
         /* ⚠️ QUI TRANCHE LE STADE DÉFENSEUR, C'EST LE DÉFENSEUR.
@@ -3810,7 +3805,9 @@ export function useBoardGeneratorController() {
     // retardement pour le jour où quelqu'un l'active pour déboguer).
     // Réécrit en séquence synchrone : on lit, on décide, on mute, on dépile.
     const cur = decisionQueue[0];
-    if (!cur || cur.attackerChoices.length !== 2) return;
+    // Deux options à désigner, ou la seule que la cible possède (Dilemme au
+    // sol, 2026-09-23) — cf. `optionsADesigner`, que le bandeau lit aussi.
+    if (!cur || cur.attackerChoices.length === 0 || cur.attackerChoices.length !== optionsADesigner(cur.defenderId, { titans: titanState.players })) return;
 
     if (!cur.defenderIsAi) {
       setDecisionQueue((prev) => (prev[0] === cur ? [{ ...cur, stage: "DEFENDER_PICK" }, ...prev.slice(1)] : prev));
@@ -4698,32 +4695,17 @@ export function useBoardGeneratorController() {
     setActionLog((prev) => [...prev, ...scan.log]);
     if (scan.touched.length === 0) {
       setActionLog((prev) => [...prev, "Aucun Titan touché sur cet axe."]);
-      // L'Adrénaline n'est PAS débitée : rien n'a été poussé, il n'y a rien
-      // à payer. Même règle que partout ailleurs, la mise suit l'effet.
     } else {
-      /* La mise est plafonnée au stock réel, comme pour Tout Casser et Tête
-         en Avant : le doseur peut afficher une valeur périmée si l'Adrénaline
-         a bougé entre l'ouverture du mode et le clic. */
-      const attaquant = titanState.players.find((t) => t.id === selectedTitanId);
-      const mise = Math.min(Number(graouAdrenaline) || 0, attaquant?.adrenaline || 0);
-      if (mise > 0 && attaquant) {
-        attaquant.adrenaline -= mise;
-        setActionLog((prev) => [...prev,
-          `Graouhhh : ${mise} Adrénaline dépensée${mise > 1 ? "s" : ""} → recul de ${scan.reculDistance + mise} case(s) au lieu de ${scan.reculDistance}.`,
-        ]);
-        setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
-      }
       advanceGraouhhhLoop({
         titanId: selectedTitanId, dr: direction.dr, dc: direction.dc,
-        reculDistance: scan.reculDistance + mise, mancheNumber,
+        reculDistance: scan.reculDistance, mancheNumber,
         remaining: scan.touched.slice().reverse().map((t) => t.id),
         bagarreIds: [], touchedCount: scan.touched.length,
       });
     }
     markCardPlayed(selectedTitanId, "graouhhh");
     setGraouMode(false);
-    setGraouAdrenaline(0);
-  }, [partieId, selectedTitanId, direction, graouAdrenaline, state.board, titanState.players, advanceGraouhhhLoop, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [partieId, selectedTitanId, direction, state.board, titanState.players, advanceGraouhhhLoop, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
 
   /* PORTÉE AFFICHÉE = PORTÉE RÉELLE.
      Deux écarts corrigés ici, tous deux remontés par Nikola le 2026-08-17.
@@ -5941,7 +5923,7 @@ export function useBoardGeneratorController() {
         what: `Decision ${mode} en cours - le reste du jeu est en pause tant qu'elle n'est pas resolue.`,
         you: mode === "RAGE"
           ? "L'attaquant prend 1 ressource dans le Repaire de sa cible."
-          : "L'attaquant designe 2 couleurs differentes, la cible choisit laquelle elle perd (ou paie 1 Adrenaline pour annuler).",
+          : "L'attaquant designe 2 options (ou la seule que la cible possede, sur un Dilemme au sol), la cible choisit ce qu'elle perd (ou paie 1 Adrenaline pour annuler).",
       };
     }
     const me = selectedTitan;
@@ -6246,8 +6228,6 @@ export function useBoardGeneratorController() {
     setTeaAdrenaline,
     tcAdrenaline,
     setTcAdrenaline,
-    graouAdrenaline,
-    setGraouAdrenaline,
     direction,
     setDirection,
     useAdrenaline,
@@ -6501,7 +6481,7 @@ export function useBoardGeneratorController() {
      qu'à faire clignoter l'écran des autres. */
   if (distantInvite) {
     const contexteCourant = () => ({
-      bbPath, bbAdrenaline, moveAdrenaline, teaAdrenaline, tcAdrenaline, graouAdrenaline,
+      bbPath, bbAdrenaline, moveAdrenaline, teaAdrenaline, tcAdrenaline,
       jnpSelected, progSelection, direction, useAdrenaline,
     });
 

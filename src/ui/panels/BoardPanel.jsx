@@ -73,6 +73,7 @@ function AdrenalinePicker({ value, max, onChange, label: aide }) {
   // épaisseur de capuchon que le reste du meuble.
   const pas = (actif) => ({
     width: 28, height: 28, flexShrink: 0,
+    display: "grid", placeItems: "center", padding: 0,
     background: actif ? T.go : "rgba(255,250,238,.06)",
     border: `2px solid ${T.edge}`,
     borderRadius: T.rChip,
@@ -81,15 +82,28 @@ function AdrenalinePicker({ value, max, onChange, label: aide }) {
     cursor: actif ? "pointer" : "not-allowed",
     boxShadow: actif ? `0 2px 0 ${T.edge}` : "none",
   });
+  /* − ET + DESSINÉS, PAS TAPÉS (Nikola, 2026-09-22 : « l'icône Adrénaline
+     n'est pas bien alignée sur le − ou le + »). Un « − » de police se pose
+     sur l'axe mathématique, au-dessus du centre de la touche, alors que
+     l'icône est centrée au pixel : les deux ne tombaient jamais sur la même
+     ligne. Un trait SVG est centré par construction. */
+  const signe = (plus) => (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path d={plus ? "M1 6h10M6 1v10" : "M1 6h10"} stroke="currentColor" strokeWidth="2.4" />
+    </svg>
+  );
+  /* SANS SERINGUE (Nikola, 2026-09-22 : « enlève directement l'icône de la
+     seringue dans la zone − ou +, la couleur fait comprendre rapidement que
+     c'est l'Adrénaline »). Le vert de la touche + suffit ; l'infobulle et les
+     noms accessibles, eux, disent toujours « Adrénaline ». */
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }} title={aide}>
-      <AdrenalineIcon size={17} />
       <button
         onClick={() => onChange(Math.max(0, value - 1))}
         disabled={value <= 0}
         aria-label="Dépenser une Adrénaline de moins"
         style={pas(value > 0)}
-      >−</button>
+      >{signe(false)}</button>
       <span style={{ ...readout(T.micro, value > 0 ? T.go : T.faint), minWidth: 34, textAlign: "center" }}>
         {value}/{max}
       </span>
@@ -98,7 +112,7 @@ function AdrenalinePicker({ value, max, onChange, label: aide }) {
         disabled={value >= max}
         aria-label="Dépenser une Adrénaline de plus"
         style={pas(value < max)}
-      >+</button>
+      >{signe(true)}</button>
     </div>
   );
 }
@@ -194,8 +208,6 @@ export default function BoardPanel({ vm }) {
     setTeaAdrenaline,
     tcAdrenaline,
     setTcAdrenaline,
-    graouAdrenaline,
-    setGraouAdrenaline,
     direction,
     setDirection,
     jnpMode,
@@ -336,6 +348,18 @@ export default function BoardPanel({ vm }) {
     && !moveSkipped;
   // Les cartes n'apparaissent qu'une fois l'etape Deplacement close.
   const stepCarte = phase !== "action" || (!roundJoue && !stepMove);
+  /* ── UNE CARTE CHOISIE, PLUS DE CARTES À L'ÉCRAN ──
+     Nikola, 2026-09-22 : « quand je sélectionne une carte à jouer, le panneau
+     des cartes ne doit plus m'afficher de carte dedans, sauf si je clique sur
+     Annuler et que ça redevient la phase de choix de carte ».
+
+     Une carte à mode (Tête en Avant, Boing Boing, Je Ne Partage Pas,
+     Graouhhh) se joue sur le plateau ; une carte à résolution différée (Tout
+     Casser, Faut Pas Me Chauffer) part dans ses trois secondes. Dans les deux
+     cas, la main n'a plus rien à offrir : il ne reste que la rangée du mode
+     en cours, avec son « Annuler », qui la fait revenir. */
+  const carteEnCours = phase === "action"
+    && (teaMode || bbMode || jnpMode || graouMode || Boolean(pendingCardConfirm && animating));
 
   // ── SECRET DE LA PROGRAMMATION ──
   // L'appareil circule entre les joueurs et Projet Titan repose sur une
@@ -375,7 +399,7 @@ export default function BoardPanel({ vm }) {
           background: T.plate,
           border: `2px solid ${tcSel ? tcSel.accent : T.edge}`,
           borderRadius: T.rPlate,
-          padding: "10px 12px",
+          padding: "8px 12px",
           // Dernier panneau de la colonne : sa marge basse ne sépare plus de
           // rien depuis que le stock et la graine sont remontés dans l'en-tête,
           // et elle coûtait 12 px à un écran qui compte ses pixels.
@@ -391,7 +415,7 @@ export default function BoardPanel({ vm }) {
               qui décident de tout : le Périmètre change à chaque déplacement,
               et l'Énergie qui en découle décide du Seuil 4. Elles vont donc
               sur l'afficheur, en grand, avant les étapes. */}
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 22, marginBottom: 12, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
             <div title="Cases occupées autour de ton Titan" style={{ cursor: "help" }}>
               <div style={label(T.faint)}>Périmètre</div>
               <div style={{ ...readout("1.15rem", T.text), marginTop: 5 }}>{perimeterCells.length}</div>
@@ -411,14 +435,20 @@ export default function BoardPanel({ vm }) {
                   jaune, y compris au Seuil 4 — l'avertissement rouge vit
                   déjà dans le badge "Seuil 4" juste à côté, pas besoin de
                   répéter la couleur sur les deux. */}
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5 }}>
+              {/* Le badge SOUS la valeur, pas à côté (2026-09-22) : à côté, il
+                  élargissait la rangée d'une trentaine de pixels et renvoyait
+                  « Annuler » à la ligne dans la colonne des Titans. La largeur
+                  de la rangée ne dépend plus que de ses libellés, qui ne
+                  changent pas. */}
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, marginTop: 5 }}>
                 <span style={readout("1.15rem", T.you)}>{energie}</span>
                 {energie >= 4 && (
                   <span
                     style={{
-                      ...label(T.stop),
+                      ...label(T.stop, T.micro),
                       border: `1.5px solid ${T.stop}`,
-                      padding: "2px 5px",
+                      padding: "1px 4px",
+                      whiteSpace: "nowrap",
                     }}
                   >
                     Seuil 4
@@ -466,7 +496,12 @@ export default function BoardPanel({ vm }) {
                 <div title={provisoire
                   ? `Force provisoire des ${vm.progSelection.length} carte(s) présélectionnée(s). Elle se fige à la confirmation.`
                   : "Somme des Forces des 3 cartes de la Manche (programmées, jouées ou défaussées). C'est elle que Faut Pas Me Chauffer compare."}>
-                  <div style={label(T.faint)}>Force{provisoire ? " (en cours)" : ""}</div>
+                  {/* Provisoire = libellé et valeur en jaune, sans mot de plus :
+                      « (en cours) » élargissait la rangée au point de renvoyer
+                      « Annuler » à la ligne (2026-09-22), et la ligne « N/3 »
+                      juste en dessous dit déjà que la sélection n'est pas
+                      finie. L'infobulle garde la phrase complète. */}
+                  <div style={label(provisoire ? T.you : T.faint)}>Force</div>
                   <div style={{ marginTop: 5 }}>
                     <span style={readout("1.15rem", provisoire ? T.you : T.text)}>{valeur}</span>
                   </div>
@@ -507,10 +542,10 @@ export default function BoardPanel({ vm }) {
                 border: `${T.edgeW} solid ${undoStack.length === 0 ? T.rule : "#fb923c"}`,
                 borderRadius: T.rChip,
                 color: undoStack.length === 0 ? T.faint : "#ffb877",
-                padding: "8px 14px",
+                padding: "8px 11px",
                 fontFamily: T.ui,
                 fontWeight: 700,
-                fontSize: T.small,
+                fontSize: T.micro,
                 letterSpacing: ".02em",
                 boxShadow: undoStack.length === 0 ? "none" : `0 3px 0 ${T.edge}`,
                 transform: undoStack.length === 0 ? "none" : "translateY(-1px)",
@@ -761,7 +796,7 @@ export default function BoardPanel({ vm }) {
             </div>
           )}
           {titanModes[selectedTitan.id] !== "ia" && cartesVisibles && stepCarte && (
-          <div style={{ marginBottom: 8 }}>
+          <div>
             {phase === "action" && (
               <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9, flexWrap: "wrap" }}>
                 <span
@@ -808,7 +843,7 @@ export default function BoardPanel({ vm }) {
                     onClick={() => setMoveSkipped(false)}
                     style={{ ...cancelBtn(), marginLeft: "auto" }}
                   >
-                    <Icon name="move" size={12} /> Me déplacer finalement
+                    <Icon name="move" size={12} /> Me déplacer
                   </button>
                 )}
               </div>
@@ -915,7 +950,8 @@ export default function BoardPanel({ vm }) {
                     <div style={{
                       display: "grid",
                       gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                      gap: 5, marginBottom: 8, justifyItems: "center",
+                      // Dernier élément du panneau : son rembourrage suffit.
+                      gap: 5, marginBottom: 0, justifyItems: "center",
                     }}>
                       {/* CLE ET SELECTION PAR EXEMPLAIRE, PAS PAR TITRE.
                           Une main peut contenir deux fois le meme titre depuis
@@ -1013,23 +1049,11 @@ export default function BoardPanel({ vm }) {
                     <p style={{ margin: "8px 0 0", fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.5)" }}>
                       Direction choisie : <strong style={{ color: "#7cf5e8" }}>{direction.label}</strong>
                     </p>
-                    {/* LE DOSEUR (Nikola, 2026-09-01 : « on peut augmenter de
-                        +1 par Adrénaline la projection des Titans avec
-                        Graouhhh »). Graouhhh était la seule carte offensive
-                        sans mise possible. Le recul de base — nombre de Titans
-                        touchés + 1 — est rappelé à côté, sans quoi le joueur
-                        mise à l'aveugle sur un total qu'il ne voit pas. */}
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
-                      <AdrenalinePicker
-                        value={graouAdrenaline}
-                        max={selectedTitan.adrenaline || 0}
-                        onChange={setGraouAdrenaline}
-                        label="Chaque Adrénaline dépensée recule les Titans touchés d'une case de plus"
-                      />
-                      <span style={{ fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.5)" }}>
-                        recul = Titans touchés + 1{graouAdrenaline > 0 ? ` + ${graouAdrenaline}` : ""}
-                      </span>
-                    </div>
+                    {/* Pas de doseur : Graouhhh ne prend pas d'Adrénaline
+                        (Nikola, 2026-09-23). */}
+                    <p style={{ margin: "6px 0 0", fontSize: "var(--fs-micro)", color: "rgba(255,255,255,.5)" }}>
+                      recul = Titans touchés + 1
+                    </p>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
                       <button
                         onClick={() => {
@@ -1047,8 +1071,8 @@ export default function BoardPanel({ vm }) {
                     </div>
                   </div>
                 )}
-                {selectedTitan.programmed.length > 0 && (
-                  <div style={{ marginBottom: 8 }}>
+                {selectedTitan.programmed.length > 0 && !carteEnCours && (
+                  <div style={{ marginBottom: 4 }}>
                     {/* Le sous-titre « Joue une carte (N restantes) » est retiré
                         (Nikola, 2026-08-29 : « on comprend visuellement qu'il
                         reste X cartes à jouer »). Il répétait le titre de
@@ -1173,7 +1197,7 @@ export default function BoardPanel({ vm }) {
                                   fontSize: "var(--fs-micro)", cursor: "pointer", marginTop: 1,
                                 }}
                               >
-                                🗑️ Défausser
+                                Défausser
                               </button>
                             )}
                             {/* Direction Graouhhh : sélection déplacée dans le
@@ -1190,6 +1214,12 @@ export default function BoardPanel({ vm }) {
                               <AdrenalinePicker value={tcAdrenaline} max={selectedTitan.adrenaline || 0}
                                 onChange={setTcAdrenaline} label="+1 Énergie par Adrénaline dépensée" />
                             )}
+                            {/* Le doseur vit SOUS la carte, comme pour Tout
+                                Casser (Nikola, 2026-09-23 : « Boing Boing, je
+                                n'ai pas les boutons − + en dessous »). Une fois
+                                la carte choisie, la main disparaît : le même
+                                doseur reprend alors place dans la rangée du
+                                mode, plus bas, sur la même valeur. */}
                             {canPlay && cardId === "tete_en_avant" && (
                               <AdrenalinePicker value={teaAdrenaline} max={selectedTitan.adrenaline || 0}
                                 onChange={setTeaAdrenaline} label="+1 case de charge par Adrénaline dépensée" />
@@ -1206,7 +1236,7 @@ export default function BoardPanel({ vm }) {
                 )}
 
                 {/* Cartes jouées + défaussées + repos + main — section repliable */}
-                {(selectedTitan.playedThisManche.length > 0 || (selectedTitan.discardedHidden || []).length > 0 || selectedTitan.repos.length > 0 || selectedTitan.hand.length > 0) && (
+                {!carteEnCours && (selectedTitan.playedThisManche.length > 0 || (selectedTitan.discardedHidden || []).length > 0 || selectedTitan.repos.length > 0 || selectedTitan.hand.length > 0) && (
                   <div style={{
                     background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.08)",
                     borderRadius: 8, padding: "6px 8px",
@@ -1266,13 +1296,16 @@ export default function BoardPanel({ vm }) {
 
             {/* Mode TEA */}
             {teaMode && (
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+                <strong style={label("#FB923C", T.small)}>{CARD_LABEL.tete_en_avant}</strong>
                 <span style={{ fontSize: "var(--fs-micro)", color: "#FB923C" }}>
                   {teaTargets.size > 0
                     ? `Clique une cible (${teaTargets.size} disponible${teaTargets.size > 1 ? "s" : ""})`
                     : "Aucune cible accessible dans cette position"}
                 </span>
-                <button onClick={toggleTeaMode} style={cancelBtn()}>Annuler</button>
+                <AdrenalinePicker value={teaAdrenaline} max={selectedTitan.adrenaline || 0}
+                  onChange={setTeaAdrenaline} label="+1 case de charge par Adrénaline dépensée" />
+                <button onClick={toggleTeaMode} style={{ ...cancelBtn(), marginLeft: "auto" }}>Annuler</button>
               </div>
             )}
 
@@ -1304,6 +1337,9 @@ export default function BoardPanel({ vm }) {
                 background: T.plate, borderTop: `1px solid ${T.rule}`,
                 paddingTop: 7, paddingBottom: 3, marginBottom: -3,
               }}>
+                <strong style={label("#FFD93D", T.small)}>{CARD_LABEL.boing_boing}</strong>
+                <AdrenalinePicker value={bbAdrenaline} max={selectedTitan.adrenaline || 0}
+                  onChange={setBbAdrenaline} label="+1 case de saut par Adrénaline dépensée" />
                 <span style={{ fontSize: "var(--fs-micro)", color: "#FFD93D" }}>
                   {bbPath.length === 0
                     ? `Clique une case adjacente pour commencer ton chemin (budget ${bbMaxRange})`
@@ -1336,6 +1372,7 @@ export default function BoardPanel({ vm }) {
                     se vide. Il n'y a donc plus rien à « valider » — le compteur
                     dit où on en est, et « Terminer » ne sert qu'à clôturer une
                     carte qu'on ne peut plus finir faute de débris à portée. */}
+                <strong style={label("#71dbff", T.small)}>{CARD_LABEL.je_ne_partage_pas}</strong>
                 <span style={{ fontSize: "var(--fs-micro)", color: "#71dbff" }}>
                   {jnpSelected.length}/{jnpNbToPick} ramassé{jnpSelected.length > 1 ? "s" : ""}{jnpNbToPick === 3 ? " (🏆 Lanterne Rouge)" : ""}
                 </span>

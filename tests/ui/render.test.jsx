@@ -40,9 +40,11 @@ describe("rendu de l'application", () => {
     render(<BoardGenerator />);
     await user.click(screen.getByRole("button", { name: /Lancer la partie/ }));
 
-    // Repère stable de la partie en cours : le titre du plateau porte le
-    // numéro de tirage, il disparaîtrait si le contrôleur était remonté.
-    const avant = screen.getByText(/BIG CITY/).textContent;
+    // Repère stable de la partie en cours : la grille elle-même, dont les
+    // bâtiments changent à chaque tirage. Elle changerait si le contrôleur
+    // était remonté et le plateau régénéré.
+    const grille = () => document.querySelector(".titan-grid").textContent;
+    const avant = grille();
 
     await user.click(screen.getByRole("button", { name: /Règles du jeu/ }));
     /* La page Règles est en import dynamique derrière un Suspense : son
@@ -59,7 +61,7 @@ describe("rendu de l'application", () => {
     expect(screen.queryByRole("dialog", { name: /Règles du jeu/ })).toBeNull();
 
     // Même partie qu'avant l'ouverture : rien n'a été régénéré.
-    expect(screen.getByText(/BIG CITY/).textContent).toBe(avant);
+    expect(grille()).toBe(avant);
   });
 
   it("ne charge pas la vue 3D tant qu'elle n'est pas demandée", async () => {

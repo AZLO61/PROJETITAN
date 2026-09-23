@@ -71,6 +71,7 @@ import {
   computeFinalScore,
   countActiveTeleporters,
   countColorOnBoard,
+  SEUIL_PENURIE,
   countStandingBuildings,
   isSocleMarker,
   manchesMax,
@@ -1015,7 +1016,7 @@ function gestesAvantLaFin(gameState) {
   // Pénurie : la couleur la plus proche de disparaître du plateau.
   let penurie = Infinity;
   COULEURS.forEach((c) => {
-    penurie = Math.min(penurie, countColorOnBoard(c, board, looseBlocks));
+    penurie = Math.min(penurie, Math.max(0, countColorOnBoard(c, board, looseBlocks) - SEUIL_PENURIE));
   });
 
   /* ── LA DERNIÈRE MANCHE EST UN DÉCLENCHEUR CERTAIN, PAS UNE SUPPOSITION ──

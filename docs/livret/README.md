@@ -30,6 +30,14 @@ appliqués dans le moteur.
 
 ## Historique des révisions
 
+### 23 septembre 2026
+
+- **DIL à une seule option** — quand la perte tombe au sol (Tout Casser,
+  Tête en avant, Graouhhh, Boing Boing), une cible qui n'a qu'une option la
+  laisse tomber sur sa case ; elle peut toujours donner 1 Adrénaline à la
+  place. Faut Pas Me Chauffer garde le minimum de 2 options. Remplace le
+  « DIL impossible sous 2 couleurs » de V36.1 pour ces quatre cartes.
+
 ### V36.2 — 16 août 2026
 
 Issues du premier test à la table, après une partie réellement jouée :

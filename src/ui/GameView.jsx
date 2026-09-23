@@ -5,7 +5,7 @@ const RulesPage = lazy(() => import("./rules/RulesPage.jsx"));
 // Même traitement pour le tutoriel : sept écrans qu'on ouvre une fois dans une
 // vie de joueur n'ont rien à faire dans le paquet de démarrage.
 const TutorielPage = lazy(() => import("./rules/TutorielPage.jsx"));
-import HeaderPhase from "./panels/HeaderPhase.jsx";
+import HeaderPhase, { StatutsTour } from "./panels/HeaderPhase.jsx";
 import RoundPanels from "./panels/RoundPanels.jsx";
 import BoardPanel from "./panels/BoardPanel.jsx";
 import DilRageBanner from "./panels/DilRageBanner.jsx";
@@ -21,7 +21,8 @@ import TitanBandPanel from "./panels/TitanBandPanel.jsx";
 import Superposition from "./panels/Superposition.jsx";
 import PodiumFinal from "./panels/PodiumFinal.jsx";
 import RainbowCelebration from "./panels/RainbowCelebration.jsx";
-import { T, TON_DE_PHASE, marquee, readout, label } from "./theme.js";
+import { T, TON_DE_PHASE, readout, label } from "./theme.js";
+import BlockStockBar from "./cards/BlockStockBar.jsx";
 import { cancelBtn } from "./styles.js";
 import Icon from "./icons.jsx";
 
@@ -193,13 +194,19 @@ function MouvementsDistants({ vm }) {
   );
 }
 
-/* ── LE FRONTON ────────────────────────────────────────────
-   Le haut d'une borne d'arcade porte son titre en grand, éclairé par
-   l'arrière, et juste dessous l'afficheur : où on en est. C'est la première
-   chose lue depuis l'autre bout de la table, donc c'est la seule chose de
-   cette taille sur tout l'écran. */
-function Marquee({
-  mancheNumber, totalManches, phase, detonateurNom,
+/* ── LA LIGNE D'INFOS, AU-DESSUS DU PLATEAU ─────────────────
+   Nikola, 2026-09-22, maquette à l'appui : « déplace l'information des blocs
+   dans la partie au-dessus du plateau, que ça ne dépasse pas la largeur du
+   plateau » — et « ne fais pas autant d'espace entre l'information des blocs
+   globaux, la Manche et le plateau ».
+
+   Le stock, la Manche et les bâtiments sont les trois comptes à rebours de la
+   partie : ils se lisent contre le plateau qu'ils décrivent, pas dans la
+   rangée des commandes. Le titre et la Phase sont montés dans cette rangée
+   (cf. HeaderPhase) ; « BIG CITY — Détonateur » en est parti, le Détonateur
+   étant déjà marqué sur la plaque de son Titan. */
+function InfosPlateau({
+  board, looseBlocks, mancheNumber, totalManches,
   occupiedCount, apocalypseThreshold, endGameReasons,
 }) {
   /* DERNIÈRE MANCHE, DIT COMME TEL (Nikola, 2026-08-27 : « indique mieux que
@@ -236,103 +243,67 @@ function Marquee({
      côté : ce qu'on annonce ici, c'est la fin qu'on n'attendait pas. */
   const finsPlateau = (endGameReasons || []).filter((r) => !/Dernière Manche/i.test(r));
 
-  return (
-    /* Ce bandeau était plus haut de moitié : le titre montait à 2,6 rem et
-       chaque bloc portait sa propre ligne de libellé. Retour de Nikola : « je
-       dois défiler un peu vers le bas pour avoir le plateau lisible avec les
-       informations de jeu ». Le fronton d'une borne se lit une fois en
-       s'asseyant ; c'est le plateau qu'on regarde pendant 1 h 30. Il rend donc
-       la hauteur au jeu — le grand format reste sur l'écran d'accueil, où il a
-       toute la place. */
-    <header
+  const badge = (texte, title) => (
+    <span
+      title={title}
       style={{
-        display: "flex",
-        alignItems: "baseline",
-        justifyContent: "space-between",
-        gap: T.s4,
-        flexWrap: "wrap",
-        paddingBottom: T.s2,
-        marginBottom: T.s3,
-        borderBottom: `2px solid ${T.ruleStrong}`,
+        ...label(T.stop, T.micro),
+        border: `1px solid ${T.stop}`,
+        padding: "1px 6px",
+        whiteSpace: "nowrap",
+        cursor: "help",
       }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", gap: T.s3, flexWrap: "wrap" }}>
-        <h1 style={marquee("clamp(1.25rem, 2.6vw, 1.75rem)", T.you)}>Projet Titan</h1>
-        <span style={label(T.faint)}>
-          BIG CITY
-          {detonateurNom ? (
-            <span style={{ textTransform: "none", letterSpacing: "normal", fontWeight: 400 }}>
-              {" "}— Détonateur {detonateurNom}
-            </span>
-          ) : null}
-        </span>
-      </div>
+      {texte}
+    </span>
+  );
 
-      {/* L'afficheur : Manche et Phase, en police bitmap, alignés à droite
-          comme le compteur de crédits d'une borne. Sur une seule ligne, le
-          libellé devant la valeur : deux lignes empilées coûtaient 30 px de
-          plateau pour deux mots qu'on lit une fois par Manche. */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: T.s4, flexWrap: "wrap" }}>
-        <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
-          <span style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2 }}>
-            <span style={label(derniereManche ? T.stop : T.faint)}>Manche</span>
-            <span style={readout("0.95rem", derniereManche ? T.stop : T.text)}>
-              {mancheNumber}
-              <span style={{ color: derniereManche ? T.stop : T.faint, opacity: derniereManche ? 0.7 : 1 }}>
-                /{totalManches}
-              </span>
-            </span>
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "center",
+      flexWrap: "wrap", columnGap: T.s5, rowGap: T.s1,
+    }}>
+      <BlockStockBar board={board} looseBlocks={looseBlocks} orientation="rangee" />
+      {/* Manche et bâtiments restent ENSEMBLE : ce sont les deux comptes à
+          rebours de la partie. Quand la ligne ne tient pas dans la largeur du
+          plateau, elle se coupe entre le stock et eux, jamais entre les deux. */}
+      <span style={{ display: "inline-flex", alignItems: "baseline", gap: T.s5, flexWrap: "wrap", justifyContent: "center" }}>
+      <span style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2 }}>
+        <span style={label(derniereManche ? T.stop : T.faint)}>Manche</span>
+        <span style={readout("0.95rem", derniereManche ? T.stop : T.text)}>
+          {mancheNumber}
+          <span style={{ color: derniereManche ? T.stop : T.faint, opacity: derniereManche ? 0.7 : 1 }}>
+            /{totalManches}
           </span>
-          {derniereManche && (
-            <span
-              title="Dernière Manche de la partie : après elle, on compte les points."
-              style={{
-                ...label(T.stop, T.micro),
-                border: `1px solid ${T.stop}`,
-                padding: "1px 6px",
-                whiteSpace: "nowrap",
-                cursor: "help",
-              }}
-            >
-              Dernière Manche
-            </span>
-          )}
-          {!derniereManche && finsPlateau.length > 0 && (
-            <span
-              title={["La partie s'arrêtera à la fin de cette Manche :", ...finsPlateau].join(" · ")}
-              style={{
-                ...label(T.stop, T.micro),
-                border: `1px solid ${T.stop}`,
-                padding: "1px 6px",
-                whiteSpace: "nowrap",
-                cursor: "help",
-              }}
-            >
-              Dernière Manche — seuil atteint
-            </span>
-          )}
         </span>
-        {occupiedCount != null && (
-          <span
-            title={`Fin de partie déclenchée dès qu'il ne reste plus que ${apocalypseThreshold} bâtiment(s) debout — il y en a ${occupiedCount} sur 25.`}
-            style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2, cursor: "help" }}
-          >
-            <span style={label(apocalypseProche ? T.stop : T.faint)}>Bâtiments</span>
-            <span style={readout("0.95rem", apocalypseProche ? T.stop : T.text)}>
-              {occupiedCount}
-              <span style={{ color: T.faint }}>/25</span>
-            </span>
-            <span style={label(T.faint)}>seuil {apocalypseThreshold}</span>
-          </span>
+        {derniereManche && badge("Dernière Manche", "Dernière Manche de la partie : après elle, on compte les points.")}
+        {!derniereManche && finsPlateau.length > 0 && badge(
+          "Dernière Manche — seuil atteint",
+          ["La partie s'arrêtera à la fin de cette Manche :", ...finsPlateau].join(" · ")
         )}
-        <span style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2 }}>
-          <span style={label(T.faint)}>Phase</span>
-          <span style={{ ...marquee("0.95rem", phase.couleur), whiteSpace: "nowrap" }}>{phase.mot}</span>
+      </span>
+      {occupiedCount != null && (
+        <span
+          title={`Fin de partie déclenchée dès qu'il ne reste plus que ${apocalypseThreshold} bâtiment(s) debout — il y en a ${occupiedCount} sur 25.`}
+          style={{ display: "inline-flex", alignItems: "baseline", gap: T.s2, cursor: "help" }}
+        >
+          <span style={label(apocalypseProche ? T.stop : T.faint)}>Bâtiments</span>
+          <span style={readout("0.95rem", apocalypseProche ? T.stop : T.text)}>
+            {occupiedCount}
+            <span style={{ color: T.faint }}>/25</span>
+          </span>
+          <span style={label(T.faint)}>seuil {apocalypseThreshold}</span>
         </span>
-      </div>
-    </header>
+      )}
+      </span>
+    </div>
   );
 }
+
+/* Hauteur minimale de la zone des bandeaux, sous la ligne : un bandeau d'une
+   ligne y tient sans rien déplacer, et sans bandeau c'est l'air qui manquait
+   au-dessus de la ligne d'infos (Nikola, 2026-09-23). */
+const BANDEAU_MIN = 46;
 
 export default function GameView(vm) {
   /* CHAQUE PHASE A SA COULEUR (demande de Nikola).
@@ -348,12 +319,161 @@ export default function GameView(vm) {
   const phaseCourante = vm.gameOver
     ? { mot: "Terminée", couleur: T.stop }
     : TON_DE_PHASE[vm.phase] || { mot: vm.phase, couleur: T.dim };
-  const detonateurNom = vm.titanState?.detonateur
-    ? vm.titanDisplayName(vm.titanState.detonateur)
-    : null;
+  const infos = (
+    <InfosPlateau
+      board={vm.state.board}
+      looseBlocks={vm.looseBlocks}
+      mancheNumber={vm.mancheNumber}
+      totalManches={vm.manchesMaxPartie}
+      occupiedCount={vm.occupiedCount}
+      apocalypseThreshold={vm.apocalypseThreshold}
+      endGameReasons={vm.endGameReasons}
+    />
+  );
+
+  /* ── LE PLATEAU TIENT DANS LA FENÊTRE ──
+     Nikola, 2026-09-22 : « grandis le plateau un peu, mais que tout soit
+     lisible en pleine page à partir du dessous de la ligne qui sépare le
+     titre ». Le plateau se borne donc aussi en HAUTEUR : ce qui reste de la
+     fenêtre sous la rangée du haut (cf. RoundPanels). La rangée peut passer
+     sur deux lignes selon la largeur, d'où la mesure plutôt qu'une constante. */
+  const enteteRef = React.useRef(null);
+  const [enteteBas, setEnteteBas] = React.useState(0);
+  /* ── LA RANGÉE DU HAUT SE CACHE AU-DESSUS DE L'ÉCRAN ──
+     Nikola, 2026-09-23 : « n'affiche pas la zone du titre et des boutons, sauf
+     si on remonte ; si on redescend, ça re-masque toute la zone au-dessus de
+     la ligne de séparation, Scoring et Vue 3D compris ».
+
+     C'est le défilement de la page lui-même, pas un panneau qui glisse : la
+     partie s'ouvre défilée juste sous la ligne, on remonte pour trouver les
+     commandes, on redescend pour les ranger. Le meuble fait au moins une
+     fenêtre de plus que la rangée (`minHeight`), sinon il n'y aurait rien à
+     faire défiler.
+
+     Le plateau, lui, ne réserve plus la place de la rangée (2026-09-23) :
+     cachée, elle laissait ce vide sous les numéros. Les bandeaux ont leur
+     propre zone, tenue plus bas.
+
+     `cibleAuto` retient où l'on a défilé soi-même. Si la rangée change de
+     hauteur (police chargée après coup, fenêtre redimensionnée), on suit —
+     mais seulement si le joueur n'a pas bougé depuis : s'il est remonté
+     chercher « Règles », on ne le redescend pas de force. */
+  const cibleAuto = React.useRef(null);
+  React.useEffect(() => {
+    if (!enteteBas || typeof window.scrollTo !== "function") return;
+    const joueurImmobile = cibleAuto.current == null || Math.abs(window.scrollY - cibleAuto.current) < 2;
+    if (!joueurImmobile) return;
+    // + 8 : la marge sous la ligne ne sépare plus rien quand la rangée est
+    // cachée. Il en reste 4 px au-dessus du contenu, et les 8 autres vont aux
+    // bandeaux de décision (celui de mise en place en fait 72).
+    const cible = enteteBas + 8;
+    cibleAuto.current = cible;
+    window.scrollTo(0, cible);
+  }, [enteteBas]);
+  React.useLayoutEffect(() => {
+    const el = enteteRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const mesurer = () => setEnteteBas(Math.ceil(el.getBoundingClientRect().bottom + window.scrollY));
+    // Tout de suite, puis à chaque changement de taille : l'observateur ne
+    // rappelle qu'à la prochaine image, et le plateau sauterait à l'ouverture.
+    mesurer();
+    const ro = new ResizeObserver(mesurer);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  /* ── LA RANGÉE S'EFFACE EN FONDU ──
+     Nikola, 2026-09-23 : « les informations au-dessus de la ligne de
+     séparation ne doivent pas être visibles […] c'est seulement si je remonte
+     que ça apparaît, vraiment un fondu d'opacité ». L'opacité suit la
+     position : 1 tout en haut, 0 dès que la ligne est sortie de l'écran.
+     Écrite directement sur l'élément, pas dans l'état : un rendu React par
+     événement de défilement serait du gâchis. */
+  React.useEffect(() => {
+    const el = enteteRef.current;
+    if (!el || !enteteBas) return undefined;
+    const fondu = () => {
+      el.style.opacity = String(Math.max(0, Math.min(1, 1 - window.scrollY / enteteBas)));
+    };
+    fondu();
+    window.addEventListener("scroll", fondu, { passive: true });
+    return () => window.removeEventListener("scroll", fondu);
+  }, [enteteBas]);
+
+  /* ── LA ZONE DES BANDEAUX, TENUE PENDANT TOUTE UNE SÉQUENCE ──
+     Nikola, 2026-09-23, en deux temps. D'abord : un bandeau qui s'ouvre
+     « fait disparaître des informations de l'écran », et sans bandeau la
+     ligne d'infos est « trop collée vers le haut ». La zone garde donc une
+     hauteur minimale, et un bandeau plus haut l'agrandit : le plateau
+     rétrécit d'autant (`--bandeau-h`, lue par RoundPanels) au lieu de
+     pousser ses numéros sous le bord de l'écran.
+
+     Puis : « une sorte de zoom-dézoom […] ne fais pas le rezoom tant qu'il y
+     a un bandeau de décision, c'est seulement quand il n'y a plus aucun
+     bandeau qu'on revient à l'état initial », et « dès que quelque chose
+     apparaît ou disparaît, ça bouge l'écran ». La zone GRANDIT donc tout de
+     suite (sinon le bandeau pousserait le plateau), mais ne RÉTRÉCIT que
+     lorsque plus aucune décision n'attend et qu'aucune carte ne se résout,
+     après un court répit : une DIL suivie d'une Fatigue, puis d'un repli,
+     ne font bouger le plateau qu'une fois à l'aller et une fois au retour.
+
+     Tout passe par le DOM et pas par l'état React : l'observateur écrit la
+     hauteur avant que l'image ne soit peinte. Un `setState` arrivait une
+     image trop tard — la zone avait déjà grandi, le plateau pas encore
+     rétréci, et ses numéros sortaient de l'écran le temps d'un éclair. */
+  const cabinetRef = React.useRef(null);
+  const zoneRef = React.useRef(null);
+  const tenueRef = React.useRef(null);
+  const contenuRef = React.useRef(null);
+  const calme = !vm.decisionBloquante && !vm.animating;
+  const calmeRef = React.useRef(calme);
+  calmeRef.current = calme;
+  const ajusterZoneRef = React.useRef(() => {});
+  React.useLayoutEffect(() => {
+    const cabinet = cabinetRef.current;
+    const zone = zoneRef.current;
+    const tenueEl = tenueRef.current;
+    const contenu = contenuRef.current;
+    if (!cabinet || !zone || !tenueEl || !contenu) return undefined;
+    let tenue = BANDEAU_MIN;
+    let relache = null;
+    const publier = () => cabinet.style.setProperty("--bandeau-h", `${Math.ceil(zone.getBoundingClientRect().height)}px`);
+    const tenir = (h) => {
+      tenue = h;
+      tenueEl.style.minHeight = `${h}px`;
+      publier();
+    };
+    const ajuster = () => {
+      const h = Math.ceil(contenu.getBoundingClientRect().height);
+      if (h > tenue) {
+        clearTimeout(relache);
+        relache = null;
+        tenir(h);
+        return;
+      }
+      publier();
+      if (!calmeRef.current || h >= tenue || relache) return;
+      relache = setTimeout(() => {
+        relache = null;
+        if (calmeRef.current) tenir(Math.max(BANDEAU_MIN, Math.ceil(contenu.getBoundingClientRect().height)));
+      }, 600);
+    };
+    ajusterZoneRef.current = ajuster;
+    tenir(BANDEAU_MIN);
+    ajuster();
+    if (typeof ResizeObserver === "undefined") return () => clearTimeout(relache);
+    const ro = new ResizeObserver(ajuster);
+    ro.observe(contenu);
+    ro.observe(zone);
+    return () => { ro.disconnect(); clearTimeout(relache); };
+  }, []);
+  // Le calme peut revenir sans qu'aucune taille ne change (le dernier bandeau
+  // avait la hauteur d'un statut) : c'est lui qui déclenche alors le retour.
+  React.useEffect(() => { ajusterZoneRef.current(); }, [calme]);
 
   return (
     <div
+      ref={cabinetRef}
       className="titan-cabinet"
       style={{
         fontFamily: T.ui,
@@ -361,27 +481,14 @@ export default function GameView(vm) {
         color: T.text,
         padding: "12px 14px",
         maxWidth: 880,
-        minHeight: "100vh",
+        minHeight: `calc(100dvh + ${enteteBas + 8}px)`,
         boxSizing: "border-box",
       }}
     >
       {/* Le contenu passe au-dessus des lignes de balayage et du vignettage,
           qui sont posés par ::before/::after du meuble. */}
       <div style={{ position: "relative", zIndex: 3 }}>
-        <Marquee
-          mancheNumber={vm.mancheNumber}
-          totalManches={vm.manchesMaxPartie}
-          phase={phaseCourante}
-          detonateurNom={detonateurNom}
-          occupiedCount={vm.occupiedCount}
-          apocalypseThreshold={vm.apocalypseThreshold}
-          endGameReasons={vm.endGameReasons}
-        />
-
-        <HeaderPhase vm={vm} />
-
-        {vm.session && <BandeauDistant vm={vm} />}
-        {vm.session && <MouvementsDistants vm={vm} />}
+        <HeaderPhase vm={vm} phase={phaseCourante} enteteRef={enteteRef} />
 
 
         {/* ── UNE SEULE DÉCISION À L'ÉCRAN ──
@@ -396,6 +503,15 @@ export default function GameView(vm) {
             l'ordre de la résolution réelle : ce qu'une carte a déclenché passe
             avant la carte, et la carte avant la Manche. La règle vit à un
             seul endroit, l'affichage ne fait plus que la suivre. */}
+        {/* La barre de liaison d'une partie à distance vit dans la zone : elle
+            est permanente, et le plateau doit tenir SOUS elle, pas derrière
+            le bord de l'écran (elle le poussait de toute sa hauteur). */}
+        <div ref={zoneRef} className="titan-bandeaux">
+        {vm.session && <BandeauDistant vm={vm} />}
+        <div ref={tenueRef} style={{ minHeight: BANDEAU_MIN, display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+        <div ref={contenuRef}>
+        {vm.session && <MouvementsDistants vm={vm} />}
+        <StatutsTour vm={vm} />
         {vm.decisionBloquante === "placement" && <PlacementBanner vm={vm} />}
         {vm.decisionBloquante === "toutcasser" && <ToutCasserBanner vm={vm} />}
         {vm.decisionBloquante === "coin" && <CornerChoiceBanner vm={vm} />}
@@ -404,6 +520,9 @@ export default function GameView(vm) {
         {vm.decisionBloquante === "repli" && <RepliBanner vm={vm} />}
         {vm.decisionBloquante === "fpmc" && <FpmcBanner vm={vm} />}
         {vm.decisionBloquante === "vol" && <RepoVolBanner vm={vm} />}
+        </div>
+        </div>
+        </div>
 
         {/* ── FIN DE PARTIE ──
             Bug remonté par Nikola le 2026-08-17 : « fais bien la transition de
@@ -433,7 +552,7 @@ export default function GameView(vm) {
               </button>
             )}
             <DecisionPanels vm={vm} />
-            <RoundPanels vm={vm} />
+            <RoundPanels vm={vm} entete={infos} />
           </>
         ) : (
           /* ── DEUX COLONNES SUR GRAND ÉCRAN ──
@@ -461,7 +580,7 @@ export default function GameView(vm) {
 
             <div className="titan-layout">
             <div style={{ minWidth: 0 }}>
-              <RoundPanels vm={vm} />
+              <RoundPanels vm={vm} entete={infos} />
             </div>
             <div className="titan-layout__aside" style={{ minWidth: 0 }}>
               <TitanBandPanel vm={vm} />
@@ -546,7 +665,10 @@ export default function GameView(vm) {
           démonté : on retrouve la partie exactement où on l'a laissée. */}
       {vm.showRules && (
         <Suspense fallback={null}>
-          <RulesPage onClose={() => vm.setShowRules(false)} />
+          <RulesPage
+            onClose={() => vm.setShowRules(false)}
+            onOuvrirTutoriel={() => { vm.setShowRules(false); vm.setShowTutoriel(true); }}
+          />
         </Suspense>
       )}
 

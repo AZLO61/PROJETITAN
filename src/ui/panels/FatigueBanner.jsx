@@ -80,7 +80,8 @@ export default function FatigueBanner({ vm }) {
                 color: T.dim, padding: "7px 14px", cursor: "pointer",
               }}
             >
-              Encaisser
+              {/* « Laisser faire » et non « Encaisser » (Nikola, 2026-09-23). */}
+              Laisser faire
             </button>
           </div>
           )}
