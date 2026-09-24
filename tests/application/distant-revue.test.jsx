@@ -98,6 +98,11 @@ describe("La Phase Programmation reste secrète", () => {
 describe("Une intention malformée ne fait pas tomber l'hôte", () => {
   it("ignore une valeur de Vert qui n'est pas une chaîne", async () => {
     const s = await partieCoteHote({ 2: "eddy" });
+    // Un Vert à placer : on ne place que ceux qu'on possède (audit du 2026-09-23).
+    act(() => {
+      vmCourant.titanState.players.find((t) => t.id === 2).repaire.push("vert");
+      vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
+    });
     // Témoin : la même intention, bien formée, va jusqu'au bout.
     act(() => { s.emettre("intention", intention("updateVertAssignment", [2, 0, "piste:rouge"])); });
     expect(vmCourant.vertAssignments[2]?.[0]).toEqual({ type: "piste", target: "rouge" });
@@ -135,7 +140,7 @@ describe("Un invité ne prend que ce qui est libre", () => {
 describe("Je Ne Partage Pas se joue chez l'hôte", () => {
   it("le ramassage d'un invité part en intention au lieu de s'exécuter chez lui", async () => {
     const s = await partieCoteInvite(2);
-    act(() => { vmCourant.jnpToggleCell("C4"); });
+    act(() => { vmCourant.jnpPickCell("C4"); });
     expect(s.intentions.map((i) => i.fn)).toContain("jnpPickCell");
   });
 });

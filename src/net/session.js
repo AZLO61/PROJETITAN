@@ -180,8 +180,13 @@ function construireSession({
              laquelle : l'hôte a fermé sa table, ou le relais a été redémarré et
              a tout oublié (rien n'est jamais écrit sur disque). Dire « session
              terminée » laissait croire à une fin de partie normale. */
+          /* L'hôte, lui, peut être retiré de SA table après une longue veille
+             alors qu'elle vit encore (audit du 2026-09-23) : lui dire qu'elle
+             n'existe plus l'empêchait de penser à la reprendre. */
           emettre("fin", {
-            raison: "Cette table n'existe plus sur le relais — elle a été fermée, ou le relais a redémarré.",
+            raison: siege === "hote"
+              ? "Ta liaison avec la table a expiré. Si le relais tourne encore, rejoins ta table avec son mot de passe et la clé du relais pour reprendre la partie."
+              : "Cette table n'existe plus sur le relais — elle a été fermée, ou le relais a redémarré.",
           });
           vivante = false;
           return;
@@ -425,13 +430,6 @@ export async function rejoindreSession({ urlRelais, id, motDePasse, pseudo, cleR
     body: JSON.stringify({ id: String(id || "").trim(), motDePasse, pseudo, cleRelais }),
   });
   return construireSession({ base, ...res });
-}
-
-/** Vérifie qu'une adresse de relais répond, avant de demander un mot de passe. */
-export async function testerRelais(urlRelais) {
-  const base = urlPropre(urlRelais);
-  const res = await appeler(`${base}/api/sante`);
-  return Boolean(res.ok);
 }
 
 /* ── LE PLATEAU PUBLIC ET LE COURRIER PRIVÉ ──────────────── */

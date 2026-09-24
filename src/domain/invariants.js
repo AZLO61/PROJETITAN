@@ -26,6 +26,9 @@ import { STOCK_INITIAL, isSocleMarker, estSurLePlateau, ROWS } from "./gameRules
 // c'est qu'une action en fabrique.
 const STOCK_TOTAL = { ...STOCK_INITIAL };
 
+// Compte de départ de chaque partie contrôlée (cf. contrôle 5 bis).
+const departs = new WeakMap();
+
 /**
  * Vérifie tous les invariants sur un état de partie.
  * Retourne un tableau de violations (vide si tout va bien).
@@ -132,6 +135,29 @@ export function verifierInvariants(etat, contexte = "") {
   for (const [couleur, n] of Object.entries(total)) {
     if (n > STOCK_TOTAL[couleur]) {
       signaler("stock-depasse", `${couleur} : ${n} en jeu pour ${STOCK_TOTAL[couleur]} dans la boîte`);
+    }
+  }
+
+  /* ── 5 bis. Aucun bloc ni Socle ne se perd (audit du 2026-09-24, C16) ──
+     Le contrôle 5 ne voit que les EXCÈS : un bloc effacé passait inaperçu.
+     Le premier contrôle d'une partie fige le compte (clé : le tableau des
+     Titans, stable pendant une partie simulée) ; chaque contrôle suivant
+     exige le même total de blocs, et autant de Socles en jeu que de
+     bâtiments rasés depuis. */
+  const blocs = Object.values(total).reduce((a, n) => a + n, 0);
+  let socles = 0;
+  for (const t of titans) socles += (t.socles || []).length;
+  for (const pile of Object.values(looseBlocks)) for (const b of pile || []) if (isSocleMarker(b)) socles++;
+  const depart = departs.get(titans);
+  if (!depart) {
+    departs.set(titans, { blocs, avecSocle: Object.keys(board).filter((k) => board[k]?.blocks?.length > 0) });
+  } else {
+    if (blocs !== depart.blocs) {
+      signaler("blocs-perdus-ou-crees", `${depart.blocs} blocs au départ, ${blocs} en jeu`);
+    }
+    const rases = depart.avecSocle.filter((k) => !(board[k]?.blocks?.length > 0)).length;
+    if (socles !== rases) {
+      signaler("socles-perdus-ou-crees", `${rases} bâtiment(s) rasé(s), ${socles} Socle(s) en jeu`);
     }
   }
 

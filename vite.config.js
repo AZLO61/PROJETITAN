@@ -36,6 +36,19 @@ export default defineConfig({
     },
   ],
   base: "/PROJETITAN/",
+  /* React à part (audit perf du 2026-09-23) : le chunk principal passait le
+     seuil d'avertissement de 500 kB, et React, qu'aucun commit de jeu ne
+     touche, reste ainsi en cache d'un déploiement à l'autre. Three.js n'est
+     pas visé : il doit rester dans le chunk différé du plateau 3D. */
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (/node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return "vendor";
+        },
+      },
+    },
+  },
   test: {
     // jsdom est nécessaire aux tests qui montent réellement les composants
     // React. Réglage de test uniquement : aucun effet sur le rendu du jeu.

@@ -169,3 +169,7 @@ scripts/tmp/
 
 # snapshots de vues pour le scan anti-pattern impeccable (regenerables)
 .impeccable/scan/
+
+# Personnalisation locale du dossier Windows (icone) : contient un chemin
+# absolu du poste, sans objet sur le depot.
+desktop.ini

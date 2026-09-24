@@ -1,5 +1,243 @@
 # Changelog
 
+## Non publié — trente-septième passe du 2026-09-24 (ce que la 36e avait laissé)
+
+« Corrige tous les points que tu n'as pas faits. » Trois questions posées
+avant d'y toucher, trois réponses de Nikola.
+
+### Les cinq réglages d'IA du 2026-09-20, mesurés
+
+Chaque changement mesuré au duel (480 parties, sièges croisés), l'ancien
+comportement en variante :
+- **Refus de Fatigue dans l'unité de l'évaluation** : l'IA comparait la Force
+  de la carte (1 à 3) à la valeur d'une Adrénaline ; elle compare maintenant
+  ce qu'une carte gelée lui coûte en points (`COUT_CARTE_GELEE`). L'ancienne
+  règle perdait **1,35 point par partie** [0,51 ; 2,19]. Gardé.
+- **La fin de partie se compte en blocs à retirer** (`gestesAvantLaFin`) au
+  lieu de mélanger bâtiments, Téléporteurs, blocs et tours : neutre (−0,01).
+  Gardé pour la cohérence — un seul Téléporteur éteint n'allume plus la fin.
+- **Un Vert vaut sa meilleure pose pour la RAGE** hors Expert, au lieu de 0 :
+  neutre (−0,23, mesuré en Difficile, l'Expert ne passe pas par là). Gardé.
+- **L'état de la Récupération** était déjà celui du tour depuis la 35e passe.
+- **Case sans carte jouable et pénalité de maximum** : écart strictement nul
+  sur 480 parties, le cas ne se présente pas. Changement retiré.
+Les réglages de mesure (`gestesEnBlocs`, `vertAuModele`, `fatigueAuModele`,
+`defendFpmc`) sont retirés une fois tranchés.
+
+### L'IA calcule deux fois plus vite, à l'identique
+
+Le placement des Verts et le décompte complet sont mis en cache
+(`scoreComplet`), sur une clé qui porte tout ce que le score lit. Preuve : 8
+parties semées rejouées avant et après, empreintes identiques au bit près ;
+54 s → 28 s.
+
+### Moteur
+
+- Le repli d'un débris déplace le débris ARRÊTÉ, plus le sommet de sa pile :
+  sa place est relevée quand le repli naît (et à la pose pour une tour qui
+  bascule, posée du bas vers le haut).
+- `getMovementReachable` et `getMovePath` partagent un seul parcours, chacun
+  avec son ordre d'exploration : sorties identiques sur 400 plateaux semés.
+- L'interrupteur `elementAuSolBloqueArret` (WIP du 19/08, toujours faux) est
+  retiré avec ses branches mortes : la règle est acquise.
+
+### Divers
+
+- Ruling de Nikola : sur Graouhhh, le débris d'avant la carte **ne suit pas**
+  sa cible quand le bloc du Dilemme est tombé dessus ; la pile de 2 reste.
+  Verrouillé par un test.
+- Trois bandeaux (Vol, coin bloqué, repli) mettaient l'icône d'un Titan dans un
+  `<p>` : alerte React corrigée, rendu identique (marges reprises).
+- `scripts/tmp/preuve-bugs.mjs` et `vert.mjs` retirés (ils portaient les seuls
+  avertissements ESLint).
+
+## Non publié — trente-sixième passe du 2026-09-24 (les points restés ouverts de l'audit)
+
+« Règle tous les points notés dans la mémoire Titan. » Chaque défaut rejoué par
+script avant d'être corrigé ; `tests/domain/audit-suite-2026-09-24.test.js` et
+`tests/domain/rulings-2026-09-24.test.js` les verrouillent.
+
+### Quatre réponses de Nikola
+
+Aucune ne change le moteur, qui appliquait déjà ce qui est voulu ; elles sont
+écrites dans les règles de l'application et le livret, et tenues par un test.
+- **Le bloc d'un Dilemme qui tombe sous l'attaquant ne fait pas basculer la
+  tour** — ni au Dilemme, ni à la carte suivante.
+- **Tête en Avant au Seuil 4 : +1 Destruction par case**, pas par bloc, même
+  quand deux blocs partent.
+- **La Faille avec 1 ou 2 d'énergie mène à la même case**, la première de
+  l'autre côté.
+- **Boing Boing : chaque Adrénaline allonge la projection d'une case**, puisque
+  la projection vaut le saut restant.
+
+### Faut Pas Me Chauffer : l'IA estime, et elle se défend
+
+La recherche lisait la programmation SECRÈTE de sa cible pour choisir sa mise.
+Elle l'estime désormais (`forceEstimee`) : cartes déjà jouées à leur Force,
+emplacements cachés à la Force moyenne de ce que le Titan détient hors de la vue
+de tous. Et une IA ciblée mise enfin (`miseDefenseFpmc`) : chaque mise est notée
+à son coût en Adrénaline plus la perte attendue, chiffrée par le même modèle que
+les Dilemmes — face à un humain, entre deux IA, et au simulateur.
+
+### Moteur
+
+- Un Titan re-percuté dans la même carte recevait un **second repli**, et le
+  Titan qui le suivait se perdait au dédoublonnage : Graouhhh joué par une IA
+  finissait autrement qu'à la table.
+- Un **repli caduc** (Titan sorti du plateau entre-temps) ne s'applique plus.
+- La **bascule de fin de carte** ne recompte plus la Bagarre d'un Titan que la
+  carte avait déjà compté (FAQ #12).
+- Faut Pas Me Chauffer ne relève les débris « d'avant la carte » qu'au premier
+  duel.
+- Nouvel **invariant de conservation** : un bloc ou un Socle perdu est signalé,
+  plus seulement un excès. 20 parties vérifiées : aucune anomalie.
+- Code mort retiré : `boingBoingStepCost`, `fromProgrammed`, une variable, une
+  ligne de RAGE que Tout Casser n'a plus. `elementAuSolBloqueArret` reste : c'est
+  un point WIP réversible qu'un test exige.
+
+### IA et simulateur
+
+- **Graouhhh se joue pas à pas** dans la recherche et le simulateur, comme à la
+  table : Dilemme de chaque cible avant son recul, repli avant la cible suivante.
+- La recherche tranche les **refus de Fatigue** et retranche la mise **avant**
+  les Dilemmes, comme la table.
+- Les **replis en chaîne** provoqués par un repli de l'IA sont proposés à l'IA.
+- L'IA peut **dépenser de l'Adrénaline pour allonger son Mouvement gratuit**
+  (1 au plus, réglage `miseMouvementMax`).
+
+Mesures au duel (480 parties d'Experts opportunistes, sièges croisés) : couper
+la défense FPMC (`defendFpmc=false`) donne +0,24 pt [−0,49 ; +0,98], couper la
+mise de mouvement (`miseMouvementMax=0`) +0,19 pt [−0,71 ; +1,09]. Les deux
+sont indiscernables du témoin : gardées comme coups légaux, pas comme gain.
+Campagne vérifiée de 20 parties : aucune anomalie, même durée qu'avant. Une
+partie complète à quatre IA jouée dans le navigateur, jusqu'au podium.
+
+Le chunk principal repasse sous le seuil de Vite : React part dans un chunk à
+lui (339 kB + 185 kB au lieu de 503 kB), qui reste en cache d'un déploiement à
+l'autre ; le plateau 3D reste différé.
+
+### En ligne
+
+- L'intention d'un invité (Dilemme, mise, Fatigue) n'écrase plus les brouillons
+  de l'hôte ; seuls les gestes « aux commandes » adoptent son contexte.
+- Le compte à rebours de programmation fige sa sélection et son Titan au 3e clic,
+  et ne survit pas à « Nouvelle partie ».
+- L'instantané porte un identifiant public de partie : une nouvelle partie au
+  même cadre ne garde plus les brouillons de l'ancienne chez l'invité.
+- Relais : une adresse IPv6 compte pour son /64, et la relève ne compte plus
+  dans le plafond de requêtes (une maisonnée tombait en 429).
+- En partie à distance, l'hôte tire le Socle, la carte de la Fatigue et la carte
+  volée au générateur cryptographique : retrouver la graine ne les prédit plus.
+- `testerRelais`, jamais appelé, est retiré.
+
+## Non publié — trente-cinquième passe du 2026-09-24 (audit complet, version en ligne comprise)
+
+« Refais-moi un audit complet, le plus poussé possible. » Dix relectures
+séparées — moteur, contrôleur, IA, version en ligne, interface, règles, tests,
+échecs silencieux, performance, code mort —, chaque constat recoupé avec le
+code ou rejoué par script avant d'être corrigé. Une partie complète à quatre IA
+a aussi été jouée sur le site publié : quatre Manches, décompte juste, aucune
+erreur.
+
+### Trois arbitrages de Nikola, le 24/09
+
+- **RAGE : l'Adrénaline se prend à tout moment**, à la place d'un bloc. L'IA le
+  faisait déjà ; le panneau humain ne l'offrait que Repaire presque vide.
+  Bandeau, règles de l'application, livret.
+- **Un tirage aveugle ferme l'annulation** — Socle tiré au sort d'un Dilemme,
+  carte prise par la Fatigue, Vol de Phase Repos —, comme la désignation d'une
+  cible FPMC : annuler puis rejouer relançait le tirage jusqu'au bon résultat.
+- **Reprendre le siège d'une IA** en cours de partie montre sa main : gardé tel
+  quel, c'est le seul chemin pour rejoindre une partie commencée.
+
+### En ligne : une décision ne se tranche que par le Titan qu'elle interroge
+
+La portée réseau « decision » laissait passer n'importe quel siège, sur la foi
+d'une garde que les résolveurs ne portaient pas. Un invité pouvait trancher le
+Dilemme ou le Vol d'un autre, et la cible d'un Dilemme perdre une couleur que
+l'attaquant n'avait pas désignée. Les portées nomment désormais qui répond
+(`dil-attaquant`, `dil-defenseur`, `repli`, `detonateur`), les six résolveurs
+de Dilemme et de RAGE vérifient le type, le stade et l'option, et les bandeaux
+ne montrent leurs boutons qu'à l'appareil concerné.
+
+Autres failles de la version en ligne, toutes prouvées puis fermées :
+- **le relais tombait sur `GET //`** : une adresse de requête invalide levait
+  hors de tout `try`, et le processus s'arrêtait avec toutes ses tables ;
+- **Faut Pas Me Chauffer** : le défenseur réécrivait la cible du duel par le
+  nom du champ de mise ; l'attaquant visait un Titan hors de son Périmètre ;
+- **les Verts** : un invité s'en attribuait autant qu'il voulait, après avoir
+  vu la révélation des autres (verrou après validation, plafond au nombre de
+  Verts détenus, aussi dans le décompte) ;
+- **le journal de l'hôte** recopiait un nom d'action de 64 ko ;
+- **la clé du relais** partait vers la table rejointe si elle traînait dans le
+  champ, et un lien piégé réécrivait l'adresse du relais retenue ;
+- un **envoi de journal raté** ne se rattrapait qu'au coup suivant, et pouvait
+  dupliquer des lignes chez l'invité.
+
+Et ce qui rendait la partie injouable à distance : Tête en Avant d'un invité
+refusée sans un mot (le mode ouvert ne voyageait pas), choix d'entrée par un
+coin bloqué absent de l'instantané, mise en place figée quand un invité partait,
+« Couper la pause » du Vol qui ne s'exécutait que chez l'invité.
+
+### Le tour ne se bloque plus quand quelqu'un part
+
+- Un invité qui perdait sa liaison **en plein ramassage de Je Ne Partage Pas**
+  gelait la table : le ramassage est désormais clos quand l'IA reprend le Titan.
+- L'IA qui reprenait un Titan dont la carte du round était déjà jouée en jouait
+  une **seconde** ; elle passe maintenant la main.
+- Un joueur qui reprend un Titan à l'IA **en plein tour** l'arrête net.
+- **Annuler** coupe un tour d'IA en vol, et ne rend plus à l'IA un siège qu'un
+  invité a repris entre-temps.
+- « Titan suivant », l'abandon d'un écroulement et le sens du Vol ont leurs
+  gardes dans le contrôleur, plus seulement sur le bouton.
+
+### Faut Pas Me Chauffer contre un humain
+
+Joué par une IA, le duel se tranchait tout de suite, défense à 0 : le joueur
+visé perdait sans avoir vu le bandeau. Ses duels passent maintenant par la même
+file que face à un humain — l'IA désigne et mise d'elle-même, la cible mise en
+secret et révèle. L'IA suivante attend la fin des duels et des Fatigues.
+
+### Moteur
+
+- **Une tour de débris montée volontairement ne bascule plus** à la fin d'une
+  carte qui ne la concerne pas (ruling du 2026-08-28) : les Titans déjà perchés
+  sont relevés en début de carte.
+- Tout Casser et Graouhhh joués par un humain relèvent enfin les débris d'avant
+  la carte (le débris qui suit le Titan projeté se comportait autrement que
+  pour l'IA) ; Tout Casser humain et Faut Pas Me Chauffer finissent par la même
+  passe de bascule que les autres cartes.
+- **Faille** : sortie bloquée vers l'ouest ou le nord, l'élément se posait
+  au-delà de l'obstacle, sans choix ; un ricochet juste après la traversée
+  proposait une case à l'autre bout du plateau.
+- Je Ne Partage Pas accepte de 1 au quota (l'IA perdait la carte dès qu'une
+  seule pile était à portée) ; l'IA sait prendre deux blocs sur la même pile.
+- La Récupération vérifie le Périmètre ; Tête en Avant ne compte plus la case
+  de rentrée d'un Titan hors plateau comme occupée.
+
+### IA et simulateur
+
+Sans coup trouvé, l'IA défausse face cachée au lieu de jouer sa carte vers le
+nord ; ses défausses ne sont plus rangées comme jouées (donc publiques). Le
+simulateur programme chaque Manche en sachant laquelle commence. La
+Récupération et les replis de l'IA voient la fin de partie et l'ordre du round,
+comme au simulateur. `cloneEtat` copie les relevés de début de carte.
+
+### Divers
+
+Le Ramassage n'appartient qu'au Titan actif. Le plateau 3D ne garde plus les
+sprites de Titan des sélections précédentes comme cibles de clic. Le livret
+connaît le Dilemme au sol dans son lexique rapide et la règle d'arrivée de
+l'Amas. Boing Boing ne prétend plus provoquer d'écroulement sur un bâtiment.
+Code mort retiré (`domain/core.js`, `src/index.js`, deux ré-exports, un alias,
+un état et deux refs jamais lus) ; `desktop.ini` n'est plus versionné.
+Deux budgets de test (90 s) passaient sous le plancher global de 120 s.
+
+`tests/application/audit-2026-09-23.test.jsx` verrouille les gardes de siège,
+le coin bloqué, Tête en Avant à distance, et classe toute action mutante du
+contrôleur : une action nouvelle qui n'est ni en liste blanche ni déclarée
+locale fait tomber le test.
+
 ## Non publié — retours de table du 2026-09-23 (deux règles, un écran qui ne bouge plus)
 
 ### Deux règles

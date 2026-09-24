@@ -475,6 +475,13 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
 
     function rebuildTitans(titansData, boardData) {
       viderGroupe(titanGroup);
+      /* Audit du 2026-09-23 : les sprites de la reconstruction précédente
+         restaient dans les cibles de clic — `viderPick` ne passe qu'avec la
+         ville. Chaque changement de sélection en ajoutait quatre, et un rayon
+         pouvait toucher le fantôme d'un Titan déjà parti. */
+      for (let i = pickables.length - 1; i >= PICK_SOL; i--) {
+        if (pickables[i].userData.titanId != null) pickables.splice(i, 1);
+      }
       titansData.forEach((t) => {
         /* Placement d'ouverture : un Titan qui n'a pas encore choisi son
            angle ne se dessine nulle part. Sa `cell` porte l'emplacement que

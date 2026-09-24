@@ -516,7 +516,8 @@ function SectionTransversales() {
         du plateau ressort par le bord opposé et poursuit sa trajectoire.{" "}
         <strong style={{ color: C.y1 }}>Sans aucune condition d'énergie</strong> — la traversée coûte
         simplement 1 de l'énergie restante, comme un pas de plus. Arrivé au bord avec 1, l'élément
-        passe donc et se pose de l'autre côté au lieu de rester collé au rebord.
+        passe donc et se pose de l'autre côté au lieu de rester collé au rebord. Avec 1 ou avec 2,
+        il se pose au même endroit, sur la première case de l'autre côté (voulu, ruling du 24/09).
         <div style={{ marginTop: 10 }}>
           Un <strong>Titan</strong> poussé au-delà du bord, lui, ne finit pas son déplacement : il
           quitte BIG CITY et rentre par le côté opposé au début de son propre tour (cf. « Poussé hors

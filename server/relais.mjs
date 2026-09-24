@@ -704,15 +704,34 @@ function adresse(requete) {
   if (DERRIERE_CLOUDFLARE) {
     const cloudflare = requete.headers["cf-connecting-ip"];
     if (typeof cloudflare === "string" && cloudflare.length > 0 && cloudflare.length < 64) {
-      return cloudflare.trim();
+      return parReseau(cloudflare.trim());
     }
   }
-  return requete.socket.remoteAddress || "inconnue";
+  return parReseau(requete.socket.remoteAddress || "inconnue");
+}
+
+/* Une adresse IPv6 compte pour son /64 (audit du 2026-09-24) : un seul abonné
+   en reçoit des milliards, et chacune ouvrait un compteur neuf — plafond de
+   requêtes et bannissement contournés d'un changement d'adresse. IPv4, IPv4
+   encapsulée et boucle locale passent telles quelles. */
+function parReseau(ip) {
+  if (!ip.includes(":") || ip === "::1" || ip.startsWith("::ffff:")) return ip;
+  const [tete, queue = ""] = ip.split("%")[0].split("::");
+  const debut = tete ? tete.split(":") : [];
+  const fin = queue ? queue.split(":") : [];
+  const plein = [...debut, ...Array(Math.max(0, 8 - debut.length - fin.length)).fill("0"), ...fin];
+  return `${plein.slice(0, 4).join(":")}::/64`;
 }
 
 const serveur = createServer(async (requete, reponse) => {
   const origine = requete.headers.origin || "";
-  const url = new URL(requete.url, "http://relais.local");
+  /* Audit du 2026-09-23 : `GET // HTTP/1.1` suffisait à tuer le relais. Une
+     cible de requête invalide faisait lever `new URL` HORS de tout `try`,
+     dans un gestionnaire asynchrone : rejet non géré, processus Node arrêté,
+     toutes les tables perdues — sans mot de passe, par qui connaît l'adresse. */
+  let url;
+  try { url = new URL(requete.url, "http://relais.local"); }
+  catch { reponse.writeHead(400); reponse.end(); return; }
   const ip = adresse(requete);
 
   if (requete.method === "OPTIONS") {
@@ -732,7 +751,11 @@ const serveur = createServer(async (requete, reponse) => {
     repondre(reponse, 429, { erreur: "Trop de tentatives. Réessaie dans un quart d'heure." }, origine);
     return;
   }
-  if (tropDeRequetes(ip)) {
+  /* La relève (`/api/flux`) ne compte pas (audit du 2026-09-24) : bornée à
+     une attente par jeton, elle revient 2 à 3 fois par coup de l'hôte et par
+     joueur. Quatre joueurs derrière la même box épuisaient le plafond en cinq
+     coups, et toute la maisonnée tombait en 429. */
+  if (url.pathname !== "/api/flux" && tropDeRequetes(ip)) {
     repondre(reponse, 429, { erreur: "Trop de requêtes." }, origine);
     return;
   }
@@ -858,7 +881,9 @@ const serveur = createServer(async (requete, reponse) => {
           de: refDe(salle, corps.jeton),
           pseudo: p.pseudo,
           titanId: p.titanId,
-          fn: String(message.fn || ""),
+          // Un nom d'action tient en quelques dizaines de caractères ; au-delà,
+          // c'est du remplissage qui finirait recopié dans le journal de l'hôte.
+          fn: String(message.fn || "").slice(0, 64),
           args: Array.isArray(message.args) ? message.args : [],
           /* Les brouillons de l'invité (chemin tracé, mise d'Adrénaline). Le
              relais les transporte sans les lire — c'est l'hôte qui décide
@@ -1113,4 +1138,4 @@ if (lanceDirectement) {
   });
 }
 
-export { serveur, salles, compteursIp, menage, nettoyerPseudo, creerSalle, rejoindreSalle };
+export { serveur, salles, compteursIp, menage, nettoyerPseudo, creerSalle, rejoindreSalle, parReseau };

@@ -24,7 +24,7 @@ const {
   resolveToutCasserBatiments, resolveToutCasserBlocs,
   resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, releverPercussion, listerCiblesToutCasser, resolveToutCasserCase, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
   scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, getJeNePartagePasCount, resolveJeNePartagePasElement, deplacerSiDerniereCaseLibre, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
-  appliquerReplElement,
+  appliquerReplElement, marquerDebutDeCarte, basculerToursSousTitans,
   canRage, canDil, optionsADesigner, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
   getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
   getRecuperationPool, resolveRecuperation, retirerPileVide, programCards, ensureProgrammableHand, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
@@ -39,7 +39,8 @@ const {
   planRecuperation, choisirRepartitionEcroulement,
   // Ce qu'une IA tranche pour de vrai : le même code que le simulateur.
   trancherDecisionIA, optionsDesigneesIA, reponseCibleIA,
-  acheminerPerte, iaRefuseFatigue, trancherReplisIA,
+  acheminerPerte, iaRefuseFatigue, trancherReplisIA, miseDefenseFpmc,
+  tiragesAveuglesSecrets,
 } = Domain;
 
 /* Ce qu'une IA tranche pour de vrai — valeur d'une option de Dilemme,
@@ -327,6 +328,11 @@ export function useBoardGeneratorController() {
   const distantInvite = session?.siege === "invite";
   const distantHote = session?.siege === "hote";
   useEffect(() => { setupDoneRef.current = setupDone; }, [setupDone]);
+  // L'hôte d'une partie à distance tire Socle, Fatigue et Vol hors de la graine (cf. rng.js).
+  useEffect(() => {
+    tiragesAveuglesSecrets(distantHote);
+    return () => tiragesAveuglesSecrets(false);
+  }, [distantHote]);
 
   /* Reprendre la main malgré tout : l'hôte assume d'écraser la partie de la
      table par celle de cette page. Un seul cas légitime — l'onglet d'origine
@@ -450,6 +456,9 @@ export function useBoardGeneratorController() {
   const [egalitesLanterneRouge, setEgalitesLanterneRouge] = useState(true);
 
   const regenerate = useCallback((graineVoulue) => {
+    // Chez un invité, la partie appartient à l'hôte : un plateau neuf tiré ici
+    // restait affiché, faux, jusqu'au coup suivant de l'hôte (audit du 2026-09-23).
+    if (distantInviteRef.current) return;
     /* PREMIER GESTE : couper ce qui appartient à la partie qu'on abandonne.
        Les minuteurs déjà programmés lisent des miroirs qui, dans un instant,
        décriront la partie SUIVANTE — ils y appliqueraient des coups calculés
@@ -988,9 +997,8 @@ export function useBoardGeneratorController() {
   const [teaMode, setTeaMode] = useState(false);
   const [teaAdrenaline, setTeaAdrenaline] = useState(0);
   const [tcAdrenaline, setTcAdrenaline] = useState(0); // Tout Casser : +1 energie par Adrenaline
-  // direction/useAdrenaline conservés pour Graouhhh (inchangé)
+  // direction conservée pour Graouhhh (inchangé)
   const [direction, setDirection] = useState({ dr: -1, dc: 0, label: "N" });
-  const [useAdrenaline, setUseAdrenaline] = useState(false);
   // Graouhhh : la rose des vents s'affichait des que la carte etait
   // programmee, occupant l'ecran tout le round meme si le Titan comptait
   // jouer autre chose. Elle passe sur le meme modele que Boing Boing /
@@ -1316,6 +1324,9 @@ export function useBoardGeneratorController() {
      et ce qu'un invité doit recevoir sont exactement la même chose. */
   const instantaneCourant = useCallback(() => {
     const snapshot = {
+      /* Identité PUBLIQUE de la partie (la graine est secrète) : le cadre de
+         l'invité la lit pour savoir qu'une nouvelle partie a commencé (C17). */
+      partieId,
       state: structuredClone(state),
       titanState: structuredClone(titanState),
       looseBlocks: structuredClone(looseBlocks),
@@ -1412,6 +1423,11 @@ export function useBoardGeneratorController() {
          l'hôte le voyait à sa place, carte nommée. `plateauPublic` en masque
          les cartes ; chaque cible reçoit la sienne par son courrier privé. */
       fatiguesEnAttente: fatiguesEnAttente.map((f) => ({ ...f })),
+      /* Le choix d'entrée par un coin bloqué (audit du 2026-09-23). Absent
+         d'ici, un invité ne voyait jamais le bandeau de sa propre rentrée — sa
+         défausse était refusée et son déplacement ne faisait rien — et Annuler
+         laissait le Titan dehors, sans bandeau. */
+      cornerChoice: cornerChoice ? { ...cornerChoice, options: [...cornerChoice.options] } : null,
       table: {
         nbJoueurs,
         titanModes: { ...titanModes },
@@ -1434,13 +1450,13 @@ export function useBoardGeneratorController() {
     };
     return snapshot;
   }, [
-    setupDone, placementRestant, nbJoueurs, titanModes, titanNames, titanProfiles,
+    partieId, setupDone, placementRestant, nbJoueurs, titanModes, titanNames, titanProfiles,
     eventsEnabled, modeVolRepos, gameSeed, apocalypseThreshold, difficulte, egalitesLanterneRouge,
     state, titanState, looseBlocks, activePlayerId, phase, passifUsed, actionLog, waitingNextTitan, volResume,
     decisionQueue, repliQueue, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcNTargets,
     fpmcAttackerBase, fpmcCurrent, mancheNumber, phaseValidated, volDirection, currentEvent,
     rainbowWinnerId, vertAssignments, vertsValides, gameOver, showScoring, coutRentree, toutCasserFile,
-    undoStack.length, jnpSelected, fatiguesEnAttente,
+    undoStack.length, jnpSelected, fatiguesEnAttente, cornerChoice,
   ]);
 
   const captureSnapshot = useCallback(() => {
@@ -1498,7 +1514,7 @@ export function useBoardGeneratorController() {
      continue de tout reposer, la synchronisation réseau ne touche qu'au
      plateau (cf. l'effet de calage côté invité, qui ne redemande la remise à
      plat que lorsque le tour, la Phase ou la Manche ont réellement changé). */
-  const restaurerInstantane = useCallback((snap, { reinitialiserInterface = true } = {}) => {
+  const restaurerInstantane = useCallback((snap, { reinitialiserInterface = true, restaurerTable = true } = {}) => {
     if (!snap) return;
     setState(structuredClone(snap.state));
     setTitanState(structuredClone(snap.titanState));
@@ -1532,6 +1548,7 @@ export function useBoardGeneratorController() {
     // Après la remise à plat de l'interface, qui le vide : cf. `instantaneCourant`.
     setJnpSelected([...(snap.jnpSelected || [])]);
     setFatiguesEnAttente((snap.fatiguesEnAttente || []).map((f) => ({ ...f })));
+    setCornerChoice(snap.cornerChoice ? { ...snap.cornerChoice, options: [...snap.cornerChoice.options] } : null);
     setRepliQueue(structuredClone(snap.repliQueue || []));
     setEcroulement(snap.ecroulement ? structuredClone(snap.ecroulement) : null);
     setToutCasserFile(snap.toutCasserFile ? structuredClone(snap.toutCasserFile) : null);
@@ -1575,7 +1592,9 @@ export function useBoardGeneratorController() {
        y remet ce qui s'y trouvait), indispensable pour un invité, qui n'a
        jamais vu l'écran d'accueil et ne connaît la table que par là. */
     if (snap.placementRestant) setPlacementRestant([...snap.placementRestant]);
-    if (snap.table) {
+    /* Annuler défait des COUPS, pas la table : un siège repris par un invité
+       depuis le coup annulé ne repasse pas à l'IA (audit du 2026-09-23). */
+    if (snap.table && restaurerTable) {
       setNbJoueurs(snap.table.nbJoueurs);
       setTitanModes({ ...snap.table.titanModes });
       setTitanNames({ ...snap.table.titanNames });
@@ -1606,9 +1625,15 @@ export function useBoardGeneratorController() {
     // puisqu'on ne dépend que de la valeur actuelle d'undoStack), on
     // restaure tout d'un coup, puis on dépile.
     if (undoStack.length === 0) return;
-    restaurerInstantane(undoStack[undoStack.length - 1]);
+    /* Un tour d'IA en vol a été calculé sur l'état qu'on défait : il jouerait
+       sa carte par-dessus le Dilemme restauré (audit du 2026-09-23). On le
+       coupe ; l'effet de tour IA le relance depuis l'état rendu. */
+    annulerTimersIA();
+    coupJointRef.current = null;
+    setAiPlayingSync(false);
+    restaurerInstantane(undoStack[undoStack.length - 1], { restaurerTable: false });
     setUndoStack((prev) => prev.slice(0, -1));
-  }, [undoStack, restaurerInstantane]);
+  }, [undoStack, restaurerInstantane, annulerTimersIA]);
 
   /* ══════════════════════════════════════════════════════════
      CE QU'UN INVITÉ A LE DROIT DE DEMANDER
@@ -1632,7 +1657,8 @@ export function useBoardGeneratorController() {
                     ne protège plus rien (cf. `titanAutorise`) ;
        "actif"      le Titan du siège doit être celui à qui c'est le tour ;
        "placement"  il doit être celui que la file de mise en place attend ;
-       "decision"   il doit être celui que la décision bloquante interroge.
+       "dil-attaquant", "dil-defenseur", "repli", "detonateur"
+                    il doit être celui que la décision bloquante interroge.
 
      Un invité peut mentir sur tout ce qu'il envoie SAUF sur son siège : le
      relais y appose son expéditeur, et c'est l'hôte qui lit la table des
@@ -1700,21 +1726,28 @@ export function useBoardGeneratorController() {
        Face à une IA, qui ne clique pas, c'est l'attaquant. */
     revealFPMC: "revele-fpmc",
 
-    // Décisions bloquantes : c'est le Titan interrogé qui répond
-    dilAttackerPick: "decision",
-    dilValidateAttackerPick: "decision",
-    resolveDilDefenderPick: "decision",
-    resolveDilCancelWithAdrenaline: "decision",
-    resolveRagePick: "decision",
-    resolveRagePickAdrenaline: "decision",
-    choisirRepli: "decision",
-    ecroulementPoserDebris: "decision",
-    ecroulementAbandonner: "decision",
+    /* Décisions bloquantes : c'est le Titan interrogé qui répond, et lui seul.
+       Audit du 2026-09-23 : une portée unique « decision » laissait passer
+       n'importe quel siège, sur la foi d'une garde que les résolveurs ne
+       portaient pas — un invité tranchait le Dilemme ou le Vol d'un autre. */
+    dilAttackerPick: "dil-attaquant",
+    dilValidateAttackerPick: "dil-attaquant",
+    resolveDilDefenderPick: "dil-defenseur",
+    resolveDilCancelWithAdrenaline: "dil-defenseur",
+    resolveRagePick: "dil-attaquant",
+    resolveRagePickAdrenaline: "dil-attaquant",
+    choisirRepli: "repli",
+    ecroulementPoserDebris: "actif",
+    ecroulementAbandonner: "actif",
     // La Fatigue ne se tranche que par sa cible : payer, c'est dépenser SON
     // Adrénaline (2026-09-16 — la portée « decision » laissait n'importe qui le faire).
     refuserFatigueEnCours: "cible-fatigue",
     accepterFatigueEnCours: "cible-fatigue",
-    chooseVolDirection: "decision",
+    chooseVolDirection: "detonateur",
+    /* Couper la pause de lecture du Vol : n'importe quel joueur assis peut le
+       faire, comme autour d'une vraie table. Elle s'exécutait chez l'invité
+       seul, dont l'état divergeait de l'hôte (audit du 2026-09-23). */
+    validerVolMaintenant: "soi",
 
     // Décompte final : le placement secret des Verts
     updateVertAssignment: "soi-arg0",
@@ -1752,7 +1785,11 @@ export function useBoardGeneratorController() {
         if (v && Number.isInteger(v.dr) && Number.isInteger(v.dc) && Math.abs(v.dr) <= 1
           && Math.abs(v.dc) <= 1 && typeof v.label === "string") setDirection(v);
       },
-      useAdrenaline: (v) => { if (typeof v === "boolean") setUseAdrenaline(v); },
+      /* Le mode Tête en Avant ouvert chez l'invité : les cibles de la charge
+         ne se calculent que mode ouvert, et celui de l'hôte est fermé. Sans
+         lui, toute Tête en Avant d'un invité était refusée sans un mot (audit
+         du 2026-09-23). */
+      teaMode: (v) => { if (typeof v === "boolean") setTeaMode(v); },
     };
   }, []);
 
@@ -1858,16 +1895,15 @@ export function useBoardGeneratorController() {
     if (portee === "cible-fatigue") {
       return fatigueEnAttente != null && Number(fatigueEnAttente.targetId) === Number(titanDuSiege);
     }
-    if (portee === "decision") {
-      /* Une décision bloquante interroge quelqu'un de précis. Faute de pouvoir
-         nommer ce quelqu'un pour les sept sortes de décisions, on retombe sur
-         la garde que chaque résolveur porte déjà : il refuse une réponse qui
-         ne le concerne pas. Le réseau n'affaiblit donc rien — il ne fait que
-         ne pas resserrer. */
-      return true;
-    }
+    /* Une décision bloquante interroge quelqu'un de précis : on le nomme. */
+    const est = (id) => id != null && Number(id) === Number(titanDuSiege);
+    if (portee === "dil-attaquant") return est(currentDecision?.attackerId);
+    if (portee === "dil-defenseur") return est(currentDecision?.defenderId);
+    if (portee === "repli") return est(currentRepli?.initiatorId);
+    if (portee === "detonateur") return est(titanState.detonateur);
     return false;
-  }, [activePlayerId, fpmcAttackerId, fpmcCurrent, fpmcRevelateur, fatigueEnAttente]);
+  }, [activePlayerId, fpmcAttackerId, fpmcCurrent, fpmcRevelateur, fatigueEnAttente,
+    currentDecision, currentRepli, titanState.detonateur]);
 
   /* ══════════════════════════════════════════════════════════
      QUAND QUELQU'UN PART, SON TITAN NE S'ARRÊTE PAS DE JOUER
@@ -2000,7 +2036,13 @@ export function useBoardGeneratorController() {
     const portee = Object.prototype.hasOwnProperty.call(ACTIONS_DISTANTES, intention.fn)
       ? ACTIONS_DISTANTES[intention.fn]
       : null;
-    if (typeof portee !== "string") { rejeter(`action « ${intention.fn} » non autorisée à distance.`); return; }
+    /* Le nom n'est cité que s'il a la forme d'un nom d'action : recopié tel
+       quel, n'importe quel spectateur remplissait le journal de l'hôte de
+       64 ko par message, fausses lignes comprises (audit du 2026-09-23). */
+    if (typeof portee !== "string") {
+      const nom = /^\w{1,40}$/.test(String(intention.fn)) ? ` « ${intention.fn} »` : "";
+      rejeter(`action${nom} non autorisée à distance.`); return;
+    }
     /* Le siège se lit dans la table de l'HÔTE, pas dans la copie du relais
        (2026-09-14) : `intention.titanId` est posé par le relais d'après la
        dernière table que l'hôte lui a publiée, et une réattribution encore en
@@ -2037,8 +2079,14 @@ export function useBoardGeneratorController() {
          fonction. Et tout le bloc passe dans un filet, comme l'exécution de
          l'action juste en dessous — une intention malformée fait perdre son tour
          à son auteur, jamais la partie aux autres. */
+      /* Le brouillon de l'invité ne sert qu'aux gestes qu'il fait AUX
+         COMMANDES — son tour, sa programmation, sa mise en place. Une réponse
+         à une décision, une mise FPMC ou un refus de Fatigue n'en lit rien, et
+         l'adopter écrasait la direction et les mises d'Adrénaline que l'hôte
+         préparait pour son propre tour (audit du 24/09, C15). */
+      const aux = portee === "actif" || portee === "soi" || portee === "placement";
       try {
-        Object.entries(intention.contexte || {}).forEach(([cle, valeur]) => {
+        if (aux) Object.entries(intention.contexte || {}).forEach(([cle, valeur]) => {
           if (!Object.prototype.hasOwnProperty.call(CONTEXTE_DISTANT, cle)) return;
           const poser = CONTEXTE_DISTANT[cle];
           if (typeof poser === "function") poser(valeur);
@@ -2292,7 +2340,9 @@ export function useBoardGeneratorController() {
   const dernierCadreDistantRef = useRef("");
   useEffect(() => {
     if (!distantInvite || !etatDistantRecu) return;
-    const cadre = `${etatDistantRecu.mancheNumber}|${etatDistantRecu.phase}|${etatDistantRecu.activePlayerId}`;
+    // `partieId` : une nouvelle partie au même cadre (« 1|programmation|null »)
+    // gardait les brouillons de l'ancienne (audit du 24/09, C17).
+    const cadre = `${etatDistantRecu.partieId ?? ""}|${etatDistantRecu.mancheNumber}|${etatDistantRecu.phase}|${etatDistantRecu.activePlayerId}`;
     const cadreChange = cadre !== dernierCadreDistantRef.current;
     dernierCadreDistantRef.current = cadre;
     restaurerInstantane(
@@ -2472,18 +2522,27 @@ export function useBoardGeneratorController() {
   useEffect(() => {
     if (!distantHote || !session) { dernierEnvoiJournalRef.current = 0; return undefined; }
     if (diffusionBloqueeRef.current) return undefined;
+    /* Audit 2026-09-23 : un envoi raté ne réessayait qu'au coup SUIVANT, et un
+       delta raté arrivé après un delta réussi rouvrait des lignes déjà parties
+       (doublons chez l'invité). Tout échec repart donc sur un `complet`, qui
+       remplace le journal de l'invité au lieu de s'y ajouter, et relance
+       l'effet sans attendre qu'un autre coup soit joué. */
+    const echec = () => {
+      dernierEnvoiJournalRef.current = 0;
+      setTimeout(() => setRelanceDiffusion((n) => n + 1), 2000);
+    };
     const deja = dernierEnvoiJournalRef.current;
     if (deja !== 0 && actionLog.length === deja) return undefined;
     if (deja === 0 || actionLog.length < deja) {
       dernierEnvoiJournalRef.current = actionLog.length;
-      session.diffuserJournal({ complet: [...actionLog] }).catch(() => { dernierEnvoiJournalRef.current = 0; });
+      session.diffuserJournal({ complet: [...actionLog] }).catch(echec);
       return undefined;
     }
     const nouvelles = actionLog.slice(deja);
     dernierEnvoiJournalRef.current = actionLog.length;
-    session.diffuserJournal({ lignes: nouvelles }).catch(() => { dernierEnvoiJournalRef.current = deja; });
+    session.diffuserJournal({ lignes: nouvelles }).catch(echec);
     return undefined;
-  }, [actionLog, distantHote, session]);
+  }, [actionLog, distantHote, session, relanceDiffusion]);
 
   useEffect(() => {
     if (distantInviteRef.current) return; // `passifUsed` arrive dans l'instantané
@@ -2672,7 +2731,12 @@ export function useBoardGeneratorController() {
       return;
     }
     // Un humain décide lui-même : la file s'arrête là, et attend son clic.
-    if (aiTitanModesRef.current[titanId] !== "ia") return;
+    /* `titanModes` lu ici, pas sa ref : la ref se synchronise dans un effet
+       déclaré plus bas, donc APRÈS celui-ci. Un invité qui partait pendant la
+       mise en place rendait son Titan à l'IA, et cet effet — qui ne dépendait
+       pas des modes — ne se relançait jamais : « elle choisit elle-même… »,
+       et rien ne bougeait (audit du 2026-09-23). */
+    if (titanModes[titanId] !== "ia") return;
 
     /* TOUTES LES IA CONSÉCUTIVES EN UNE PASSE, jamais une par rendu.
        Une IA par commit obligeait à quatre allers-retours dans une partie tout
@@ -2692,7 +2756,7 @@ export function useBoardGeneratorController() {
     let restant = placementRestant;
     for (;;) {
       const suivant = prochainAPlacer(restant, joueurs);
-      if (suivant == null || aiTitanModesRef.current[suivant] !== "ia") break;
+      if (suivant == null || titanModes[suivant] !== "ia") break;
       /* Sans case demandée, le domaine retombe sur l'emplacement que le tirage
          avait réservé à cette IA — donc une partie tout IA se place exactement
          comme avant, à la graine près. */
@@ -2704,7 +2768,7 @@ export function useBoardGeneratorController() {
     setActionLog((prev) => [...prev, ...logs]);
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setPlacementRestant((prev) => prev.filter((id) => !poses.includes(id)));
-  }, [placementRestant, titanState.players, prochainAPlacer]);
+  }, [placementRestant, titanState.players, prochainAPlacer, titanModes]);
 
   // Choix du joueur entre les deux cases d'un coin bloqué (cf. l'effet
   // ci-dessus) : résolu par un clic sur l'une des deux options proposées.
@@ -2756,7 +2820,6 @@ export function useBoardGeneratorController() {
 
   // ── AUTO-PLAY IA ──
   // Compteur pour forcer le re-trigger de l'effect IA entre chaque carte
-  const aiTriggerRef = useRef(0);
   const [aiTrigger, setAiTrigger] = useState(0);
 
   // Ref pour transmettre le prochain joueur depuis setTitanState (batch) vers setActivePlayerId
@@ -2767,7 +2830,6 @@ export function useBoardGeneratorController() {
   const aiTitanStateRef = useRef(titanState);
   const aiLooseBlocksRef = useRef(looseBlocks);
   const aiPassifUsedRef = useRef(passifUsed);
-  const aiActivePlayerIdRef = useRef(activePlayerId);
   const aiTitanModesRef = useRef(titanModes);
   // Profils des IA, lus au moment de trancher un repli (cf. enqueueReplis).
   const aiTitanProfilesRef = useRef(titanProfiles);
@@ -2775,7 +2837,6 @@ export function useBoardGeneratorController() {
   useEffect(() => { aiTitanStateRef.current = titanState; }, [titanState]);
   useEffect(() => { aiLooseBlocksRef.current = looseBlocks; }, [looseBlocks]);
   useEffect(() => { aiPassifUsedRef.current = passifUsed; }, [passifUsed]);
-  useEffect(() => { aiActivePlayerIdRef.current = activePlayerId; }, [activePlayerId]);
   useEffect(() => { aiTitanModesRef.current = titanModes; }, [titanModes]);
   useEffect(() => { aiTitanProfilesRef.current = titanProfiles; }, [titanProfiles]);
   // Les minuteries de l'IA lisent le coût de rentrée bien après le rendu :
@@ -2789,6 +2850,12 @@ export function useBoardGeneratorController() {
      depuis un etat different et pourrait annuler le placement que l'etape 1
      venait de choisir POUR ce coup-la. */
   const coupJointRef = useRef(null);
+  // La mise cachée qu'une IA attaquante engage sur chacun de ses duels contre
+  // un humain (cf. la branche Faut Pas Me Chauffer de `jouerCarte`).
+  const miseFpmcIARef = useRef(0);
+  // `passerAuTitanSuivant` est déclaré plus bas : la ref fait le pont (même
+  // motif que `validerVolRef`).
+  const passerAuTitanSuivantRef = useRef(null);
 
   /* Les Titans qui jouent encore APRÈS celui-ci dans le round. C'est ce que
      l'évaluation consulte pour chiffrer ce qu'un coup offre (cf.
@@ -2835,6 +2902,10 @@ export function useBoardGeneratorController() {
     const refus = currentDecision ? "un Dilemme ou une RAGE non tranché"
       : currentRepli ? "un repli d'élément non placé"
       : ecroulement ? "un Amas non réparti"
+      // Ces deux-là manquaient (audit du 2026-09-23) : l'IA suivante jouait
+      // par-dessus un duel ou une Fatigue qu'un joueur n'avait pas tranché.
+      : fpmcAttackerId && (fpmcPendingIds.length > 0 || fpmcCurrent) ? "un Faut Pas Me Chauffer non révélé"
+      : fatigueEnAttente ? "une Fatigue non tranchée"
       : null;
     if (refus) {
       const signature = `${activePlayerId}|${refus}`;
@@ -2843,6 +2914,14 @@ export function useBoardGeneratorController() {
         setActionLog((prev) => [...prev,
           `⏸️ Tour de Titan ${activePlayerId} (IA) en attente : ${refus}.`]);
       }
+      return;
+    }
+
+    /* La carte de ce round est déjà jouée : un joueur l'a jouée puis a rendu
+       son Titan à l'IA avant « Titan suivant » (audit du 2026-09-23). L'IA en
+       jouait une SECONDE ; elle passe simplement la main. */
+    if (waitingNextTitan) {
+      passerAuTitanSuivantRef.current?.();
       return;
     }
 
@@ -2878,8 +2957,19 @@ export function useBoardGeneratorController() {
     //    que la carte ait été jouée avec effet ou défaussée face cachée.
     // advanceActionRound étant désormais 100% synchrone, aiNextPlayerRef.current
     // est fiable dès le retour de markCardPlayed — plus besoin de microtask.
-    const finishAiTurn = (cardId) => {
-      markCardPlayed(playerId, cardId);
+    const finishAiTurn = (cardId, { defausse = false } = {}) => {
+      /* Une défausse d'IA se range FACE CACHÉE, comme celle d'un joueur
+         (audit du 2026-09-23) : rangée comme jouée, elle nommait la carte à
+         toute la table. Le round avance de la même façon. */
+      if (defausse) {
+        const res = discardCardHidden(playerId, cardId, aiTitanStateRef.current.players);
+        if (res.ok) {
+          setActionLog((prev) => [...prev, res.log]);
+          advanceActionRound(playerId);
+        }
+      } else {
+        markCardPlayed(playerId, cardId);
+      }
       setTitanState((p) => ({ ...p, players: [...p.players] }));
       setAiPlayingSync(false); // réinitialise aussi aiStepLabel via setAiPlayingSync
       setWaitingNextTitan(false);
@@ -2916,7 +3006,17 @@ export function useBoardGeneratorController() {
        déjà programmée renonce au lieu d'appliquer un coup calculé sur un
        plateau qui n'existe plus (cf. `regenerate`). */
     const partieDuTour = partieRef.current;
-    const partieAbandonnee = () => partieRef.current !== partieDuTour;
+    const partieAbandonnee = () => {
+      if (partieRef.current !== partieDuTour) return true;
+      /* Un joueur a repris ce Titan en plein tour (audit du 2026-09-23) :
+         l'IA lâche la main sans jouer la carte qu'elle préparait. */
+      if (aiTitanModesRef.current[playerId] !== "ia") {
+        annulerTimersIA();
+        setAiPlayingSync(false);
+        return true;
+      }
+      return false;
+    };
 
     /* ── L'ÉTAT EST RELU À CHAQUE USAGE ──
        La recherche peut partir dans un Web Worker (cf. `penseeIA`) : le coup
@@ -2985,11 +3085,18 @@ export function useBoardGeneratorController() {
                Le mouvement passif n'appelle aucune projection : son chemin se
                calcule comme celui du joueur, avec `getMovePath`. */
             const jeu = jeuIA();
-            const depart = jeu.titans.find((t) => t.id === playerId).cell;
+            const moi = jeu.titans.find((t) => t.id === playerId);
+            const depart = moi.cell;
+            // +1 case par Adrénaline, comme le joueur (audit du 24/09, L6).
+            const mise = Math.min(choix.mise || 0, moi.adrenaline || 0);
             const cheminIA = getMovePath(
-              depart, choix.destKey, portee, jeu.board,
+              depart, choix.destKey, portee + mise, jeu.board,
               indexerTitans(jeu.titans), jeu.looseBlocks
             );
+            if (mise > 0) {
+              moi.adrenaline -= mise;
+              setActionLog((prev) => [...prev, `🤖 Titan ${playerId} dépense ${mise} 💉 pour allonger son déplacement.`]);
+            }
             resolveFreeMovement(playerId, choix.destKey, jeu);
             setTitanState((p) => ({ ...p, players: [...p.players] }));
             animerTrajectoires([{ cases: cheminIA, arrivee: choix.destKey, titanId: playerId }]);
@@ -2999,7 +3106,7 @@ export function useBoardGeneratorController() {
           }
           etapeCarte();
         };
-        if (tour) deplacer(tour.destKey ? { destKey: tour.destKey } : null);
+        if (tour) deplacer(tour.destKey ? { destKey: tour.destKey, mise: tour.miseMouvement || 0 } : null);
         else penser("planMovement", [playerId, jeuIA(), profilDe(playerId), portee], deplacer);
       });
     }, 2000);
@@ -3043,8 +3150,12 @@ export function useBoardGeneratorController() {
            mesuraient une IA plus forte que celle de la table. */
         replis: [],
       };
-      // Si aucun coup n'a pu être noté, on défausse la première carte.
+      // Si aucun coup n'a pu être noté, on défausse la première carte —
+      // vraiment, comme le simulateur : la jouer avec des paramètres par
+      // défaut (charge vers le nord) produisait un coup que personne n'avait
+      // choisi (audit du 2026-09-23).
       const cardId = move?.cardId ?? curTitan2.programmed[0];
+      let defausse = !move;
       const { dir, mise = 0, bbDest: dest, jnpCells } = move || {};
       // L'Adrénaline est retranchée ici : les résolveurs du domaine la
       // lisent pour allonger la portée mais ne la débitent pas, c'est
@@ -3060,7 +3171,9 @@ export function useBoardGeneratorController() {
       let newLog = [];
       let newDecisions = [];
 
-      if (cardId === "tout_casser") {
+      if (defausse) {
+        newLog = [`IA T${playerId} : aucun coup jouable, défausse.`];
+      } else if (cardId === "tout_casser") {
         const res = resolveToutCasser(playerId, jeu2, mise);
         newLog = res.log; newDecisions = res.decisions || []; // défensif (fix session) : certains résolveurs (ex. resolveJeNePartagePas) ne retournent jamais "decisions", d'autres l'omettent sur leurs early-returns "applied:false" — sans ce garde, newDecisions.some(...) plus bas plante avec "Cannot read properties of undefined (reading 'some')"
         setState((p) => ({ ...p })); setLooseBlocks((p) => ({ ...p }));
@@ -3120,6 +3233,7 @@ export function useBoardGeneratorController() {
           setState((p) => ({ ...p })); setLooseBlocks((p) => ({ ...p }));
         } else {
           newLog = [`IA T${playerId} : Boing Boing sans destination, défausse.`];
+          defausse = true;
         }
       } else if (cardId === "je_ne_partage_pas") {
         const cells = jnpCells || [];
@@ -3156,11 +3270,36 @@ export function useBoardGeneratorController() {
              cible tant que le stock suit, un duel ne se partage pas. */
           let stockFpmc = curTitan2.adrenaline || 0;
           const miseFpmcVoulue = move?.miseFpmc ?? 0;
-          targets.forEach((defId) => {
+          /* ── UNE CIBLE HUMAINE MISE, ELLE AUSSI (audit du 2026-09-23) ──
+             « L'attaquant et la cible ajoutent chacun une mise cachée. » L'IA
+             tranchait tous ses duels ici, défense à 0 : un joueur visé perdait
+             sans avoir vu le bandeau. Ses duels passent donc par la même file
+             que face à un attaquant humain — l'IA y désigne ses cibles et pose
+             sa mise d'elle-même (cf. l'effet plus bas), la cible mise et
+             révèle. Une IA ciblée mise elle aussi, depuis le 2026-09-24
+             (`miseDefenseFpmc`). */
+          const ciblesHumaines = targets.filter((id) => aiTitanModesRef.current[id] !== "ia");
+          if (ciblesHumaines.length > 0) {
+            miseFpmcIARef.current = miseFpmcVoulue;
+            setFpmcAttackerId(playerId);
+            setFpmcAttackerBase(getProgrammedSum(curTitan2));
+            setFpmcNTargets(targets.length);
+            setFpmcPendingIds(ciblesHumaines);
+            setFpmcCurrent(null);
+            newLog.push(`FPMC : ${ciblesHumaines.length} cible(s) humaine(s) — chacune mise en secret avant la révélation.`);
+          }
+          targets.filter((id) => !ciblesHumaines.includes(id)).forEach((defId, i) => {
             const miseIA = Math.min(miseFpmcVoulue, stockFpmc);
             stockFpmc -= miseIA;
-            const res = resolveFautPasMeChauffer(playerId, defId, targets.length, jeu2, { attackerBid: miseIA });
+            const cibleIA = curTitanState2.players.find((t) => t.id === defId);
+            const miseCible = cibleIA ? miseDefenseFpmc(curTitan2, cibleIA, curTitanState2.players, {
+              baseAttaquant: getProgrammedSum(curTitan2), baseDefenseur: getProgrammedSum(cibleIA),
+              profile: aiTitanProfilesRef.current[defId],
+            }) : 0;
+            const res = resolveFautPasMeChauffer(playerId, defId, targets.length, jeu2, { attackerBid: miseIA, defenderBid: miseCible, premierDuel: i === 0 });
+            if (cibleIA) cibleIA.adrenaline = Math.max(0, (cibleIA.adrenaline || 0) - miseCible);
             if (miseIA > 0) newLog.push(`Mise cachée de Titan ${playerId} : ${miseIA} 💉.`);
+            if (miseCible > 0) newLog.push(`Mise cachée de Titan ${defId} : ${miseCible} 💉.`);
             newLog.push(...res.log);
             newDecisions.push(...(res.decisions || []));
           });
@@ -3170,6 +3309,7 @@ export function useBoardGeneratorController() {
         }
       } else {
         newLog = [`IA T${playerId} : carte inconnue (${cardId}), défausse.`];
+        defausse = true;
       }
 
       setActionLog((prev) => [...prev, ...newLog]);
@@ -3222,7 +3362,10 @@ export function useBoardGeneratorController() {
           // planRecuperation désigne la case ET le bloc précis, au gain
           // marginal réel : un 9e Bleu à 0 point ne vaut pas un 1er
           // Rouge à 3.
-          const jeu3 = { titans: curTitanState3.players, looseBlocks: curLooseBlocks3, board: aiStateRef.current.board };
+          // Le même contexte que le reste du tour (fin de partie, qui joue
+          // encore après lui) : le simulateur le passait, la table non (audit
+          // du 2026-09-23 — 15 Récupérations d'Expert sur 244 différaient).
+          const jeu3 = { ...jeuIA(), titans: curTitanState3.players, looseBlocks: curLooseBlocks3, board: aiStateRef.current.board };
           const choix = planRecuperation(playerId, jeu3, profilDe(playerId));
           if (choix) {
             resolveRecuperation(playerId, choix.cellKey, jeu3, choix.pickedValue);
@@ -3243,7 +3386,7 @@ export function useBoardGeneratorController() {
         // humain : enqueueDecisions puis markCardPlayed sont déjà synchrones côté
         // humain, cf. jouerToutCasser et consorts). La queue DIL/RAGE est globale
         // et se résout indépendamment du joueur actif — inutile d'attendre ici.
-        finishAiTurn(cardId);
+        finishAiTurn(cardId, { defausse });
       }, 2000);
       aiTimersRef.current.push(t3);
     }
@@ -3254,7 +3397,8 @@ export function useBoardGeneratorController() {
        vide, et chaque étape revérifie `partieAbandonnee()` pour le cas où elle
        serait déjà dépilée quand la coupure arrive. */
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setupDone, phase, activePlayerId, titanModes, aiTrigger, currentDecision, currentRepli, ecroulement]);
+  }, [setupDone, phase, activePlayerId, titanModes, aiTrigger, currentDecision, currentRepli, ecroulement, waitingNextTitan,
+    fpmcAttackerId, fpmcPendingIds, fpmcCurrent, fatigueEnAttente]);
 
   // ── AUTO-VALIDER PHASES IA ──
   // FIX (bug hunt) : cet effect lisait `titanState.players` depuis le closure
@@ -3378,6 +3522,11 @@ export function useBoardGeneratorController() {
   const canUseRecupPassif = useCallback(
     (titanId) => {
       if (phase !== "action") return false;
+      /* Le Ramassage clôt SON tour, comme le Mouvement gratuit l'ouvre (audit
+         du 2026-09-23) : sans cette ligne, sélectionner pendant la fin de tour
+         d'un autre un Titan qui avait déjà joué dans la Manche lui ouvrait le
+         Ramassage, hors de son tour. */
+      if (titanId !== activePlayerId) return false;
       if (ramassageEnCours) return false;
       if (passifUsed[titanId]?.recup) return false;
       const titan = titanState.players.find((t) => t.id === titanId);
@@ -3387,7 +3536,7 @@ export function useBoardGeneratorController() {
       // même titre qu'une carte réellement jouée (confirmé Nikola).
       return titan.playedThisManche.length > 0 || (titan.discardedHidden || []).length > 0;
     },
-    [phase, passifUsed, titanState.players, ramassageEnCours]
+    [phase, activePlayerId, passifUsed, titanState.players, ramassageEnCours]
   );
 
   // ── AUTO-RÉSOLUTION DIL/RAGE avec IA (attaquant et/ou défenseur) ──
@@ -3411,6 +3560,10 @@ export function useBoardGeneratorController() {
   const acheminerBlocPerdu = useCallback((decision, defender, attacker, color) => {
     const suffixe = acheminerPerte(decision, defender, attacker, color, aiLooseBlocksRef.current);
     setLooseBlocks((prev) => ({ ...prev }));
+    /* Un Socle se tire au sort : annuler, puis retrancher, relancerait le
+       tirage jusqu'au Socle voulu (Nikola, 2026-09-24 — même règle que la
+       désignation d'une cible FPMC). */
+    if (color === SOCLE_OPTION) setUndoStack([]);
     return suffixe;
   }, []);
 
@@ -3642,6 +3795,11 @@ export function useBoardGeneratorController() {
       board: aiStateRef.current.board,
       looseBlocks: aiLooseBlocksRef.current,
       titans: aiTitanStateRef.current.players,
+      // Même contexte que le simulateur (audit du 2026-09-23) : l'IA juge ses
+      // replis en sachant où en est la partie et qui joue encore ce round.
+      finDePartie: { apocalypseThreshold, mancheNumber, nbJoueurs },
+      aJouerEncore: titansApresMoi(activePlayerId),
+      egalitesLanterneRouge,
     };
     /* Le dédoublonnage et le choix de l'IA vivent dans le domaine
        (`trancherReplisIA`, aiPlanner.js) : le simulateur appliquait chaque
@@ -3657,7 +3815,7 @@ export function useBoardGeneratorController() {
     // Rendu à l'appelant : Graouhhh doit savoir s'il peut enchaîner sur le
     // Titan suivant ou s'il doit attendre un clic (cf. `advanceGraouhhhLoop`).
     return aTrancher;
-  }, []);
+  }, [apocalypseThreshold, mancheNumber, nbJoueurs, titansApresMoi, activePlayerId, egalitesLanterneRouge]);
 
   /* ── GRAOUHHH : DIL PUIS DÉPLACEMENT, TITAN PAR TITAN ──
      Ruling Nikola (test à la table, 2026-08-18) : « on fait dans l'ordre
@@ -3699,6 +3857,9 @@ export function useBoardGeneratorController() {
 
   const enqueueFatigues = useCallback((liste) => {
     if (!liste || liste.length === 0) return;
+    // La carte prise par la Fatigue est tirée au sort : pas d'annulation qui
+    // permettrait de retirer (Nikola, 2026-09-24).
+    setUndoStack([]);
     const joueurs = aiTitanStateRef.current.players;
     const modes = aiTitanModesRef.current;
     const aTrancher = [];
@@ -3786,7 +3947,7 @@ export function useBoardGeneratorController() {
   const dilAttackerPick = useCallback((color) => {
     setDecisionQueue((prev) => {
       const [cur, ...rest] = prev;
-      if (!cur) return prev;
+      if (!cur || cur.type !== "DIL" || cur.stage !== "ATTACKER_PICK") return prev;
       const already = cur.attackerChoices.includes(color);
       let choices;
       if (already) choices = cur.attackerChoices.filter((c) => c !== color);
@@ -3807,7 +3968,12 @@ export function useBoardGeneratorController() {
     const cur = decisionQueue[0];
     // Deux options à désigner, ou la seule que la cible possède (Dilemme au
     // sol, 2026-09-23) — cf. `optionsADesigner`, que le bandeau lit aussi.
-    if (!cur || cur.attackerChoices.length === 0 || cur.attackerChoices.length !== optionsADesigner(cur.defenderId, { titans: titanState.players })) return;
+    if (!cur || cur.type !== "DIL" || cur.stage !== "ATTACKER_PICK") return;
+    // Une option désignée doit exister chez la cible : le clic du bandeau n'en
+    // propose pas d'autre, une intention réseau, si.
+    const offertes = getDilOptions(cur.defenderId, { titans: titanState.players });
+    if (!cur.attackerChoices.every((c) => offertes.includes(c))) return;
+    if (cur.attackerChoices.length === 0 || cur.attackerChoices.length !== optionsADesigner(cur.defenderId, { titans: titanState.players })) return;
 
     if (!cur.defenderIsAi) {
       setDecisionQueue((prev) => (prev[0] === cur ? [{ ...cur, stage: "DEFENDER_PICK" }, ...prev.slice(1)] : prev));
@@ -3870,7 +4036,10 @@ export function useBoardGeneratorController() {
   const resolveDilDefenderPick = useCallback(
     (color) => {
       const cur = decisionQueue[0];
-      if (!cur) return;
+      /* La cible ne choisit que parmi ce que l'attaquant a désigné, et
+         seulement une fois qu'il l'a fait (audit du 2026-09-23 : rien ne
+         l'empêchait, à distance, de perdre une couleur jamais désignée). */
+      if (!cur || cur.type !== "DIL" || cur.stage !== "DEFENDER_PICK" || !cur.attackerChoices.includes(color)) return;
       captureSnapshot();
       const defender = titanState.players.find((t) => t.id === cur.defenderId);
       const attacker = titanState.players.find((t) => t.id === cur.attackerId);
@@ -3886,7 +4055,7 @@ export function useBoardGeneratorController() {
 
   const resolveDilCancelWithAdrenaline = useCallback(() => {
     const cur = decisionQueue[0];
-    if (!cur) return;
+    if (!cur || cur.type !== "DIL" || cur.stage !== "DEFENDER_PICK") return;
     const defender = titanState.players.find((t) => t.id === cur.defenderId);
     const attaquant = titanState.players.find((t) => t.id === cur.attackerId);
     if ((defender.adrenaline || 0) < 1) { return; }
@@ -3919,9 +4088,11 @@ export function useBoardGeneratorController() {
   const resolveRagePick = useCallback(
     (color) => {
       const cur = decisionQueue[0];
-      if (!cur) return;
-      captureSnapshot();
+      if (!cur || cur.type !== "RAGE") return;
       const defender = titanState.players.find((t) => t.id === cur.defenderId);
+      // Une RAGE prend un bloc du Repaire (jamais un Socle : ruling du 18/08).
+      if (!defender?.repaire.includes(color)) return;
+      captureSnapshot();
       const attacker = titanState.players.find((t) => t.id === cur.attackerId);
       const suffixe = acheminerBlocPerdu(cur, defender, attacker, color);
       setActionLog((prevLog) => [...prevLog, `RAGE (${cur.cardLabel}) : Titan ${cur.attackerId} arrache ${color} à Titan ${cur.defenderId}${suffixe}`]);
@@ -3933,7 +4104,7 @@ export function useBoardGeneratorController() {
 
   const resolveRagePickAdrenaline = useCallback(() => {
     const cur = decisionQueue[0];
-    if (!cur) return;
+    if (!cur || cur.type !== "RAGE") return;
     const defender = titanState.players.find((t) => t.id === cur.defenderId);
     const attacker = titanState.players.find((t) => t.id === cur.attackerId);
     if ((defender.adrenaline || 0) < 1) return;
@@ -4004,7 +4175,15 @@ export function useBoardGeneratorController() {
     // Le compteur interne part de la MÊME valeur que l'affichage : à 5 ici et
     // 3 à l'écran, le premier tick remontait de 3 à 4.
     let countdown = 3;
+    /* La sélection et le Titan sont FIGÉS au troisième clic (audit du 24/09,
+       B5) : relus au dernier tic, ils pouvaient être ceux d'un invité dont
+       l'hôte adoptait le brouillon pendant ces 3 s. Et le minuteur ne survit
+       pas à « Nouvelle partie » (garde `partieRef`, comme tout minuteur de jeu). */
+    const choix = next;
+    const titanProgramme = selectedTitanId;
+    const partie = partieRef.current;
     const timerId = setInterval(() => {
+      if (partie !== partieRef.current) { clearInterval(timerId); return; }
       countdown -= 1;
       setProgCountdown(countdown);
       if (countdown > 0) return;
@@ -4014,7 +4193,6 @@ export function useBoardGeneratorController() {
       setProgCountdownTimer(null);
       setProgCountdown(null);
 
-      const choix = progSelectionRef.current;
       progSelectionRef.current = [];
       setProgSelection([]);
 
@@ -4032,29 +4210,29 @@ export function useBoardGeneratorController() {
         }
         return;
       }
-      if (choix.length !== 3 || !selectedTitanId) return;
+      if (choix.length !== 3 || !titanProgramme) return;
 
       // Lecture via la ref toujours à jour (jamais `titanState.players` par
       // closure, cf. le même bug côté IA plus haut) — évite de muter un objet
       // Titan périmé si l'état a changé pendant le compte à rebours.
       const curPlayers = aiTitanStateRef.current.players;
       const ids = choix.map((c) => c.cardId);
-      const res = programCards(selectedTitanId, ids, curPlayers);
+      const res = programCards(titanProgramme, ids, curPlayers);
       if (res.ok) {
         setTitanState((p) => ({ ...p, players: [...p.players] }));
-        setPhaseValidated((p) => ({ ...p, [selectedTitanId]: true }));
+        setPhaseValidated((p) => ({ ...p, [titanProgramme]: true }));
         /* Le journal dit QUE le Titan a programmé, jamais QUOI (2026-09-14) : il
            est diffusé à toute la table et lu par l'hôte, et nommer les trois
            cartes rendait publique la Phase Programmation — même principe que
            le placement des Verts d'une IA, plus bas. */
-        setActionLog((p) => [...p, `✅ T${selectedTitanId} a programmé ses 3 cartes.`]);
+        setActionLog((p) => [...p, `✅ T${titanProgramme} a programmé ses 3 cartes.`]);
         setProgErreur(null);
       } else {
         // Échec (ex. état déjà modifié entre-temps) : on informe le joueur au
         // lieu de valider silencieusement une phase non réellement programmée
         // — ce silence était la cause du gel de tour ("en attente des autres
         // Titans").
-        setActionLog((p) => [...p, `⚠️ Programmation T${selectedTitanId} échouée : ${res.reason}`]);
+        setActionLog((p) => [...p, `⚠️ Programmation T${titanProgramme} échouée : ${res.reason}`]);
         setProgErreur(res.reason);
       }
     }, 1000);
@@ -4100,7 +4278,11 @@ export function useBoardGeneratorController() {
   const chooseVolDirection = useCallback(
     (direction) => {
       if (volDirection) return; // déjà résolu cette Manche
-      captureSnapshot();
+      // Le Vol n'existe qu'en Phase Repos, et n'a que deux sens (audit du 2026-09-23).
+      if (phase !== "repos" || gameOver || (direction !== "gauche" && direction !== "droite")) return;
+      // Le Vol pioche à l'aveugle : il ferme l'annulation au lieu d'en ouvrir
+      // une (Nikola, 2026-09-24).
+      setUndoStack([]);
       setVolDirection(direction);
       /* ON REND AVANT DE PIQUER (Nikola, 2026-08-28). Une carte empruntée à
          la Manche précédente retourne à son propriétaire d'abord ; le pool
@@ -4146,7 +4328,7 @@ export function useBoardGeneratorController() {
         validerVolRef.current();
       }, DUREE_LECTURE_VOL_MS);
     },
-    [volDirection, mancheNumber, titanState.ordreJeu, titanState.players, titanState.detonateur, captureSnapshot, modeVolRepos]
+    [volDirection, phase, gameOver, mancheNumber, titanState.ordreJeu, titanState.players, titanState.detonateur, modeVolRepos]
   );
 
   /* Clôt la lecture du récapitulatif et laisse la Manche suivante démarrer.
@@ -4460,13 +4642,26 @@ export function useBoardGeneratorController() {
      côté du Ramassage) et faisait à chaque fois son `setActivePlayerId` en
      ligne — sans jamais savoir refermer la Phase Action quand il n'y a plus
      de Titan suivant. */
-  const passerAuTitanSuivant = useCallback(() => {
+  const avancerAuTitanSuivant = useCallback(() => {
     if (aiNextPlayerRef.current == null) { cloturerPhaseAction(); return; }
     setWaitingNextTitan(false);
     setActivePlayerId(aiNextPlayerRef.current);
     // Même raison que dans `finishAiTurn` : le suivant peut être soi-même.
     setAiTrigger((n) => n + 1);
   }, [cloturerPhaseAction]);
+  useEffect(() => { passerAuTitanSuivantRef.current = avancerAuTitanSuivant; }, [avancerAuTitanSuivant]);
+
+  /* Le geste du joueur, lui, a ses gardes (audit du 2026-09-23) : le bouton
+     n'apparaît qu'une fois la carte jouée et tout tranché, mais un message
+     forgé par l'invité actif passait la main en plein Dilemme ou en plein
+     ramassage — et au premier tour, clôturait la Phase Action. */
+  const passerAuTitanSuivant = useCallback(() => {
+    if (!waitingNextTitan || ramassageEnCours) return;
+    if (currentDecision || currentRepli || ecroulement || fatigueEnAttente || cornerChoice) return;
+    if (fpmcAttackerId && (fpmcPendingIds.length > 0 || fpmcCurrent)) return;
+    avancerAuTitanSuivant();
+  }, [waitingNextTitan, ramassageEnCours, currentDecision, currentRepli, ecroulement, fatigueEnAttente,
+    cornerChoice, fpmcAttackerId, fpmcPendingIds, fpmcCurrent, avancerAuTitanSuivant]);
 
   const markCardPlayed = useCallback(
     (titanId, cardId) => {
@@ -4691,7 +4886,8 @@ export function useBoardGeneratorController() {
     // Titan par Titan (cf. advanceGraouhhhLoop) : seul le scan de l'axe se
     // fait d'un bloc, aucun Titan n'est déplacé avant que sa propre décision
     // DIL soit tranchée.
-    const scan = scanGraouhhhAxis(selectedTitanId, { board: state.board, titans: titanState.players }, direction.dr, direction.dc);
+    // `looseBlocks` : c'est ce qui pose le relevé de début de carte (audit du 2026-09-23).
+    const scan = scanGraouhhhAxis(selectedTitanId, { board: state.board, titans: titanState.players, looseBlocks }, direction.dr, direction.dc);
     setActionLog((prev) => [...prev, ...scan.log]);
     if (scan.touched.length === 0) {
       setActionLog((prev) => [...prev, "Aucun Titan touché sur cet axe."]);
@@ -4705,7 +4901,7 @@ export function useBoardGeneratorController() {
     }
     markCardPlayed(selectedTitanId, "graouhhh");
     setGraouMode(false);
-  }, [partieId, selectedTitanId, direction, state.board, titanState.players, advanceGraouhhhLoop, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
+  }, [partieId, selectedTitanId, direction, state.board, titanState.players, looseBlocks, advanceGraouhhhLoop, mancheNumber, canPlayCard, markCardPlayed, captureSnapshot]);
 
   /* PORTÉE AFFICHÉE = PORTÉE RÉELLE.
      Deux écarts corrigés ici, tous deux remontés par Nikola le 2026-08-17.
@@ -4753,7 +4949,7 @@ export function useBoardGeneratorController() {
      laissait le moteur choisir SA trajectoire (la plus courte) sans jamais
      la montrer ; le joueur trace maintenant la sienne, case adjacente par
      case adjacente, avec la même règle de coût que le calcul automatique
-     (`boingBoingStepCost`) — le moteur de résolution, lui, ne regarde
+     (`getBoingBoingReach`) — le moteur de résolution, lui, ne regarde
      toujours que la dernière case (`bbDest`), inchangé. */
   /* BUDGET DU SAUT (refonte du 2026-08-19).
 
@@ -5013,10 +5209,15 @@ export function useBoardGeneratorController() {
      permette de continuer la partie. Il ne s'affiche jamais tant qu'il existe
      une case éligible. */
   const ecroulementAbandonner = useCallback(() => {
+    /* Seulement quand il n'y a vraiment plus où poser (audit du 2026-09-23) :
+       appelé après un premier débris, par un message forgé, il faisait
+       disparaître du jeu les débris pas encore posés. */
+    if (!ecroulement) return;
+    if (getEcroulementCells(ecroulement.cellKey, { board: state.board, looseBlocks }, ecroulement.choix).eligibles.length > 0) return;
     setActionLog((prev) => [...prev,
       `Amas de ${ecroulement?.cellKey} : aucune case voisine ne peut recevoir de débris — répartition abandonnée, ils restent en place.`]);
     setEcroulement(null);
-  }, [ecroulement]);
+  }, [ecroulement, state.board, looseBlocks]);
 
   const ecroulementPoserDebris = useCallback((cellKey) => {
     const cur = ecroulement;
@@ -5328,23 +5529,20 @@ export function useBoardGeneratorController() {
   }, [selectedTitanId, jnpPool, jnpSelected, jnpNbToPickLive, jnpNbToPickFrozen, titanState.players, looseBlocks, state.board, egalitesLanterneRouge, canPlayCard, markCardPlayed, captureSnapshot]);
 
   // Conserve sous son ancien nom : les panneaux l'appellent pour le clic case.
-  const jnpToggleCell = jnpPickCell;
-
   /* Sortie de secours du ramassage sequentiel. Un Titan peut se retrouver
      sans aucun debris a portee apres s'etre deplace : la carte est alors
      ramassee a moitie et il n'y a plus rien a cliquer. Sans ce bouton, le
      panneau resterait ouvert sans issue — exactement le blocage de partie
      rencontre trois fois le 18 aout. Il cloture la carte avec ce qui a ete
      obtenu. */
-  const jouerJeNePartagePas = useCallback(() => {
-    if (!selectedTitanId || !canPlayCard("je_ne_partage_pas")) return;
+  const cloturerRamassage = useCallback((titanId) => {
     if (jnpSelected.length === 0) return;
     // Cloture anticipee : le Titan se pose quand meme sur sa derniere case
     // choisie, si elle est libre. Meme regle que pour un ramassage complet.
     const derniere = jnpSelected[jnpSelected.length - 1];
     const journal = [];
     deplacerSiDerniereCaseLibre(
-      selectedTitanId, derniere,
+      titanId, derniere,
       { titans: titanState.players, looseBlocks, board: state.board },
       journal
     );
@@ -5352,11 +5550,30 @@ export function useBoardGeneratorController() {
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setActionLog((prev) => [...prev, ...journal,
       `Je Ne Partage Pas : ramassage cloture a ${jnpSelected.length}/${jnpNbToPick} element(s).`]);
-    markCardPlayed(selectedTitanId, "je_ne_partage_pas");
+    markCardPlayed(titanId, "je_ne_partage_pas");
     setJnpMode(false);
     setJnpSelected([]);
-  }, [selectedTitanId, jnpSelected, jnpNbToPick, canPlayCard, markCardPlayed,
-      titanState.players, looseBlocks, state.board]);
+  }, [jnpSelected, jnpNbToPick, markCardPlayed, titanState.players, looseBlocks, state.board]);
+
+  const jouerJeNePartagePas = useCallback(() => {
+    if (!selectedTitanId || !canPlayCard("je_ne_partage_pas")) return;
+    cloturerRamassage(selectedTitanId);
+  }, [selectedTitanId, canPlayCard, cloturerRamassage]);
+
+  /* ── UN RAMASSAGE ORPHELIN SE CLÔT ──
+     Audit du 2026-09-23. Le ramassage vit dans un compteur de TABLE
+     (`jnpSelected`), qui gèle tout le reste tant qu'il n'est pas vide. Un
+     invité qui perdait sa liaison en plein ramassage rendait son Titan à
+     l'IA ; l'IA jouait son tour, la main passait, et le compteur restait
+     levé : le Titan suivant ne pouvait plus ni jouer, ni défausser, ni
+     bouger. L'IA ne sait pas reprendre un ramassage à moitié fait — on le
+     clôt donc avec ce qui a été pris, comme le bouton « Clôturer ». */
+  useEffect(() => {
+    if (distantInviteRef.current) return;
+    if (jnpSelected.length === 0 || activePlayerId == null) return;
+    if (titanModes[activePlayerId] !== "ia") return;
+    cloturerRamassage(activePlayerId);
+  }, [jnpSelected.length, activePlayerId, titanModes, cloturerRamassage]);
 
   const jouerFautPasMeChauffer = useCallback(() => {
     /* ── CETTE CARTE APPARTIENT-ELLE ENCORE À LA PARTIE EN COURS ? ──
@@ -5401,18 +5618,42 @@ export function useBoardGeneratorController() {
      encore dedans. Ce qui suit reste annulable normalement — la fermeture ne
      porte que sur ce qui précède la révélation. */
   const pickFpmcTarget = useCallback((defenderId) => {
+    // Une cible de la liste, et un duel à la fois (audit du 2026-09-23 : un
+    // attaquant distant visait un Titan hors de son Périmètre).
+    if (!fpmcAttackerId || fpmcCurrent || !fpmcPendingIds.includes(defenderId)) return;
     const defender = titanState.players.find((t) => t.id === defenderId);
-    setFpmcCurrent({ defenderId, defenderBase: getProgrammedSum(defender), attackerBid: 0, defenderBid: 0 });
+    const attacker = titanState.players.find((t) => t.id === fpmcAttackerId);
+    /* Une IA ciblée mise en défense (Nikola, 2026-09-24). Posée dès la
+       désignation ; le bandeau la montre « ? » à tout appareil qui ne la tient pas. */
+    const defenderBid = titanModes[defenderId] === "ia" && attacker ? miseDefenseFpmc(attacker, defender, titanState.players, {
+      baseAttaquant: getProgrammedSum(attacker), baseDefenseur: getProgrammedSum(defender),
+      profile: titanProfiles[defenderId],
+    }) : 0;
+    setFpmcCurrent({ defenderId, defenderBase: getProgrammedSum(defender), attackerBid: 0, defenderBid });
     setFpmcPendingIds((prev) => prev.filter((id) => id !== defenderId));
     setUndoStack([]);
     setActionLog((prev) => [...prev,
       `FPMC : cible désignée (Titan ${defenderId}) — l'annulation se ferme, la comparaison des Forces est une information.`,
     ]);
-  }, [titanState.players]);
+  }, [titanState.players, fpmcAttackerId, fpmcCurrent, fpmcPendingIds, titanModes, titanProfiles]);
+
+  /* Une IA attaquante désigne sa cible suivante et pose sa mise sans attendre
+     de clic ; la cible humaine, elle, mise et révèle depuis le bandeau. */
+  useEffect(() => {
+    if (distantInviteRef.current) return;
+    if (!fpmcAttackerId || fpmcCurrent || fpmcPendingIds.length === 0) return;
+    if (titanModes[fpmcAttackerId] !== "ia") return;
+    const attaquant = titanState.players.find((t) => t.id === fpmcAttackerId);
+    const mise = Math.min(miseFpmcIARef.current, attaquant?.adrenaline || 0);
+    pickFpmcTarget(fpmcPendingIds[0]);
+    setFpmcCurrent((prev) => (prev ? { ...prev, attackerBid: mise } : prev));
+  }, [fpmcAttackerId, fpmcCurrent, fpmcPendingIds, titanModes, titanState.players, pickFpmcTarget]);
 
   const updateFpmcBid = useCallback((side, value) => {
     const cur = fpmcCurrent;
-    if (!cur) return;
+    /* Deux champs, et rien d'autre (audit du 2026-09-23) : `side` vient du
+       réseau, et `("defenderId", 3)` détournait le duel vers un autre Titan. */
+    if (!cur || (side !== "attackerBid" && side !== "defenderBid")) return;
     const capId = side === "attackerBid" ? fpmcAttackerId : cur.defenderId;
     const capTitan = titanState.players.find((t) => t.id === capId);
     const cap = capTitan ? capTitan.adrenaline || 0 : 0;
@@ -5443,7 +5684,11 @@ export function useBoardGeneratorController() {
     const trajectoires = [];
     const result = resolveFautPasMeChauffer(fpmcAttackerId, cur.defenderId, fpmcNTargets, {
       board: state.board, titans: titanState.players, looseBlocks, replis, trajectoires,
-    }, { attackerBid: cur.attackerBid, defenderBid: cur.defenderBid });
+    }, {
+      attackerBid: cur.attackerBid, defenderBid: cur.defenderBid,
+      // Duel en cours déjà retiré de la file : premier si aucun autre n'a eu lieu.
+      premierDuel: fpmcPendingIds.length === fpmcNTargets - 1,
+    });
 
     attacker.adrenaline = Math.max(0, (attacker.adrenaline || 0) - cur.attackerBid);
     defender.adrenaline = Math.max(0, (defender.adrenaline || 0) - cur.defenderBid);
@@ -5455,7 +5700,7 @@ export function useBoardGeneratorController() {
     setLooseBlocks((prev) => ({ ...prev }));
     setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     setFpmcCurrent(null);
-  }, [fpmcCurrent, fpmcAttackerId, fpmcNTargets, titanState.players, state.board, looseBlocks, enqueueDecisions, enqueueReplis, animerTrajectoires]);
+  }, [fpmcCurrent, fpmcAttackerId, fpmcNTargets, fpmcPendingIds, titanState.players, state.board, looseBlocks, enqueueDecisions, enqueueReplis, animerTrajectoires]);
 
   /* ── TOUT CASSER : LE JOUEUR CHOISIT L'ORDRE ────────────────
      Nikola, 2026-08-28 : « en cas de TOUT CASSER, on projette les éléments 1 par
@@ -5491,6 +5736,11 @@ export function useBoardGeneratorController() {
     if (bonus > 0) attacker.adrenaline -= bonus;
 
     const jeu = { board: state.board, titans: titanState.players, looseBlocks, replis: [], trajectoires: [] };
+    /* Le relevé de début de carte, comme `resolveToutCasser` le pose pour
+       l'IA : sans lui, le chemin humain lisait celui de la carte précédente,
+       et un débris arrivé depuis ne suivait pas le Titan projeté (audit du
+       2026-09-23). */
+    marquerDebutDeCarte(looseBlocks, titanState.players);
     const percussion = releverPercussion(selectedTitanId, jeu, bonus);
     const cibles = listerCiblesToutCasser(selectedTitanId, jeu, percussion);
 
@@ -5542,6 +5792,13 @@ export function useBoardGeneratorController() {
       setActionLog((prev) => [...prev,
         `+${bagarreSet.size} Bagarre (Titan ${file.titanId} → ${attaquant.bagarre}) — ${bagarreSet.size} Titan(s) distinct(s) touché(s) sur toute la carte (FAQ #12).`,
       ]);
+      setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
+    }
+    // Fin de carte : la passe des tours, comme dans la résolution de l'IA.
+    const bascule = basculerToursSousTitans(file.titanId, jeu, bagarreSet);
+    if (bascule.length > 0) {
+      setActionLog((prev) => [...prev, ...bascule]);
+      setLooseBlocks((prev) => ({ ...prev }));
       setTitanState((prev) => ({ ...prev, players: [...prev.players] }));
     }
     setToutCasserFile(null);
@@ -5688,12 +5945,18 @@ export function useBoardGeneratorController() {
        démesuré allouait, lui, un tableau géant (revue du 2026-09-14). */
     if (!Number.isInteger(index) || index < 0 || index > 64) return;
     if (value != null && typeof value !== "string") return;
+    /* Un placement validé est figé, et on ne place que les Verts qu'on a
+       (audit du 2026-09-23 : un invité réécrivait ses Verts APRÈS avoir vu la
+       révélation de ceux des autres, et s'en attribuait autant qu'il voulait). */
+    if (vertsValides[titanId]) return;
+    const titan = titanState.players.find((t) => Number(t.id) === Number(titanId));
+    if (!titan || index >= getVertCount(titan)) return;
     setVertAssignments((prev) => {
       const current = prev[titanId] ? [...prev[titanId]] : [];
       current[index] = value ? (() => { const [type, target] = value.split(":"); return { type, target }; })() : null;
       return { ...prev, [titanId]: current };
     });
-  }, []);
+  }, [vertsValides, titanState.players, getVertCount]);
 
   const finalScoreResult = showScoring
     ? computeFinalScore(
@@ -6230,8 +6493,6 @@ export function useBoardGeneratorController() {
     setTcAdrenaline,
     direction,
     setDirection,
-    useAdrenaline,
-    setUseAdrenaline,
     jnpMode,
     setJnpMode,
     // Sans son setter : le compteur ne bouge que par le ramassage lui-même.
@@ -6316,7 +6577,6 @@ export function useBoardGeneratorController() {
     instantaneCourant,
     prevActivePlayerRef,
     handleUndo,
-    aiTriggerRef,
     aiTrigger,
     setAiTrigger,
     aiNextPlayerRef,
@@ -6324,7 +6584,6 @@ export function useBoardGeneratorController() {
     aiTitanStateRef,
     aiLooseBlocksRef,
     aiPassifUsedRef,
-    aiActivePlayerIdRef,
     aiTitanModesRef,
     canUseMovePassif,
     canUseRecupPassif,
@@ -6374,7 +6633,6 @@ export function useBoardGeneratorController() {
     jnpNbToPick,
     jnpPool,
     toggleJnpMode,
-    jnpToggleCell,
     jnpPickCell,
     jouerJeNePartagePas,
     jouerFautPasMeChauffer,
@@ -6482,7 +6740,7 @@ export function useBoardGeneratorController() {
   if (distantInvite) {
     const contexteCourant = () => ({
       bbPath, bbAdrenaline, moveAdrenaline, teaAdrenaline, tcAdrenaline,
-      jnpSelected, progSelection, direction, useAdrenaline,
+      progSelection, direction, teaMode,
     });
 
     /* ── CE QUI FERME UN MODE UNE FOIS LE COUP PARTI ──
@@ -6525,8 +6783,6 @@ export function useBoardGeneratorController() {
         return envoi;
       };
     });
-    // Le clic sur une case de ramassage passe par l'alias historique (cf. `jnpToggleCell`).
-    vm.jnpToggleCell = vm.jnpPickCell;
 
     /* ── ANNULER TRAVERSE LE RÉSEAU COMME LE RESTE ──
        Il ne faisait rien du tout ici (« vm.handleUndo = () => {} »), au motif

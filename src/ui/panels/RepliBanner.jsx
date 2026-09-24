@@ -27,6 +27,9 @@ export default function RepliBanner({ vm }) {
   const quoi = currentRepli.titanId != null
     ? `${titanDisplayName ? titanDisplayName(currentRepli.titanId) : `Titan ${currentRepli.titanId}`}`
     : "Le débris";
+  // À distance, seul l'appareil de l'initiateur choisit (audit du 2026-09-23).
+  const aMoi = !(vm.titanMasque && vm.titanMasque(currentRepli.initiatorId));
+  const nomInitiateur = titanDisplayName ? titanDisplayName(currentRepli.initiatorId) : `Titan ${currentRepli.initiatorId}`;
 
   return (
     <div style={{
@@ -48,12 +51,13 @@ export default function RepliBanner({ vm }) {
         )}
       </div>
 
-      <p style={{ margin: "0 0 8px", color: "rgba(255,255,255,.85)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <div style={{ margin: "0 0 8px", color: "rgba(255,255,255,.85)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
         {currentRepli.initiatorId != null && <TitanIcon titanId={currentRepli.initiatorId} size={18} />}
         {quoi} n'a pas pu franchir <strong style={{ color: "#ffb877" }}>{currentRepli.cible}</strong> et
-        s'arrête là. À toi de choisir où il se pose.
-      </p>
+        s'arrête là. {aMoi ? "À toi de choisir où il se pose." : `${nomInitiateur} choisit où il se pose…`}
+      </div>
 
+      {aMoi && <>
       <div style={{ fontSize: "var(--fs-micro)", color: "#ffb877", fontWeight: 700 }}>
         👆 Clique une case orange sur le plateau ({currentRepli.cases.length} possibles)
       </div>
@@ -71,6 +75,7 @@ export default function RepliBanner({ vm }) {
           d'une case, et ça te rapporte 1 Bagarre.
         </p>
       )}
+      </>}
     </div>
   );
 }

@@ -49,9 +49,11 @@
 
 import {
   valeurMarginaleAdrenaline,
-  computeFinalScore,
   ADRENALINE_OPTION,
   CARD_FORCE,
+  getProgrammedSum,
+  makeDecisionRequest,
+  scoreAdrenaline,
   SOCLE_OPTION,
   seuilOptionsDil,
   retirerSocleAuSort,
@@ -75,13 +77,15 @@ import {
   resolveBoingBoing,
   resolveFautPasMeChauffer,
   resolveFreeMovement,
-  resolveGraouhhh,
   resolveJeNePartagePas,
   resolveRecuperation,
   resolveTeteEnAvant,
   resolveToutCasser,
+  refuserFatigue,
+  scanGraouhhhAxis,
+  advanceGraouhhh,
 } from "./gameRules.js";
-import { bestVertAssignments, chooseAmongBest, evaluatePosition, gagnantArcEnCiel, makeProfile, reglagesDe } from "./aiEvaluation.js";
+import { chooseAmongBest, COUT_CARTE_GELEE, evaluatePosition, makeProfile, reglagesDe, scoreComplet } from "./aiEvaluation.js";
 
 const DIRS = Object.freeze([
   { dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 },
@@ -105,6 +109,9 @@ const DIRS = Object.freeze([
    d'éviter certains vols de points ou certaines situations où elle dépense
    mal ou pas ses ressources ». */
 const MISE_ADRENALINE_DEFAUT = 2;
+// Adrénaline au plus pour allonger le Mouvement gratuit (réglage `miseMouvementMax`).
+// ponytail: 1 par défaut, chaque cran double à peu près les cases à noter.
+const MISE_MOUVEMENT_DEFAUT = 1;
 
 /* Le clone est la boucle chaude de tout le module : chaque coup candidat en
    demande un, et un tour d'Expert en évalue plusieurs centaines.
@@ -128,6 +135,11 @@ function cloneEtat(gameState) {
   const looseBlocks = {};
   const loose = gameState.looseBlocks ?? {};
   for (const k in loose) looseBlocks[k] = (loose[k] || []).slice();
+  /* Les relevés de début de carte vivent sous des Symbols, que `for...in`
+     ignore (cf. `marquerDebutDeCarte`) : sans eux, la recherche prévoyait un
+     débris qui ne suivait pas le Titan, et une tour qui basculait sous qui y
+     était monté (audit du 2026-09-23). */
+  for (const sym of Object.getOwnPropertySymbols(loose)) looseBlocks[sym] = new Set(loose[sym]);
 
   const titans = (gameState.titans ?? []).map((t) => ({
     ...t,
@@ -195,13 +207,17 @@ export function reinitialiserDiagnostics() {
   diagnostics.erreurs = {};
 }
 
+function compterErreur(e) {
+  diagnostics.candidatsEcartes++;
+  const cle = String(e?.message || e);
+  diagnostics.erreurs[cle] = (diagnostics.erreurs[cle] || 0) + 1;
+}
+
 function noterApres(titanId, etat, profile, muter) {
   try {
     muter(etat);
   } catch (e) {
-    diagnostics.candidatsEcartes++;
-    const cle = String(e?.message || e);
-    diagnostics.erreurs[cle] = (diagnostics.erreurs[cle] || 0) + 1;
+    compterErreur(e);
     return null;
   }
   return evaluatePosition(titanId, etat, profile);
@@ -396,36 +412,47 @@ export function planTour(titanId, gameState, profile = makeProfile(), mancheNumb
   if (!titan || !estSurLePlateau(titan)) return null;
 
   // `null` = rester sur place, toujours dans la liste.
-  const destinations = [null];
-  if (porteeMouvement > 0) {
+  const destinations = [{ destKey: null, mise: 0 }];
+  /* +1 case par Adrénaline, comme le joueur (`moveAdrenaline`) — audit du
+     24/09, L6 : l'IA n'envisageait jamais ce coup légal. Une case n'entre
+     qu'à sa mise la plus basse, et l'évaluation compte l'Adrénaline dépensée. */
+  const plafondMise = Math.min(titan.adrenaline || 0, reglages.miseMouvementMax ?? MISE_MOUVEMENT_DEFAUT);
+  const vues = new Set();
+  for (let mise = 0; mise <= plafondMise; mise++) {
+    if (porteeMouvement + mise <= 0) continue;
     const { reachable } = getMovementReachable(
-      titan.cell, porteeMouvement, gameState.board,
+      titan.cell, porteeMouvement + mise, gameState.board,
       indexerTitans(gameState.titans), gameState.looseBlocks
     );
-    reachable.forEach((k) => destinations.push(k));
+    reachable.forEach((k) => {
+      if (!vues.has(k)) { vues.add(k); destinations.push({ destKey: k, mise }); }
+    });
   }
+  const seDeplacer = (e, destKey, mise) => {
+    if (!destKey) return;
+    if (mise) e.titans.find((t) => t.id === titanId).adrenaline -= mise;
+    resolveFreeMovement(titanId, destKey, e);
+  };
 
   // Tri statique : ce que vaut la case en elle-même, carte non jouée.
   const triees = [];
-  for (const destKey of destinations) {
+  for (const { destKey, mise } of destinations) {
     const etat = cloneEtat(gameState);
-    const note = noterApres(titanId, etat, profile, (e) => {
-      if (destKey) resolveFreeMovement(titanId, destKey, e);
-    });
-    if (note !== null) triees.push({ destKey, note });
+    const note = noterApres(titanId, etat, profile, (e) => seDeplacer(e, destKey, mise));
+    if (note !== null) triees.push({ destKey, mise, note });
   }
   if (triees.length === 0) return null;
   triees.sort((a, b) => b.note - a.note);
 
   const candidats = [];
   const developpees = new Set();
-  for (const { destKey, note: noteSeule } of triees.slice(0, largeur)) {
+  for (const { destKey, mise, note: noteSeule } of triees.slice(0, largeur)) {
     developpees.add(destKey);
     const base = cloneEtat(gameState);
-    if (destKey) resolveFreeMovement(titanId, destKey, base);
+    seDeplacer(base, destKey, mise);
     const coup = planCardPlay(titanId, base, profile, mancheNumber);
     // Pas de carte jouable depuis là : la case vaut ce qu'elle vaut seule.
-    candidats.push({ destKey, coup, note: coup ? coup.note : noteSeule });
+    candidats.push({ destKey, miseMouvement: mise, coup, note: coup ? coup.note : noteSeule });
   }
 
   /* Les cases retenues pour une carte précise (cf. `MESURE_DE_PLACEMENT`). On
@@ -436,16 +463,16 @@ export function planTour(titanId, gameState, profile = makeProfile(), mancheNumb
       if (!titan.programmed?.includes(cardId)) continue;
       const classees = triees
         .filter(({ destKey }) => !developpees.has(destKey))
-        .map(({ destKey }) => ({ destKey, force: mesure(titanId, gameState, destKey ?? titan.cell) }))
+        .map(({ destKey, mise }) => ({ destKey, mise, force: mesure(titanId, gameState, destKey ?? titan.cell) }))
         .filter(({ force }) => force > 0)
         .sort((a, b) => b.force - a.force)
         .slice(0, PLACEMENTS_PAR_CARTE);
-      for (const { destKey } of classees) {
+      for (const { destKey, mise } of classees) {
         developpees.add(destKey);
         const base = cloneEtat(gameState);
-        if (destKey) resolveFreeMovement(titanId, destKey, base);
+        seDeplacer(base, destKey, mise);
         const coup = planCardPlay(titanId, base, profile, mancheNumber, [cardId]);
-        if (coup) candidats.push({ destKey, coup, note: coup.note });
+        if (coup) candidats.push({ destKey, miseMouvement: mise, coup, note: coup.note });
       }
     }
   }
@@ -489,6 +516,18 @@ function perteSiRetire(repaire, couleur) {
   const n = compteCouleur(repaire, couleur);
   if (n === 0) return 0;
   return scoreBareme(couleur, n) - scoreBareme(couleur, n - 1);
+}
+
+/* ── UN VERT VAUT CE QU'IL RAPPORTE LÀ OÙ IL SE POSE (réglage d'IA du 2026-09-20, point 3) ──
+   Au barème, `scoreBareme("vert")` vaut 0 : hors Expert, la RAGE ne prenait
+   jamais un Vert et n'en protégeait jamais, alors que l'évaluation, elle, le
+   compte. Au décompte un Vert se pose sur une couleur que le Titan possède
+   déjà : il vaut donc le meilleur gain marginal parmi elles. */
+function valeurVertAuBareme(repaire) {
+  const gains = COULEURS_SCORABLES
+    .filter((c) => compteCouleur(repaire, c) > 0)
+    .map((c) => gainSiAjoute(repaire, c));
+  return Math.max(0, ...gains);
 }
 
 /* Ce que vaut une Adrenaline pour CE Titan-la, maintenant. Sert d'etalon
@@ -536,13 +575,13 @@ function faiseurDeDelta(etat) {
      Nikola a signalé le 2026-08-28 : « personne n'a voulu prendre un bloc vert
      alors que c'est fort ». `bestVertAssignments` est le placement glouton que
      l'évaluation utilise déjà — on lui donne le même. */
-  const base = computeFinalScore(etat.titans, bestVertAssignments(etat.titans), gagnantArcEnCiel(etat.titans)).totals;
+  const base = scoreComplet(etat.titans).totals;
 
   return (titanId, mutation, cle) => {
     const cleComplete = `${titanId}|${cle}`;
     if (memo.has(cleComplete)) return memo.get(cleComplete);
     const liste = etat.titans.map((t) => (t.id === titanId ? mutation(t) : t));
-    const apres = computeFinalScore(liste, bestVertAssignments(liste), gagnantArcEnCiel(liste)).totals;
+    const apres = scoreComplet(liste).totals;
     const delta = (apres[titanId]?.total ?? 0) - (base[titanId]?.total ?? 0);
     memo.set(cleComplete, delta);
     return delta;
@@ -656,11 +695,16 @@ function evaluationsModele(d, etat, profile) {
     if (couleur === OPTION_SOCLE) return versAttaquant ? petitSocle() : 0;
     return delta
       ? delta(attaquant.id, (t) => ({ ...t, repaire: [...t.repaire, couleur] }), `+${couleur}`)
-      : gainSiAjoute(attaquant.repaire, couleur);
+      : (couleur === "vert" ? valeurVertAuBareme(attaquant.repaire) : gainSiAjoute(attaquant.repaire, couleur));
   };
   const saPerte = (couleur) => {
     if (couleur === OPTION_SOCLE) return petitSocle();
-    if (!delta) return perteSiRetire(defenseur.repaire, couleur);
+    if (!delta) {
+      if (couleur === "vert") {
+        return compteCouleur(defenseur.repaire, "vert") > 0 ? valeurVertAuBareme(defenseur.repaire.filter((c, i) => i !== defenseur.repaire.indexOf("vert"))) : 0;
+      }
+      return perteSiRetire(defenseur.repaire, couleur);
+    }
     if (defenseur.repaire.indexOf(couleur) === -1) return 0;
     return -delta(defenseur.id, (t) => {
       const r = [...t.repaire];
@@ -942,14 +986,15 @@ export function acheminerPerte(decision, defender, attacker, color, looseBlocks)
 
 /* ── REFUS DE FATIGUE PAR UNE IA ── (ruling du 2026-08-28 : « l'Adrénaline
    permet de refuser une Fatigue »)
-   L'IA paie quand la carte lui coûte plus que le jeton. La Force d'une carte
-   est le seul étalon dont on dispose côté cartes — le décompte final ne les
-   compte pas — et elle dit assez bien ce qu'on perd : une Faut Pas Me
-   Chauffer à 3 pèse plus qu'un Tout Casser à 1. */
+   L'IA paie quand la carte lui coûte plus que le jeton, les deux dans l'unité
+   de l'évaluation : une carte gelée vaut `COUT_CARTE_GELEE` points. Jusqu'au
+   2026-09-24 elle comparait la FORCE de la carte (1 à 3), qui n'est pas une
+   unité de points, à la valeur d'une Adrénaline — mesuré au duel, 1,35 point
+   par partie de moins (480 parties d'Experts, IC [0,51 ; 2,19]). */
 export function iaRefuseFatigue(fatigue, titans) {
   const cible = titans.find((t) => t.id === fatigue.targetId);
-  const marginale = valeurMarginaleAdrenaline(Math.max(0, (cible?.adrenaline || 0) - 1));
-  return (CARD_FORCE[fatigue.cardId] || 0) > marginale;
+  if (!cible || (cible.adrenaline || 0) < 1) return false;
+  return COUT_CARTE_GELEE > valeurMarginaleAdrenaline(Math.max(0, (cible.adrenaline || 0) - 1));
 }
 
 /**
@@ -958,7 +1003,7 @@ export function iaRefuseFatigue(fatigue, titans) {
  * rendu ne nomme que les replis posés ailleurs qu'à leur case par défaut —
  * celle-là, le résolveur l'a déjà appliquée.
  */
-export function trancherReplisIA(liste, etat, profilDe, estIA) {
+export function trancherReplisIA(liste, etat, profilDe, estIA, profondeur = 0) {
   const humains = [];
   const journal = [];
 
@@ -1022,13 +1067,70 @@ export function trancherReplisIA(liste, etat, profilDe, estIA) {
       // `appliquerRepli` remonte son propre journal : depuis le ruling du
       // 2026-08-18, poser l'élément peut chasser un Titan et rapporter une
       // Bagarre. Sans ça, l'IA marquait un point que rien n'expliquait.
+      /* Les replis que ce repli provoque à son tour (un Titan chassé qui
+         s'arrête contre un mur) passent par la même file, comme sur le chemin
+         humain (`replisEnChaine`) — audit du 24/09, L2 : ils restaient à leur
+         case par défaut sans que personne choisisse. Profondeur bornée : une
+         chaîne ne compte jamais plus de maillons que de Titans. */
+      const enChaine = [];
       journal.push(
         `🤖 Titan ${r.initiatorId} (IA) pose l'élément arrêté en ${choix} plutôt qu'en ${r.defaut}.`,
-        ...(appliquerRepli(r, choix, etat) || [])
+        ...(appliquerRepli(r, choix, { ...etat, replis: enChaine }) || [])
       );
+      if (enChaine.length > 0 && profondeur < 4) {
+        const suite = trancherReplisIA(enChaine, etat, profilDe, estIA, profondeur + 1);
+        humains.push(...suite.humains);
+        journal.push(...suite.journal);
+      }
     }
   }
   return { humains, journal };
+}
+
+/* ── FAUT PAS ME CHAUFFER : CE QUE L'IA SAIT DE LA FORCE ADVERSE ──
+   Nikola, 2026-09-24 : l'IA doit ESTIMER la Force adverse au lieu de lire la
+   programmation secrète. Les cartes déjà jouées cette Manche comptent pour leur
+   Force réelle ; chaque emplacement encore caché (programmé ou défaussé face
+   cachée), pour la Force moyenne de ce que le Titan détient hors de la vue de
+   tous — main, programmation, défausses et Zone Repos face cachée. */
+export function forceEstimee(titan) {
+  const force = (id) => CARD_FORCE[id] || 0;
+  const connue = (titan.playedThisManche || []).reduce((s, id) => s + force(id), 0);
+  const caches = (titan.programmed || []).length + (titan.discardedHidden || []).length;
+  const pool = [
+    ...(titan.hand || []), ...(titan.programmed || []), ...(titan.discardedHidden || []),
+    ...(titan.repos || []).filter((r) => !r.faceUp).map((r) => r.cardId),
+  ];
+  const moyenne = pool.length ? pool.reduce((s, id) => s + force(id), 0) / pool.length : 0;
+  return connue + caches * moyenne;
+}
+
+/* Mise d'une IA CIBLÉE par Faut Pas Me Chauffer (Nikola, 2026-09-24 : « miser
+   en DÉFENSE quand ça limite ce qu'elle perd »). Elle ne misait jamais.
+   Les deux sommes s'affichent avant les mises ; seule la mise adverse est
+   inconnue, supposée uniforme entre 0 et ce qu'une IA mise au plus. Chaque
+   mise est notée à son coût (Adrénaline lâchée, au barème) plus la perte
+   attendue — la ressource que la RAGE prendrait, chiffrée par le même modèle
+   que les Dilemmes —, et l'IA garde la moins chère. */
+export function miseDefenseFpmc(attaquant, defenseur, titans, { baseAttaquant, baseDefenseur, profile = makeProfile() }) {
+  const stock = defenseur.adrenaline || 0;
+  if (stock === 0) return 0;
+  const d = makeDecisionRequest("RAGE", attaquant.id, defenseur.id, "Faut Pas Me Chauffer", defenseur.cell);
+  const ev = evaluationsModele(d, { titans }, profile);
+  const rage = ev && rageSelonModele(ev);
+  if (!rage) return 0;
+  const perte = rage.idx === -1 ? valeurAdrenalinePour(defenseur) : ev.saPerte(defenseur.repaire[rage.idx]);
+  const plafond = Math.min(stock, reglagesDe(profile).miseAdrenalineMax ?? MISE_ADRENALINE_DEFAUT);
+  const adverses = Array.from({ length: Math.min(attaquant.adrenaline || 0, MISE_ADRENALINE_DEFAUT) + 1 }, (_, i) => i);
+  let meilleure = 0;
+  let meilleurCout = Infinity;
+  for (let b = 0; b <= plafond; b++) {
+    // Égalité : l'attaquant l'emporte (DIL), elle compte comme perdue.
+    const perdus = adverses.filter((a) => baseAttaquant + a >= baseDefenseur + b).length / adverses.length;
+    const cout = scoreAdrenaline(stock) - scoreAdrenaline(stock - b) + perdus * perte;
+    if (cout < meilleurCout - 1e-9) { meilleurCout = cout; meilleure = b; }
+  }
+  return meilleure;
 }
 
 /**
@@ -1048,7 +1150,7 @@ export function trancherReplisIA(liste, etat, profilDe, estIA) {
  * réelles (`trancherDecisionIA`, `iaRefuseFatigue`), au moment où le
  * contrôleur le fait.
  */
-export function appliquerCoup(coup, titanId, etat, mancheNumber, profile = makeProfile()) {
+export function appliquerCoup(coup, titanId, etat, mancheNumber, profile = makeProfile(), pas = null) {
   /* Application RÉELLE d'un coup (simulateur et campagnes), par opposition
      aux simulations de recherche menées dans `planCardPlay`.
 
@@ -1062,9 +1164,42 @@ export function appliquerCoup(coup, titanId, etat, mancheNumber, profile = makeP
      tomber ses débris n'importe où, et le simulateur mesurerait une force
      qui n'est pas celle qu'un joueur affronte. */
   const replis = [];
-  const res = simulerCarte(coup, titanId, { ...etat, replis }, mancheNumber, profile, false);
-  trancherReplisIA(replis, etat, () => profile, () => true);
+  const trancherReplis = () => trancherReplisIA(replis.splice(0), etat, () => profile, () => true);
+  const res = simulerCarte(coup, titanId, { ...etat, replis }, mancheNumber, profile, false, pas && { ...pas, replis: trancherReplis });
+  trancherReplis();
   return res;
+}
+
+/* ── GRAOUHHH PAS À PAS, COMME À LA TABLE (audit du 24/09, M1) ──
+   La table (`advanceGraouhhhLoop`) tranche le Dilemme de chaque cible AVANT de
+   la déplacer, et chaque repli avant la cible suivante. La recherche et le
+   simulateur jouaient la carte d'un bloc (`resolveGraouhhh`) : un bloc de
+   Dilemme bousculé par la cible suivante, un débris d'avant la carte qui ne
+   suit plus sa cible — deux plateaux différents, et l'IA chiffrait l'autre.
+   `pas.decision`, `pas.fatigue`, `pas.replis` tranchent chaque pause. Sans
+   eux, décisions et Fatigues remontent à l'appelant, sans être tranchées. */
+function graouhhhPasAPas(titanId, dr, dc, mancheNumber, etat, pas) {
+  const scan = scanGraouhhhAxis(titanId, etat, dr, dc); // pose aussi le relevé de début de carte
+  const log = [...scan.log];
+  const decisions = [];
+  const fatigues = [];
+  if (scan.touched.length === 0) return { log, decisions, fatigues };
+  let cont = {
+    titanId, dr, dc, reculDistance: scan.reculDistance, mancheNumber,
+    remaining: scan.touched.slice().reverse().map((t) => t.id),
+    bagarreIds: [], touchedCount: scan.touched.length, pendingMoveId: null,
+  };
+  for (;;) {
+    const r = advanceGraouhhh(etat, cont);
+    log.push(...r.log);
+    for (const f of r.fatigues || []) (pas ? pas.fatigue(f) : fatigues.push(f));
+    if (r.done) break;
+    if (r.repliEnAttente) pas?.replis?.();
+    else if (pas) pas.decision(r.decision);
+    else decisions.push(r.decision);
+    cont = r.continuation;
+  }
+  return { log, decisions, fatigues };
 }
 
 /**
@@ -1112,7 +1247,7 @@ export function choisirRepartitionEcroulement(ecroulement, etat, initiatorId = n
 // `modele` : pendant la recherche, les décisions sont résolues par le modèle
 // (`appliquerDecisions`) ; pour jouer pour de vrai (`appliquerCoup`), elles
 // remontent à l'appelant.
-function simulerCarte(coup, titanId, etat, mancheNumber, profile = makeProfile(), modele = true) {
+function simulerCarte(coup, titanId, etat, mancheNumber, profile = makeProfile(), modele = true, pas = null) {
   const { cardId, dir, bbDest, jnpCells, mise = 0 } = coup;
   const moi = etat.titans.find((t) => t.id === titanId);
   let res = null;
@@ -1125,7 +1260,12 @@ function simulerCarte(coup, titanId, etat, mancheNumber, profile = makeProfile()
       res = resolveTeteEnAvant(titanId, dir.dr, dir.dc, mise, etat);
       break;
     case "graouhhh":
-      res = resolveGraouhhh(titanId, dir.dr, dir.dc, mancheNumber, etat);
+      res = graouhhhPasAPas(titanId, dir.dr, dir.dc, mancheNumber, etat, modele
+        ? {
+          decision: (d) => appliquerDecisions([d], etat, profile),
+          fatigue: (f) => { if (iaRefuseFatigue(f, etat.titans)) refuserFatigue(f.attackerId, f.targetId, f.cardId, etat.titans); },
+        }
+        : pas);
       break;
     case "boing_boing":
       res = resolveBoingBoing(titanId, bbDest, mise, mancheNumber, etat);
@@ -1174,10 +1314,23 @@ function simulerCarte(coup, titanId, etat, mancheNumber, profile = makeProfile()
          est engagée sur CHAQUE cible tant que le stock suit : la carte est
          résolue duel par duel, et une mise ne se partage pas. */
       const miseVoulue = coup.miseFpmc ?? 0;
-      for (const defId of cibles) {
+      for (const [i, defId] of cibles.entries()) {
         const miseIA = Math.min(miseVoulue, stock);
         stock -= miseIA;
-        const r = resolveFautPasMeChauffer(titanId, defId, cibles.length, etat, { attackerBid: miseIA });
+        /* La cible mise aussi (2026-09-24). Pour de vrai, avec sa somme et son
+           profil ; dans la recherche, l'attaquant ne connaît de sa somme que
+           l'estimation publique, et prête à la cible la même règle. */
+        const cible = etat.titans.find((t) => t.id === defId);
+        const baseCible = modele ? forceEstimee(cible) : getProgrammedSum(cible);
+        const miseCible = attaquant && cible ? miseDefenseFpmc(attaquant, cible, etat.titans, {
+          baseAttaquant: getProgrammedSum(attaquant), baseDefenseur: baseCible,
+          profile: modele ? profile : (pas?.profilDe?.(defId) ?? profile),
+        }) : 0;
+        const r = resolveFautPasMeChauffer(titanId, defId, cibles.length, etat, {
+          attackerBid: miseIA, defenderBid: miseCible, premierDuel: i === 0,
+          defenderBase: modele ? baseCible : null,
+        });
+        if (cible) cible.adrenaline = Math.max(0, (cible.adrenaline || 0) - miseCible);
         decisions.push(...(r.decisions || []));
       }
       if (attaquant) attaquant.adrenaline = Math.max(0, stock);
@@ -1188,11 +1341,28 @@ function simulerCarte(coup, titanId, etat, mancheNumber, profile = makeProfile()
       break;
   }
 
-  if (modele) appliquerDecisions(res?.decisions, etat, profile);
   // Sur Faut Pas Me Chauffer, le duel a déjà débité la mise cible par cible :
-  // la retrancher ici la compterait deux fois.
+  // la retrancher ici la compterait deux fois. AVANT les décisions, comme à la
+  // table : l'arbitrage RAGE lit la réserve de l'attaquant (audit du 24/09, L3).
   if (mise > 0 && moi && cardId !== "faut_pas_me_chauffer") {
     moi.adrenaline = Math.max(0, (moi.adrenaline || 0) - mise);
+  }
+  if (modele) {
+    /* Les Fatigues refusables aussi, avec la règle et dans l'ordre de la
+       table (audit du 24/09, M5) : sans elles, l'IA croyait sa Fatigue
+       acquise et ne voyait pas l'Adrénaline que le refus lui rapporte. */
+    const fatigues = () => {
+      for (const f of res?.fatigues || []) {
+        if (iaRefuseFatigue(f, etat.titans)) refuserFatigue(f.attackerId, f.targetId, f.cardId, etat.titans);
+      }
+    };
+    if (cardId === "graouhhh") {
+      appliquerDecisions(res?.decisions, etat, profile);
+      fatigues();
+    } else {
+      fatigues();
+      appliquerDecisions(res?.decisions, etat, profile);
+    }
   }
   /* Le `return` manquait (audit du 2026-09-07). Aucun bug visible : le seul
      appelant, `simulation.js`, ignore la valeur. Mais la fonction est
@@ -1252,7 +1422,15 @@ export function candidatsPourCarte(cardId, titanId, gameState, profile = makePro
     const pool = getJeNePartagePasPool(titanId, gameState);
     if (pool.length === 0) return [{ cardId, jnpCells: [], mise: 0 }];
     const nb = isLanterneRouge(titanId, gameState) ? 3 : 2;
-    return combinaisons(pool, Math.min(nb, pool.length)).map((jnpCells) => ({ cardId, jnpCells, mise: 0 }));
+    /* Une case qui porte plusieurs éléments se ramasse plusieurs fois, comme
+       le fait le joueur. En cases DISTINCTES seulement, une pile unique à
+       portée faisait jouer la carte pour rien (« Sélection invalide »), là où
+       un humain prend deux blocs sur la même case (audit du 2026-09-23). */
+    const exemplaires = pool.flatMap((cle) => Array(gameState.looseBlocks[cle].length).fill(cle));
+    const vus = new Set();
+    return combinaisons(exemplaires, Math.min(nb, exemplaires.length))
+      .filter((jnpCells) => { const k = jnpCells.join(); if (vus.has(k)) return false; vus.add(k); return true; })
+      .map((jnpCells) => ({ cardId, jnpCells, mise: 0 }));
   }
 
   /* Faut Pas Me Chauffer : les cibles sont imposées par le Périmètre, mais
@@ -1508,9 +1686,11 @@ export function planProgrammationSequentielle(titanId, gameState, profile = make
         if (pick.depuis) resolveFreeMovement(titanId, pick.depuis, suite);
         simulerCarte(pick.coup, titanId, suite, mancheNumber, profile);
         etatCourant = suite;
-      } catch {
+      } catch (e) {
         // Un coup qui ne se rejoue pas ne doit pas faire tomber la
-        // programmation : on garde l'état précédent et on continue.
+        // programmation : on garde l'état précédent et on continue — mais
+        // compté, comme tout candidat écarté (cf. DIAGNOSTIC).
+        compterErreur(e);
       }
     }
   }

@@ -99,7 +99,12 @@ describe("simulateur — reproductibilité", () => {
     // Relevé à 90 s le 2026-08-28 : la référence développe dix cases avant
     // de choisir sa carte et chiffre chaque bloc à portée au score complet,
     // placements de Verts compris. Même mesure, IA qui réfléchit bien plus.
-  }, 90000);
+    //
+    // Porté à 240 s le 2026-09-23 : 90 s passait SOUS le plancher global de
+    // 120 s (`vite.config.js`), et le test d'échelle a sauté à 90 s dans une
+    // suite lancée sur une machine chargée. Un budget local ne doit jamais
+    // être plus serré que le défaut qu'il est censé élargir.
+  }, 240000);
 });
 
 describe("simulateur — l'échelle de force est bien ordonnée", () => {
@@ -126,7 +131,8 @@ describe("simulateur — l'échelle de force est bien ordonnée", () => {
     // planificateur — ce que la règle des éléments contigus a suffi à
     // provoquer. Ce n'est pas une régression de perf à masquer, c'est un
     // budget qui n'a jamais correspondu au coût réel du test.
-  }, 90000);
+    // 240 s depuis le 2026-09-23 (cf. le test de reproductibilité plus haut).
+  }, 240000);
 });
 
 describe("agrégation — les indicateurs utiles à un auteur", () => {

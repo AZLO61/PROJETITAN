@@ -42,7 +42,10 @@ function renoncer() {
   travailleur = null;
   const demandes = [...enAttente.values()];
   enAttente.clear();
-  demandes.forEach((d) => d.suite(calculer(d)));
+  // Une demande qui lève ne doit pas emporter celles qui attendent derrière.
+  demandes.forEach((d) => {
+    try { d.suite(calculer(d)); } catch (e) { console.error("[penseeIA]", d.nom, e); }
+  });
 }
 
 function obtenirTravailleur() {
@@ -60,6 +63,8 @@ function obtenirTravailleur() {
       d.suite("erreur" in data ? calculer(d) : data.resultat);
     };
     w.onerror = () => { w.terminate(); renoncer(); };
+    // Une réponse impossible à désérialiser ne doit pas rester sans suite.
+    w.onmessageerror = () => { w.terminate(); renoncer(); };
     travailleur = w;
   } catch {
     travailleur = null;

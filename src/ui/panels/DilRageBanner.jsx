@@ -61,6 +61,12 @@ export default function DilRageBanner({ vm }) {
   const { currentDecision, decisionQueue, titanState, dilAttackerPick, dilValidateAttackerPick, resolveDilDefenderPick, resolveDilCancelWithAdrenaline, resolveRagePick, resolveRagePickAdrenaline, titanDisplayName } = vm;
   if (!currentDecision) return null;
   const isRage = currentDecision.type === "RAGE";
+  /* À distance, seul l'appareil du Titan interrogé tranche (audit du
+     2026-09-23, même règle que la Fatigue et FPMC) : l'attaquant désigne ou
+     arrache, la cible choisit ce qu'elle perd. Les autres attendent. */
+  const interroge = currentDecision.stage === "DEFENDER_PICK" && !isRage
+    ? currentDecision.defenderId : currentDecision.attackerId;
+  const aMoi = !(vm.titanMasque && vm.titanMasque(interroge));
   const mainColor = isRage ? "#e32347" : "#2D8DF5";
 
   return (
@@ -108,7 +114,13 @@ export default function DilRageBanner({ vm }) {
         </div>
       )}
 
-      {currentDecision.type === "DIL" && currentDecision.stage === "ATTACKER_PICK" && (() => {
+      {!aMoi && (
+        <p style={{ margin: "0 0 6px", color: "rgba(255,255,255,.75)", fontSize: ".8rem" }}>
+          ⏳ {titanDisplayName ? titanDisplayName(interroge) : `Titan ${interroge}`} tranche sur son appareil…
+        </p>
+      )}
+
+      {aMoi && currentDecision.type === "DIL" && currentDecision.stage === "ATTACKER_PICK" && (() => {
         const defender = titanState.players.find((t) => t.id === currentDecision.defenderId);
         // Couleurs du Repaire + « un Socle tiré au sort » si la cible en a.
         const options = getDilOptions(currentDecision.defenderId, { titans: titanState.players });
@@ -169,7 +181,7 @@ export default function DilRageBanner({ vm }) {
         );
       })()}
 
-      {currentDecision.type === "DIL" && currentDecision.stage === "DEFENDER_PICK" && (() => {
+      {aMoi && currentDecision.type === "DIL" && currentDecision.stage === "DEFENDER_PICK" && (() => {
         const defender = titanState.players.find((t) => t.id === currentDecision.defenderId);
         const canPay = (defender.adrenaline || 0) >= 1;
         return (
@@ -218,9 +230,12 @@ export default function DilRageBanner({ vm }) {
         );
       })()}
 
-      {currentDecision.type === "RAGE" && (() => {
+      {aMoi && currentDecision.type === "RAGE" && (() => {
         const defender = titanState.players.find((t) => t.id === currentDecision.defenderId);
-        const showAdrOpt = defender.repaire.length < 2 && (defender.adrenaline || 0) > 0;
+        /* L'Adrénaline est une ressource comme une autre (FAQ #5) : toujours
+           prenable, pas seulement Repaire presque vide. L'IA le faisait déjà ;
+           le panneau humain l'offrait sous condition (Nikola, 2026-09-24). */
+        const showAdrOpt = (defender.adrenaline || 0) > 0;
         return (
           <div>
             <p style={{ margin: "0 0 6px", color: "rgba(255,255,255,.75)", fontSize: ".8rem" }}>
@@ -248,7 +263,7 @@ export default function DilRageBanner({ vm }) {
               {showAdrOpt && (
                 <button
                   onClick={resolveRagePickAdrenaline}
-                  title="La cible n'a pas assez de blocs : son Adrénaline est une ressource comme une autre, tu peux la lui prendre."
+                  title="Son Adrénaline est une ressource comme une autre : tu peux la lui prendre à la place d'un bloc."
                   style={{
                     background: "rgba(134,255,113,.2)", border: "1.5px solid #86ff71",
                     borderRadius: 8, color: "#86ff71", padding: "6px 16px", fontSize: ".85rem", fontWeight: 700, cursor: "pointer",

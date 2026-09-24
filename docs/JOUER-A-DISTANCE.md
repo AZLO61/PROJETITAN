@@ -167,9 +167,10 @@ Puis **Lancer la partie**. Les invités entrent automatiquement.
 Les autres voient ton plateau et t'envoient leurs coups. C'est ce qui garantit
 que quatre écrans ne divergent jamais.
 
-**Si tu fermes ton onglet, la partie s'arrête** pour tout le monde — ils sont
-prévenus au lieu d'attendre devant un plateau figé. Un rechargement de page, en
-revanche, est rattrapable : tu as deux minutes pour revenir.
+**Si tu fermes ton onglet, la partie s'arrête** pour tout le monde. Les invités
+l'apprennent au bout de deux minutes, le temps que le relais constate ton
+absence. Une **coupure réseau** se rattrape (voir plus bas), un **rechargement
+de page** non : le moteur et les mains partent avec l'onglet.
 
 **Chacun ne voit que sa main.** Le plateau part en clair à toute la table, les
 cartes de chacun lui partent à part. Un joueur qui ouvre la console de son

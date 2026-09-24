@@ -227,7 +227,7 @@ export default function RoundPanels({ vm, entete = null }) {
     recupPool,
     jouerRecuperation,
     jnpPool,
-    jnpToggleCell,
+    jnpPickCell,
     boardSignature3D,
     perimeterKeys,
     energie,
@@ -305,7 +305,7 @@ export default function RoundPanels({ vm, entete = null }) {
            toujours au sommet. */
         const distincts = [...new Set(looseBlocks[key] || [])];
         if (distincts.length > 1) setRecupChoiceCell({ cle: key, mode: "jnp" });
-        else jnpToggleCell(key);
+        else jnpPickCell(key);
       }
       return;
     }
@@ -1582,7 +1582,7 @@ export default function RoundPanels({ vm, entete = null }) {
                 <button
                   key={val}
                   onClick={() => {
-                    if (recupChoiceCell.mode === "jnp") jnpToggleCell(recupChoiceCell.cle, val);
+                    if (recupChoiceCell.mode === "jnp") jnpPickCell(recupChoiceCell.cle, val);
                     else jouerRecuperation(recupChoiceCell.cle, val);
                     setRecupChoiceCell(null);
                   }}

@@ -49,7 +49,9 @@ export default function FpmcBanner({ vm }) {
      la mise des Titans qu'il tient — celle d'en face reste « ? » jusqu'à la
      révélation — et le bouton n'existe que chez celui qui révèle. */
   const aDistance = Boolean(session);
-  const tenu = (id) => !aDistance || (!titanMasque(id) && titanModes[id] !== "ia");
+  // La mise d'une IA est la sienne, même autour d'une seule tablette : elle
+  // reste « ? » jusqu'à la révélation (audit du 2026-09-23).
+  const tenu = (id) => titanModes[id] !== "ia" && (!aDistance || !titanMasque(id));
   const peutReveler = !aDistance || !titanMasque(fpmcRevelateur);
 
   return (

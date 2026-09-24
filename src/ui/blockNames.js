@@ -26,9 +26,7 @@ export const BLOCK_ORDER = ["bleu", "rose", "orange", "rouge"];
    endroits » relevé sur les règles de jeu.
 
    L'affichage lit maintenant la même fonction que le décompte final. */
-import { scoreBareme, BAREME } from "../domain/gameRules.js";
-
-export { BAREME as BAREME_PALIERS };
+import { scoreBareme } from "../domain/gameRules.js";
 
 /** Points rapportés par `n` blocs de cette couleur. `null` pour le Vert. */
 export function scoreBloc(color, n) {

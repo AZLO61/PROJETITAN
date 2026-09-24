@@ -50,6 +50,8 @@ export default function RepoVolBanner({ vm }) {
      désormais elle-même — voir l'effet dédié dans le contrôleur — et ce
      bandeau se contente de l'annoncer. */
   const detonateurEstIa = titanModes && titanModes[detonateurId] === "ia";
+  // À distance, seul l'appareil du Détonateur choisit (audit du 2026-09-23).
+  const detonateurAilleurs = Boolean(vm.titanMasque && vm.titanMasque(detonateurId));
 
   /* La chaîne réelle, nommée. On repart du Détonateur — c'est lui qui
      choisit, il doit se lire en premier — et on referme la boucle sur lui
@@ -133,12 +135,19 @@ export default function RepoVolBanner({ vm }) {
 
       {!volDirection ? (
         <div>
-          <p style={{ marginBottom: 8, color: "rgba(255,255,255,.85)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {/* Un <div> et non un <p> : l'icône du Titan est un <div>, interdit dans un
+              paragraphe (alerte React). `marginTop: "1em"` reprend la marge par
+              défaut du <p>, le rendu ne bouge pas. */}
+          <div style={{ marginTop: "1em", marginBottom: 8, color: "rgba(255,255,255,.85)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <TitanIcon titanId={detonateurId} size={18} /> {titanDisplayName ? titanDisplayName(detonateurId) : `Titan ${detonateurId}`} (Détonateur) choisit le sens de la chaîne :
-          </p>
+          </div>
           {detonateurEstIa ? (
             <div style={{ color: "#a855f7", fontWeight: 700, fontSize: ".8rem" }}>
               🤖 Ce n'est pas ton choix — le Détonateur est une IA, elle tranche elle-même…
+            </div>
+          ) : detonateurAilleurs ? (
+            <div style={{ color: "#a855f7", fontWeight: 700, fontSize: ".8rem" }}>
+              ⏳ Ce n'est pas ton choix — le Détonateur tranche sur son appareil…
             </div>
           ) : (
           /* « GAUCHE » ET « DROITE » NE DISENT RIEN — Nikola, 2026-08-28 :

@@ -70,15 +70,15 @@ describe("Je Ne Partage Pas — Lanterne Rouge figée pour toute la carte", () =
     act(() => { vmCourant.toggleJnpMode(); });
     expect(vmCourant.jnpNbToPick).toBe(3); // figé à l'engagement de la carte
 
-    act(() => { vmCourant.jnpToggleCell(voisines[0]); });
-    act(() => { vmCourant.jnpToggleCell(voisines[1]); });
+    act(() => { vmCourant.jnpPickCell(voisines[0]); });
+    act(() => { vmCourant.jnpPickCell(voisines[1]); });
 
     // À ce stade, en direct, le Titan n'est plus Lanterne Rouge (Repaire à 2
     // contre 0 pour les autres) — mais le compte figé doit rester à 3.
     expect(vmCourant.jnpNbToPick).toBe(3);
     expect(vmCourant.jnpMode).toBe(true); // la carte n'est pas close, le 3e bloc reste à prendre
 
-    act(() => { vmCourant.jnpToggleCell(titanAvant.cell); });
+    act(() => { vmCourant.jnpPickCell(titanAvant.cell); });
 
     const titanApres = vmCourant.titanState.players.find((p) => p.id === id);
     expect(titanApres.repaire).toHaveLength(3);

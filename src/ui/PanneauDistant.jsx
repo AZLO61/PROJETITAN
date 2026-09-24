@@ -122,6 +122,10 @@ export default function PanneauDistant({
      et se dicte aux invités. Aucun des deux n'est écrit sur le disque : seules
      l'adresse et le pseudo sont retenus. */
   const [cleRelais, setCleRelais] = useState("");
+  /* La clé ne part en REJOIGNANT que si l'hôte a ouvert « je reprends ma
+     table » (audit du 2026-09-23) : tapée pour « Ouvrir », puis oubliée dans
+     le champ, elle partait vers le relais de n'importe quelle table rejointe. */
+  const [reprise, setReprise] = useState(false);
   const [motDePasse, setMotDePasse] = useState("");
   const [idSalle, setIdSalle] = useState("");
   const [occupe, setOccupe] = useState(false);
@@ -205,15 +209,19 @@ export default function PanneauDistant({
     setOccupe(true);
     setErreur(null);
     try {
-      ecrireMemoire(CLE_RELAIS, adresse);
       ecrireMemoire(CLE_PSEUDO, pseudo);
       const s = quoi === "creer"
         ? await creerSession({ urlRelais: adresse, cleRelais, pseudo })
         /* `cleRelais` part aussi en rejoignant, et elle est facultative : elle
            ne sert qu'à l'hôte qui REPREND sa propre table après s'être
            déconnecté. Vide, le relais l'ignore et rend un siège d'invité. */
-        : await rejoindreSession({ urlRelais: adresse, id: table, motDePasse: secret, pseudo, cleRelais });
+        : await rejoindreSession({ urlRelais: adresse, id: table, motDePasse: secret, pseudo, cleRelais: reprise ? cleRelais : "" });
       onBrancherSession(s);
+      /* L'adresse n'est retenue qu'une fois la connexion réussie, et jamais
+         quand elle vient d'un lien (audit du 2026-09-23) : un lien piégé la
+         réécrivait en mémoire, et le prochain « Ouvrir une table » de l'hôte
+         envoyait sa clé du relais à ce faux relais. */
+      if (valeurs.urlRelais == null) ecrireMemoire(CLE_RELAIS, adresse);
       // Le mot de passe a servi : il quitte la barre d'adresse.
       effacerInvitation();
       // Les deux secrets quittent les champs dès qu'ils ont servi. Celui de la
@@ -589,7 +597,7 @@ export default function PanneauDistant({
 
               Facultatif, et discret : neuf joueurs sur dix n'y touchent jamais. */}
           {ecran === "rejoindre" && (
-            <details>
+            <details onToggle={(e) => setReprise(e.currentTarget.open)}>
               <summary style={{ ...prose(T.faint, T.micro), fontWeight: 700, cursor: "pointer" }}>
                 Tu es l&apos;hôte et tu reprends ta table ?
               </summary>

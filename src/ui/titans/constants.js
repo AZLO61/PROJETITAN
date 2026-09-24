@@ -30,5 +30,3 @@ export function accentDeplacement(titanId) {
 export function accentDeplacement3D(titanId) {
   return Number(`0x${accentDeplacement(titanId).slice(1)}`);
 }
-
-export { TITAN_SPRITE_KEY, SPRITE_DATA } from "../board3d/constants.js";

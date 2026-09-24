@@ -245,6 +245,14 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
        que celui qu'on joue — et c'est sur ces chiffres qu'on arbitre. */
     for (const t of etat.titans) ensureProgrammableHand(t);
 
+    /* La programmation voit la Manche QUI COMMENCE, comme à la table (audit
+       du 2026-09-23) : `finDePartie` n'était réécrit que pendant les tours
+       d'action, la dernière Manche se programmait donc avec la lecture de fin
+       de partie éteinte — 36 programmations d'Expert sur 60 différaient. Et
+       l'ordre de passage du round précédent n'a plus de sens ici. */
+    etat.finDePartie = { apocalypseThreshold, mancheNumber: manche, nbJoueurs };
+    delete etat.aJouerEncore;
+
     for (const id of ordreManche) {
       const cartes = reglagesDe(profilsUtilises[id]).programmationSequentielle
         ? planProgrammationSequentielle(id, etat, profilsUtilises[id], manche)
@@ -306,6 +314,7 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
         const mouvement = tour
           ? (tour.destKey ? { destKey: tour.destKey } : null)
           : (porteeMouvement > 0 ? planMovement(id, etat, profil, porteeMouvement) : null);
+        if (mouvement && tour?.miseMouvement) titan.adrenaline -= tour.miseMouvement;
         if (mouvement) resolveFreeMovement(id, mouvement.destKey, etat);
         controler("mouvement", manche, round, id);
 
@@ -313,7 +322,13 @@ export function jouerPartie({ nbJoueurs = 4, profils = null, seed = 0, verifier 
         const coup = tour ? tour.coup : planCardPlay(id, etat, profil, manche);
         const cardId = coup?.cardId ?? titan.programmed[0];
         if (coup) {
-          const res = appliquerCoup(coup, id, etat, manche, profil);
+          // Graouhhh tranche chaque Dilemme et chaque Fatigue PENDANT la carte,
+          // cible par cible, comme la table (audit du 24/09, M1).
+          const res = appliquerCoup(coup, id, etat, manche, profil, {
+            decision: (d) => trancherDecisions([d]),
+            fatigue: (f) => trancherFatigues([f]),
+            profilDe: (tid) => profilsUtilises[tid],
+          });
           /* DANS L'ORDRE DU CONTRÔLEUR (`jouerCarte`), et tout AVANT la
              Récupération. Graouhhh tranche ses Dilemmes Titan par Titan
              pendant la carte (`advanceGraouhhhLoop`), chaque Fatigue après le

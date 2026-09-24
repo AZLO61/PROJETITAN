@@ -35,11 +35,11 @@ export default function CornerChoiceBanner({ vm }) {
         RENTRÉE PAR UN COIN BLOQUÉ
       </div>
 
-      <p style={{ margin: "0 0 10px", color: "rgba(255,255,255,.85)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <div style={{ margin: "0 0 10px", color: "rgba(255,255,255,.85)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
         {cornerChoice.titanId != null && <TitanIcon titanId={cornerChoice.titanId} size={18} />}
         {titanDisplayName ? titanDisplayName(cornerChoice.titanId) : `Titan ${cornerChoice.titanId}`} devait rentrer par{" "}
         <strong style={{ color: "#a3e8ff" }}>{cornerChoice.coinBloque}</strong>, occupé. Choisis par où il entre :
-      </p>
+      </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {cornerChoice.options.map((cle) => (

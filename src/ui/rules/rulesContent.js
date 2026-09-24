@@ -31,7 +31,7 @@ export const LEXIQUE = [
 
 export const BADGES = [
   { code: "DIL", nom: "Dilemme", def: "L'attaquant désigne 2 options différentes chez la cible : une couleur de son Repaire, ou « un Socle tiré au sort » si elle en possède au moins un. La cible choisit laquelle des 2 elle perd, ou paie 1 Adrénaline pour annuler. L'option Socle est anonyme : personne ne choisit lequel partira ni ne connaît sa valeur avant le tirage. Le VERT ne peut jamais être désigné, sauf s'il est la seule couleur du Repaire : sa valeur n'existe qu'au décompte final, en fixer la perte reviendrait à jouer un prix que personne ne connaît. Il faut 2 options distinctes — « 1 couleur + 1 Socle » suffit — SAUF quand la perte tombe au sol (Tout Casser, Tête en Avant, Graouhhh, Boing Boing) : une cible qui n'a qu'UNE option la laisse tomber sur sa case, l'attaquant n'a rien à désigner, et elle peut toujours payer 1 Adrénaline à la place (Nikola, 23 septembre 2026). Faut Pas Me Chauffer, dont la perte part chez l'attaquant, garde le minimum de 2. On ne peut pas DEMANDER une Adrénaline (Nikola, 7 septembre 2026) : l'Adrénaline est la DÉFENSE du Dilemme, pas une de ses options — la proposer reviendrait à offrir à la cible deux branches au même prix, donc aucun choix. Une cible qui en possède une s'en sort en la payant ; une cible qui n'en a pas subit le Dilemme. La Rage, elle, peut toujours prendre une Adrénaline. Où va l'élément perdu dépend de la CARTE jouée, voir le tableau ci-dessous.", color: "#FFD93D" },
-  { code: "RAGE", nom: "Rage", def: "L'attaquant choisit librement 1 ressource dans le Repaire de la cible, sans étape de défense. Possible dès que la cible possède 1 seule ressource. Où va la ressource dépend de la CARTE jouée, voir le tableau ci-dessous. Une Adrénaline volée rejoint toujours la réserve de l'attaquant : elle ne se pose pas au sol. Deux différences assumées avec le Dilemme (tranchées par Nikola le 2026-08-18) : les Socles ne sont PAS ciblables par une Rage, ils restent réservés au Dilemme — et le VERT, lui, l'est, alors que le Dilemme le protège. La Rage est plus brutale, c'est ce qui la distingue.", color: "#FF2E63" },
+  { code: "RAGE", nom: "Rage", def: "L'attaquant choisit librement 1 ressource dans le Repaire de la cible, sans étape de défense. Possible dès que la cible possède 1 seule ressource. Où va la ressource dépend de la CARTE jouée, voir le tableau ci-dessous. Son Adrénaline est une ressource comme une autre : l'attaquant peut la prendre à la place d'un bloc, à tout moment (Nikola, 24 septembre 2026). Une Adrénaline volée rejoint toujours la réserve de l'attaquant : elle ne se pose pas au sol. Deux différences assumées avec le Dilemme (tranchées par Nikola le 2026-08-18) : les Socles ne sont PAS ciblables par une Rage, ils restent réservés au Dilemme — et le VERT, lui, l'est, alors que le Dilemme le protège. La Rage est plus brutale, c'est ce qui la distingue.", color: "#FF2E63" },
   {
     code: "⊣",
     nom: "Arrêt faute de puissance",
@@ -79,7 +79,7 @@ export const CARTES = [
     resume: "Tu fonces en ligne droite sur 3 cases (+1 par Adrénaline dépensée).",
     effets: [
       "Bâtiment 1 bloc : arrêt, +1 Destruction.",
-      "Bâtiment plus haut (Seuil 4) : le bloc du dessous est projeté DANS L'AXE de la charge, jamais à contre-sens.",
+      "Bâtiment plus haut (Seuil 4) : le bloc du haut va dans ton Repaire, celui du dessous est projeté DANS L'AXE de la charge, jamais à contre-sens. +1 Destruction : elle se compte par case touchée, pas par bloc.",
       "Bloc libre : récupéré, tu prends sa place et tu t'arrêtes.",
       "Titan touché : DIL, ou RAGE au Seuil 4. +1 Bagarre.",
     ],
@@ -108,11 +108,11 @@ export const CARTES = [
     resume: "Destination au choix, 3 cases max, tous azimuts. Chaque obstacle se saute gratuitement (saute-mouton) : seules les cases libres comptent dans les 3.",
     effets: [
       "Bloc libre à l'arrivée : ramassé.",
-      "Bâtiment (Seuil 4) : Écroulement, les blocs sont distribués sur les cases adjacentes.",
+      "Amas de béton à l'arrivée : Écroulement, ses débris sont distribués sur les cases adjacentes.",
       "Titan présent : DIL, projeté de la valeur restante, +1 Bagarre.",
       "Titan présent (Seuil 4) : RAGE, le bloc part directement dans ton Repaire. Impossible sans Adrénaline.",
     ],
-    note: "🦘 La projection du Titan sur lequel tu atterris est égale à la distance restante de ton saut. 🧱 Un groupe d'éléments bloquants COLLÉS les uns aux autres (bâtiments, débris, Titans) ne compte que pour 1 case dans ton décompte, quelle que soit sa longueur : un mur de trois bâtiments te coûte autant qu'une seule case.",
+    note: "🦘 La projection du Titan sur lequel tu atterris est égale à la distance restante de ton saut. 💉 Chaque Adrénaline ajoute 1 case à ton saut, donc 1 case de plus à cette projection. 🧱 Un groupe d'éléments bloquants COLLÉS les uns aux autres (bâtiments, débris, Titans) ne compte que pour 1 case dans ton décompte, quelle que soit sa longueur : un mur de trois bâtiments te coûte autant qu'une seule case.",
   },
   {
     num: "05",

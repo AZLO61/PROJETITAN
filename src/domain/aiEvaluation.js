@@ -69,10 +69,8 @@
 import {
   COULEURS,
   computeFinalScore,
-  countActiveTeleporters,
   countColorOnBoard,
   SEUIL_PENURIE,
-  countStandingBuildings,
   isSocleMarker,
   manchesMax,
   scoreBareme,
@@ -626,11 +624,52 @@ export function bestVertAssignment(titanId, titans, { exact = false, autres = {}
  * commune mesure avec le gain.
  */
 export function bestVertAssignments(titans, { exact = false } = {}) {
+  const cle = `${exact ? "x" : "g"}|${signatureScore(titans)}`;
+  const connu = cacheVerts.get(cle);
+  if (connu) return connu;
   const out = {};
   for (const t of titans) {
     out[t.id] = bestVertAssignment(t.id, titans, { exact, autres: out });
   }
+  if (cacheVerts.size >= CACHE_VERTS_MAX) cacheVerts.clear();
+  cacheVerts.set(cle, out);
   return out;
+}
+
+/* ── CACHE DU PLACEMENT DES VERTS (audit perf du 2026-09-23) ──
+   `computeFinalScore` était la fonction la plus chaude du profil de l'IA
+   (19 % du temps JS) : chaque placement de Verts en demande des dizaines, et
+   la recherche le recalcule pour des centaines de coups qui ne changent pas
+   les Repaires. Le résultat ne dépend que de ce que la clé contient, lu dans
+   le même ordre des Titans : couleurs du Repaire COMPTÉES (l'ordre n'y joue
+   pas), Bagarre, Destruction, Adrénaline, Socles. Un champ lu par le score et
+   absent d'ici rendrait le cache faux : prouvé identique sur des parties
+   semées (empreinte avant/après), à refaire si le décompte lit un champ neuf.
+   Aucun appelant ne modifie l'objet rendu. */
+const cacheVerts = new Map();
+const cacheScores = new Map();
+const CACHE_VERTS_MAX = 20000; // ponytail: vidé d'un coup une fois plein, un LRU si la mémoire compte
+/* Le décompte complet que l'IA lit partout (placement glouton des Verts,
+   trophée Arc-en-ciel déduit du plateau) : même clé, puisque le trophée ne
+   dépend que des couleurs présentes. Objet partagé, lu jamais modifié. */
+export function scoreComplet(titans) {
+  const cle = signatureScore(titans);
+  const connu = cacheScores.get(cle);
+  if (connu) return connu;
+  const res = computeFinalScore(titans, bestVertAssignments(titans), gagnantArcEnCiel(titans));
+  if (cacheScores.size >= CACHE_VERTS_MAX) cacheScores.clear();
+  cacheScores.set(cle, res);
+  return res;
+}
+
+function signatureScore(titans) {
+  let s = "";
+  for (const t of titans) {
+    const c = { bleu: 0, rose: 0, orange: 0, rouge: 0, vert: 0 };
+    for (const x of t.repaire || []) if (c[x] !== undefined) c[x] += 1;
+    s += `${t.id}:${c.bleu},${c.rose},${c.orange},${c.rouge},${c.vert}:${t.bagarre || 0}:${t.destruction || 0}:${t.adrenaline || 0}:${(t.socles || []).join(",")};`;
+  }
+  return s;
 }
 
 /* ── LE TROPHÉE ARC-EN-CIEL, DÉDUIT DU PLATEAU ────────────────
@@ -713,6 +752,10 @@ const ATTRAIT_VERT = 1.3;
    proche — perdre son tour, c'est perdre à peu près ça. */
 const VALEUR_TOUR_PERDU = 4;
 
+/* Une carte gelée (Zone Repos) n'est pas un tour entier : la moitié. Exporté
+   pour que le refus de Fatigue parle la même unité que l'évaluation. */
+export const COUT_CARTE_GELEE = VALEUR_TOUR_PERDU * 0.5;
+
 /* Ce qu'un tour perdu par un ADVERSAIRE me rapporte à moi. Pas la totalité :
    à quatre joueurs, les deux autres en profitent autant. */
 const PART_DU_TOUR_ADVERSE = 0.5;
@@ -776,7 +819,7 @@ export function valeurAPortee(titan, gameState, rayon = 2, options = {}) {
      n'importe où sur une catégorie avec une couleur ». */
   const scoreAvec = (mutation) => {
     const liste = titans.map((t) => (t.id === titan.id ? mutation(t) : t));
-    return computeFinalScore(liste, bestVertAssignments(liste), gagnantArcEnCiel(liste))
+    return scoreComplet(liste)
       .totals[titan.id]?.total ?? 0;
   };
   const baseComplet = auScoreComplet && titans.length > 0 ? scoreAvec((t) => t) : 0;
@@ -1005,14 +1048,27 @@ export function valeurOfferte(titanId, gameState, options = {}) {
 ============================================================ */
 const PORTEE_FIN_DE_PARTIE = 3;
 
+/* ── UNE SEULE UNITÉ : LE BLOC À RETIRER (réglage d'IA du 2026-09-20, point 1) ──
+   Le `Math.min` comparait des bâtiments, des Téléporteurs, des blocs et des
+   tours de joueur. Mesuré : il valait 4 dès le premier tour, porté par les
+   cinq Téléporteurs, et un seul Téléporteur éteint allumait la fin de partie
+   alors qu'il restait des blocs à casser sur tous les autres. Un bâtiment
+   rasé ou un Téléporteur éteint coûte désormais autant de gestes qu'il porte
+   de blocs — les plus petits d'abord, c'est le chemin le plus court.
+   Mesuré au duel : neutre (−0,01 pt, 480 parties), gardé pour la cohérence. */
+const blocsDesPlusPetits = (batiments, n) => batiments
+  .map((b) => b.blocks.length).sort((a, b) => a - b).slice(0, n).reduce((s, x) => s + x, 0);
+
 function gestesAvantLaFin(gameState) {
   const { board = {}, looseBlocks = {}, finDePartie } = gameState;
   const seuil = finDePartie?.apocalypseThreshold ?? 5;
+  const debout = Object.values(board).filter((b) => b.blocks.length > 0);
+  const actifs = debout.filter((b) => b.isTeleporter);
 
   // Apocalypse Urbaine : bâtiments encore debout au-dessus du seuil.
-  const apocalypse = Math.max(0, countStandingBuildings(board) - seuil);
+  const apocalypse = blocsDesPlusPetits(debout, Math.max(0, debout.length - seuil));
   // Vide Spatial : Téléporteurs actifs au-dessus du dernier.
-  const vide = Math.max(0, countActiveTeleporters(board) - 1);
+  const vide = blocsDesPlusPetits(actifs, Math.max(0, actifs.length - 1));
   // Pénurie : la couleur la plus proche de disparaître du plateau.
   let penurie = Infinity;
   COULEURS.forEach((c) => {
@@ -1152,7 +1208,7 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
   // plateau. L'IA l'ignore donc, c'est une sous-estimation de 5 points
   // identique pour tout le monde, donc sans effet sur le classement des
   // coups.
-  const scores = computeFinalScore(titans, bestVertAssignments(titans), gagnantArcEnCiel(titans));
+  const scores = scoreComplet(titans);
   const mien = scores.totals[titanId];
   if (!mien) return 0;
 
@@ -1284,12 +1340,11 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
        au-dessus : c'est du temps de jeu retiré à quelqu'un, pas des points.
        Compté aussi POUR SOI, pour que l'IA se défende — jusqu'ici elle ne
        payait jamais l'Adrénaline qui refuse une Fatigue. */
-    const PART_DE_MANCHE = 0.5; // une carte gelée n'est pas un tour entier
     for (const t of titans) {
       const gelees = (t.repos || []).length;
       if (gelees === 0) continue;
-      if (t.id === titanId) note -= gelees * VALEUR_TOUR_PERDU * PART_DE_MANCHE;
-      else note += gelees * VALEUR_TOUR_PERDU * PART_DU_TOUR_ADVERSE * PART_DE_MANCHE * poids.adn;
+      if (t.id === titanId) note -= gelees * COUT_CARTE_GELEE;
+      else note += gelees * COUT_CARTE_GELEE * PART_DU_TOUR_ADVERSE * poids.adn;
     }
   }
 

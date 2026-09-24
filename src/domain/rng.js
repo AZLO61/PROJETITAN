@@ -85,6 +85,28 @@ export function randomInt(maxExclusive) {
   return Math.floor(next() * maxExclusive);
 }
 
+/* ── TIRAGES AVEUGLES, EN PARTIE À DISTANCE ──
+   Audit du 2026-09-24. La graine n'est plus diffusée, mais 32 bits se
+   retrouvent en quelques heures à partir du plateau initial, qui est public :
+   un invité motivé prédirait alors le Socle tiré au sort, la carte prise par
+   la Fatigue et la carte volée. En partie à distance, l'hôte tire ces trois-là
+   au générateur cryptographique ; en local et en simulation, rien ne change
+   et une graine rejoue toujours la partie. */
+let aveuglesSecrets = false;
+export function tiragesAveuglesSecrets(actif) {
+  aveuglesSecrets = Boolean(actif);
+}
+export function randomIntAveugle(maxExclusive) {
+  if (!aveuglesSecrets || !globalThis.crypto?.getRandomValues) return randomInt(maxExclusive);
+  const u = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(u);
+  return u[0] % maxExclusive; // ponytail: biais de modulo négligeable pour 6 éléments au plus
+}
+export function pickAveugle(arr) {
+  if (!arr || arr.length === 0) return undefined;
+  return arr[randomIntAveugle(arr.length)];
+}
+
 /** Un élément au hasard, ou `undefined` si le tableau est vide. */
 export function pick(arr) {
   if (!arr || arr.length === 0) return undefined;

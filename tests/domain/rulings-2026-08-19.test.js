@@ -339,13 +339,13 @@ describe("Cohabitation avec un debris (WIP 2026-08-19)", () => {
     expect(versBat.log.join(" ")).toMatch(/bloqu/i);
   });
 
-  it("la regle ne vit qu'a un seul endroit, condition d'un WIP reversible", () => {
+  it("la regle est acquise : plus aucune condition sur le Vert au sol", () => {
+    /* Le WIP est clos (Nikola, 2026-09-24) : l'interrupteur
+       `elementAuSolBloqueArret`, qui renvoyait toujours faux, est retire avec
+       ses branches mortes. Le comportement est tenu par les tests ci-dessus. */
     const src = lire("src/domain/gameRules.js");
-    // Plus aucune recopie de la condition : elle etait dupliquee 4 fois.
     expect(src).not.toMatch(/looseStack\.some\(\(e\) => e === "vert"\)/);
-    expect(src).toContain("function elementAuSolBloqueArret");
-    // Un seul point a rebasculer, et il est ecrit noir sur blanc.
-    expect(src).toMatch(/Avant le 2026-08-19 : return .*e === "vert"/);
+    expect(src).not.toContain("elementAuSolBloqueArret");
   });
 });
 
