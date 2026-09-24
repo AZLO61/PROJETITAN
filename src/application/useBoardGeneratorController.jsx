@@ -3072,6 +3072,15 @@ export function useBoardGeneratorController() {
       egalitesLanterneRouge,
     });
 
+    /* ── LE TOUR D'UNE IA PREND LE TEMPS QU'ON LE VOIE ──
+       2 000 ms suffisaient tant que rien ne s'animait. Depuis que les IA
+       tracent leurs chemins comme le joueur (Nikola, 2026-08-29 : « quitte à
+       ralentir un peu la vitesse de leur tour »), il faut au moins la durée
+       d'une traînée — 110 ms par case plus 1,5 s de tenue — avant que l'étape
+       suivante n'efface la précédente. Déclarée ce jour-là, branchée le
+       2026-09-24 seulement (Nikola : « ok pour 2,6 ») : le tour tournait à 2 s. */
+    const DELAI_IA_MS = 2600;
+
     // ── ÉTAPE 1 : MOUVEMENT PASSIF ──
     const t1 = setTimeout(() => {
       if (partieAbandonnee()) return;
@@ -3139,7 +3148,7 @@ export function useBoardGeneratorController() {
         if (tour) deplacer(tour.destKey ? { destKey: tour.destKey, mise: tour.miseMouvement || 0 } : null);
         else penser("planMovement", [playerId, jeuIA(), profilDe(playerId), portee], deplacer);
       });
-    }, 2000);
+    }, DELAI_IA_MS);
     aiTimersRef.current.push(t1);
 
     // ── ÉTAPE 2 : CARTE ──
@@ -3154,7 +3163,7 @@ export function useBoardGeneratorController() {
         coupJointRef.current = null;
         if (joint && joint.titanId === playerId) jouerCarte(joint.coup);
         else penser("planCardPlay", [playerId, jeuIA(), profilDe(playerId), mancheNumber], jouerCarte);
-      }, 2000);
+      }, DELAI_IA_MS);
       aiTimersRef.current.push(t2);
     }
 
@@ -3408,7 +3417,7 @@ export function useBoardGeneratorController() {
         // humain, cf. jouerToutCasser et consorts). La queue DIL/RAGE est globale
         // et se résout indépendamment du joueur actif — inutile d'attendre ici.
         finishAiTurn(cardId, { defausse });
-      }, 2000);
+      }, DELAI_IA_MS);
       aiTimersRef.current.push(t3);
     }
     /* Toujours pas de cleanup sur le démontage : la cascade doit s'exécuter

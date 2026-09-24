@@ -256,48 +256,6 @@ button {
   }
 }
 
-/* ── LE SEUL MOMENT ANIMÉ ───────────────────────────────────
-   Un mouvement, orchestré, et pas une collection d'effets au survol : la
-   plaque du Titan dont c'est le tour SE LÈVE hors du plateau pendant que les
-   autres reculent. C'est ce qui répond à « savoir ce que je peux faire » :
-   il n'y a jamais qu'une seule chose en relief à l'écran. */
-@keyframes titan-plate-rise {
-  from {
-    transform: translateY(6px) scale(0.985);
-    opacity: 0.7;
-  }
-  to {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes titan-coin-blink {
-  0%,
-  55% {
-    opacity: 1;
-  }
-  56%,
-  100% {
-    opacity: 0.25;
-  }
-}
-
-/* Un impact de kaiju secoue le meuble. Réservé à la résolution d'une carte,
-   une fois, jamais en boucle. */
-@keyframes titan-impact {
-  0% { transform: translate3d(0, 0, 0); }
-  15% { transform: translate3d(-3px, 2px, 0); }
-  30% { transform: translate3d(3px, -2px, 0); }
-  45% { transform: translate3d(-2px, -1px, 0); }
-  60% { transform: translate3d(2px, 1px, 0); }
-  100% { transform: translate3d(0, 0, 0); }
-}
-
-.titan-impact {
-  animation: titan-impact 420ms var(--ease-out) both;
-}
-
 /* ESSAI (2026-09-24, cf. ANIMER_TRAVERSEE dans RoundPanels.jsx) : un Titan
    poussé hors de BIG CITY traverse la Faille. Son icône s'ouvre en iris dans
    sa gouttière, une fois, en décélérant — pas de rebond, pas de boucle. */

@@ -21,6 +21,29 @@ import js from "@eslint/js";
 import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 
+/* ── UN COMPOSANT CITÉ EN JSX EST UN COMPOSANT UTILISÉ (2026-09-24) ──
+   Sans plugin React, `no-unused-vars` ne voit pas `<BoardPanel />` et croit
+   l'import mort : la règle était donc coupée sur tout le JSX, et le code mort
+   s'y accumulait sans bruit — l'audit du 24/09 y a trouvé ~90 imports, props
+   et états jamais lus. Ces quelques lignes font ce que fait le plugin
+   (`jsx-uses-vars`), sans dépendance de plus : elles marquent comme utilisé
+   le nom de chaque élément JSX ouvert. */
+const titan = {
+  rules: {
+    "jsx-uses-vars": {
+      create(context) {
+        return {
+          JSXOpeningElement(node) {
+            let nom = node.name;
+            while (nom.type === "JSXMemberExpression") nom = nom.object;
+            if (nom.type === "JSXIdentifier") context.sourceCode.markVariableAsUsed(nom.name, node);
+          },
+        };
+      },
+    },
+  },
+};
+
 export default [
   {
     /* `dist-*` ajouté le 2026-09-07 : une seconde sortie de build (`dist-sm`)
@@ -39,7 +62,7 @@ export default [
       sourceType: "module",
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
-    plugins: { "react-hooks": reactHooks },
+    plugins: { "react-hooks": reactHooks, titan },
     rules: {
       // La règle qui manquait. Toute la raison d'être de ce fichier.
       "no-undef": "error",
@@ -53,10 +76,14 @@ export default [
       "react-hooks/exhaustive-deps": "warn",
 
       // Une variable inutilisée signale souvent un renommage à moitié fait
-      // ou un paramètre oublié. En `warn` : le JSX n'étant pas analysé
-      // sans plugin React, quelques faux positifs subsistent sur les
-      // composants.
-      "no-unused-vars": ["warn", { args: "none", varsIgnorePattern: "^_" }],
+      // ou un paramètre oublié. En ERREUR depuis le 2026-09-24 (Nikola : « ok
+      // pour empêcher le code mort ») : un import, une prop, un état ou un
+      // paramètre final jamais lus font échouer `npm run check`, donc la CI.
+      // Un nom préfixé `_` reste permis quand l'inutilisation est voulue.
+      "titan/jsx-uses-vars": "error",
+      "no-unused-vars": ["error", {
+        args: "after-used", argsIgnorePattern: "^_", varsIgnorePattern: "^_", ignoreRestSiblings: true,
+      }],
     },
   },
   /* ── DEUX MONDES, DEUX JEUX DE GLOBALES (2026-09-16, accord de Nikola) ──
@@ -73,11 +100,4 @@ export default [
   { files: ["src/**"], languageOptions: { globals: globals.browser } },
   { files: ["server/**", "scripts/**", "*.config.js"], languageOptions: { globals: globals.node } },
   { files: ["tests/**"], languageOptions: { globals: { ...globals.browser, ...globals.node } } },
-  {
-    // Les composants d'interface utilisent leurs imports dans du JSX, que
-    // `no-unused-vars` ne sait pas voir sans le plugin React. La règle y
-    // est donc coupée plutôt que de noyer les vrais signaux.
-    files: ["src/ui/**/*.jsx", "src/**/*.jsx", "tests/**/*.jsx"],
-    rules: { "no-unused-vars": "off" },
-  },
 ];

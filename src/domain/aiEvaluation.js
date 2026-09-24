@@ -668,6 +668,10 @@ export function scoreComplet(titans) {
   return res;
 }
 
+/* Clé compacte : un caractère par nombre (des entiers de 0 à 65 535), et le
+   NOMBRE de Socles avant leurs valeurs — la chaîne reste décodable, donc sans
+   collision possible, pour deux fois moins de caractères à hacher à chaque
+   consultation du cache (la plus fréquente de toute la recherche). */
 function signatureScore(titans) {
   let s = "";
   for (const t of titans) {
@@ -679,7 +683,9 @@ function signatureScore(titans) {
       else if (x === "rouge") rouge++;
       else if (x === "vert") vert++;
     }
-    s += `${t.id}:${bleu},${rose},${orange},${rouge},${vert}:${t.bagarre || 0}:${t.destruction || 0}:${t.adrenaline || 0}:${(t.socles || []).join(",")};`;
+    const socles = t.socles || [];
+    s += String.fromCharCode(t.id, bleu, rose, orange, rouge, vert,
+      t.bagarre || 0, t.destruction || 0, t.adrenaline || 0, socles.length, ...socles);
   }
   return s;
 }

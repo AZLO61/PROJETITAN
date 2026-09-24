@@ -92,7 +92,7 @@ describe("Graouhhh joué par une IA", () => {
       vmCourant.setPassifUsed((prev) => ({ ...prev, [t1.id]: { move: true, recup: true } }));
     });
 
-    // La boucle IA enchaîne ses étapes sur des minuteries de 2 s.
+    // La boucle IA enchaîne ses étapes sur des minuteries de 2,6 s.
     await act(async () => { await vi.advanceTimersByTimeAsync(7000); });
 
     /* On vérifie l'INVARIANT, pas l'identité de la cible. Le plateau est

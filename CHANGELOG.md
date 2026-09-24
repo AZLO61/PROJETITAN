@@ -49,10 +49,19 @@ l'IA n'a changé.
   avant et après cette passe) — quand E7 est vide, la cible avance et son
   débris la suit (ruling du 19/09), ce que le test, écrit le 24/08, ignorait.
   Il pose désormais E7 debout : 0 échec sur 400.
-- **Non touché, à trancher par Nikola (DA)** : trois animations CSS jamais
-  branchées depuis la refonte du 25/08 (`titan-plate-rise`, `titan-coin-blink`,
-  `titan-impact`) et trois aides de style sans usage (`keyPressed`,
-  `meterSegments`, `hairline`).
+- **Décisions de Nikola, appliquées le soir même** :
+  - trois animations CSS jamais branchées depuis la refonte du 25/08
+    (`titan-plate-rise`, `titan-coin-blink`, `titan-impact`) et trois aides de
+    style sans usage (`keyPressed`, `meterSegments`, `hairline`) : montrées
+    dans un onglet, vérifiées inutilisées dans tout le dépôt, supprimées ;
+  - le tour d'IA passe à 2,6 s par étape (`DELAI_IA_MS`, voulu le 29/08) ;
+  - clé du cache de score compacte (un caractère par nombre, nombre de Socles
+    en tête : décodable, donc sans collision) — encore −10 % de réflexion,
+    empreintes identiques ;
+  - **le code mort fait échouer la CI** : `no-unused-vars` en erreur partout,
+    JSX compris, grâce à une règle `jsx-uses-vars` écrite dans
+    `eslint.config.js` (sans plugin de plus) ; paramètres finaux inutilisés
+    compris. Le chat à distance et l'élagage de l'IA restent en attente.
 
 ## Non publié — trente-neuvième passe du 2026-09-24 (règles et équilibrage, point par point)
 

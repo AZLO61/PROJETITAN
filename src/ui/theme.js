@@ -3,8 +3,7 @@
    ============================================================
    Les mêmes jetons que `src/index.css`, exposés au JavaScript parce que
    toute l'interface est en styles en ligne. Un composant ne compose plus
-   `rgba(255,255,255,.06)` à la main : il demande une plaque, une jauge, une
-   touche. C'est ce qui permet de changer le monde à un seul endroit — et ce
+   `rgba(255,255,255,.06)` à la main : il demande une plaque, une touche. C'est ce qui permet de changer le monde à un seul endroit — et ce
    qui empêche vingt panneaux d'inventer vingt gris légèrement différents.
 
    LANGUE D'ÉLÉVATION : le cerne. Un sprite d'arcade est cerné de noir, et
@@ -120,17 +119,13 @@ export function key(tone = "ghost", { enabled = true, size = "m", full = false }
     textTransform: "uppercase",
     cursor: enabled ? "pointer" : "not-allowed",
     /* L'ombre dure sous la touche n'est pas un effet néobrutaliste posé au
-       hasard : c'est l'épaisseur du capuchon de bouton, et c'est elle qui
-       disparaît quand on appuie (cf. `keyPressed`). */
+       hasard : c'est l'épaisseur du capuchon de bouton. */
     boxShadow: enabled && tone !== "ghost" ? `0 3px 0 ${T.edge}` : "none",
     transform: "translateY(0)",
     transition: `transform 90ms ${T.easeOut}, box-shadow 90ms ${T.easeOut}, background 140ms linear`,
     opacity: enabled ? 1 : 0.55,
   };
 }
-
-/* À poser sur onMouseDown/onMouseUp quand un bouton mérite l'enfoncement. */
-export const keyPressed = { transform: "translateY(3px)", boxShadow: "none" };
 
 /* ── TYPOGRAPHIE ───────────────────────────────────────────── */
 
@@ -187,40 +182,6 @@ export function prose(color = T.dim, size = T.small) {
   };
 }
 
-/* ── JAUGE À SEGMENTS ──────────────────────────────────────
-   Les pistes de score ne sont pas des barres lisses : ce sont des segments
-   durs, comme une jauge d'énergie de borne. On COMPTE les segments d'un coup
-   d'œil, on n'estime pas une longueur — c'est précisément ce que « suivre
-   les scores » demandait. */
-export function meterSegments(value, max, color) {
-  const cells = [];
-  for (let i = 0; i < max; i++) {
-    cells.push({
-      key: i,
-      on: i < value,
-      style: {
-        flex: 1,
-        minWidth: 3,
-        height: 10,
-        background: i < value ? color : "rgba(255,250,238,.10)",
-        border: `1px solid ${T.edge}`,
-        borderRadius: 1,
-      },
-    });
-  }
-  return cells;
-}
-
-/* ── LIGNE DE SERVICE ──────────────────────────────────────
-   Le filet fin qui sépare deux blocs d'information sans créer une boîte de
-   plus. Aucune plaque n'existe uniquement pour porter une bordure. */
-export const hairline = {
-  height: 1,
-  background: T.rule,
-  border: "none",
-  margin: `${T.s3} 0`,
-};
-
 /* ── LES VALEURS LITTÉRALES DES SIGNAUX ────────────────────
    `T.you` et compagnie valent `"var(--sig-you)"` : parfait pour peindre,
    inutilisable pour CALCULER. `encrePour` (styles.js) doit décider si une
@@ -236,7 +197,7 @@ export const hairline = {
    les jetons de `index.css` — c'est le prix à payer pour pouvoir calculer
    avec, en attendant `getComputedStyle` qui n'est pas disponible au moment
    où un style en ligne est fabriqué. */
-export const HEX = {
+const HEX = {
   "var(--sig-you)": "#ffd93d",
   "var(--sig-go)": "#16e08c",
   "var(--sig-warn)": "#fb923c",
