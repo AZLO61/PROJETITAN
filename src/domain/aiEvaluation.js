@@ -408,7 +408,13 @@ export const FORCE_SETTINGS = Object.freeze({
        aussi jugee depuis la meilleure case atteignable, et pas seulement
        depuis celle ou le Titan se tient. Mesure ci-dessus. */
     visePlacementCarte: true,
-    miseAdrenalineMax: 3, largeurJointe: 10, programmationSequentielle: true,
+    /* largeurJointe 10 → 16 (Nikola, 24/09 : le Difficile avait rattrapé
+       l'Expert, 101,5 % sur 960 parties). Duels de 480 parties : 16 contre 10
+       +1,08 pt/partie [+0,47 ; +1,70] ; 24 contre 16 +1,36 [+0,73 ; +1,99],
+       mais à 24 le Difficile restait à 99 % (le gain porte sur les tables
+       faibles) pour ~60 % de temps de réflexion en plus : Nikola a gardé 16.
+       Coût à 16 : ~145 → ~215 ms par tour de Titan sur PC (dans le Worker). */
+    miseAdrenalineMax: 3, largeurJointe: 16, programmationSequentielle: true,
     topN: 1, biais: 1,
   },
   [FORCES.DIFFICILE]: {

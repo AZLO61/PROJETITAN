@@ -1,5 +1,27 @@
 # Changelog
 
+## Non publié — trente-neuvième passe du 2026-09-24 (règles et équilibrage, point par point)
+
+Liste « à patcher » de Nikola, tranchée question par question. Un commit par
+point.
+
+- **Pénurie au seuil 1** : la partie s'arrête quand il ne reste plus qu'UN bloc
+  d'une couleur sur le plateau (bâtiments et sol). À 0 elle ne mordait presque
+  jamais (13-18 % des parties) ; à 1 elle devient la fin principale (48-62 %).
+  Moteur, glossaire, livret, tutoriel et tests.
+- **Livret ↔ moteur** : chaque chiffre de règle du livret porte une balise
+  invisible `data-const` ; `livret-constantes.test.js` vérifie qu'il vaut la
+  constante du moteur, et que chaque constante de règle est balisée.
+- **Option de table « Scores visibles »** (décochée par défaut) : le pré-score
+  de chaque Titan, Verts non comptés, dans sa bande.
+- **Expert** : `largeurJointe` 10 → 16, +1,08 pt/partie au duel (480 parties,
+  IC 95 % [+0,47 ; +1,70]). 24 gagnait encore +1,36 mais laissait le Difficile
+  à 99 % pour 60 % de réflexion en plus. Le Difficile reste proche de l'Expert.
+- **Essayé et rejeté** : « Lanterne partout » (Récupération à 2 blocs pour le
+  plus petit Repaire). L'écart 1er-4e passe de 20,6 à 21,7 sur 160 parties
+  appariées ; code retiré.
+- Rayés par Nikola : temps mort, tempérament visible, mode solo, journal typé.
+
 ## Non publié — trente-huitième passe du 2026-09-24 (les derniers points ouverts)
 
 « Règle tous les points que tu peux faire seul, au fur et à mesure. » Un
