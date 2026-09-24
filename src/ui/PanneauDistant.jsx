@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { T, marquee, readout, label, prose } from "./theme.js";
 import Icon from "./icons.jsx";
 import { TitanIcon } from "./titans/TitanVisuals.jsx";
 import { TITAN_COLORS } from "./titans/constants.js";
 import { creerSession, rejoindreSession } from "../net/session.js";
-import { btnStyle, smallBtn, cancelBtn } from "./styles.js";
+import { btnStyle, cancelBtn } from "./styles.js";
 
 /* ============================================================
    JOUER À DISTANCE — LE PANNEAU DE L'ÉCRAN D'ACCUEIL

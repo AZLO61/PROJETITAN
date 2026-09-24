@@ -2,7 +2,7 @@
 
 ## Domain
 
-`src/domain/gameRules.js` est la source de vérité comportementale extraite du fichier fourni. Les façades `board.js`, `cards.js`, `movement.js`, `turns.js` et `scoring.js` exposent des frontières sémantiques sans dupliquer les règles.
+`src/domain/gameRules.js` est la source de vérité comportementale extraite du fichier fourni. `aiPlanner.js` et `aiEvaluation.js` portent les Titans robots, `simulation.js` les campagnes ; `index.js` réexporte le tout.
 
 ## Application
 

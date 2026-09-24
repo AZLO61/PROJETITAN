@@ -4,7 +4,7 @@ import {
   BAREMES, BAREME_VERT, TROPHEES, PISTES_ADN, FINS_PARTIE,
 } from "./rulesContent.js";
 import BlockIcon from "../BlockIcon.jsx";
-import { T, marquee, label, prose } from "../theme.js";
+import { T, marquee, label } from "../theme.js";
 import Icon, { RainbowIcon } from "../icons.jsx";
 
 /* ============================================================

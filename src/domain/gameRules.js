@@ -934,7 +934,7 @@ function releaseSocle(cellKey, board, looseBlocks) {
    pas de bâtiment debout, et pas de Titan déjà là quand c'est un Titan qu'on
    déplace (un débris, lui, peut reposer sur la case d'un Titan).
 ============================================================ */
-function getCasesRepliDebris(depuis, cible, dr, dc, { board, looseBlocks = {}, titans = [], movingTitanId = null, initiatorId = null } = {}) {
+function getCasesRepliDebris(depuis, cible, dr, dc, { board, titans = [], movingTitanId = null, initiatorId = null } = {}) {
   const cr = rowIndex(cible[0]);
   const cc = Number(cible.slice(1));
   const titansByCell = indexerTitans(titans);
@@ -1451,7 +1451,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
   const elementEstUnDebris = ctx.movingTitanId == null;
   const noterRepli = (depuis, cible) => {
     const cases = getCasesRepliDebris(depuis, cible, curDr, curDc, {
-      board, looseBlocks, titans,
+      board, titans,
       movingTitanId: ctx.movingTitanId ?? null,
       initiatorId: ctx.initiatorId ?? null,
     });
@@ -1682,7 +1682,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
           // point de départ au repli (audit du 2026-09-23).
           const casesPossibles = getCasesRepliDebris(
             sortieDeFaille ? null : rowFromIndex(r) + c, impactKey, curDr, curDc,
-            { board, looseBlocks, titans, movingTitanId: null, initiatorId: ctx.initiatorId ?? null }
+            { board, titans, movingTitanId: null, initiatorId: ctx.initiatorId ?? null }
           );
           // Le point de chute par defaut fait partie des choix offerts.
           const choix = [...new Set([pushedKey, ...(casesPossibles || [])])];
@@ -1950,7 +1950,7 @@ function projectInDirection(fromRow, fromCol, dr, dc, energy, ctx) {
           ?? (Array.isArray(ctx.replis) ? ctx.replis.find((x) => x.titanId === occupantTitanId && x.defaut === caseAvant) : null)
           ?? null;
         if (!repliDeLOccupant && Array.isArray(ctx.replis)) {
-          const libresAutour = getFreeAdjacentCells(caseAvant, board, indexerTitans(titans), looseBlocks);
+          const libresAutour = getFreeAdjacentCells(caseAvant, board, indexerTitans(titans));
           if (libresAutour.length > 0) {
             repliDeLOccupant = {
               titanId: occupantTitanId,
@@ -3900,7 +3900,7 @@ function resolveBoingBoing(titanId, destKey, useAdrenaline, mancheNumber, gameSt
          « libre » y remettait un second Titan (graine 7086 en campagne).
          On réinterroge l'état réel, comme le fait projectInDirection depuis
          la correction du même défaut. */
-      const freeAdj = getFreeAdjacentCells(destKey, board, indexerTitans(titans), looseBlocks);
+      const freeAdj = getFreeAdjacentCells(destKey, board, indexerTitans(titans));
       if (freeAdj.length > 0) {
         landingKey = freeAdj[0];
         /* Point 1.1 de la liste du 2026-08-19. Ce cas etait le dernier
@@ -4658,7 +4658,7 @@ function poserDebrisAuSol(looseBlocks, cellKey, bloc) {
   looseBlocks[cellKey].push(bloc);
 }
 
-function getFreeAdjacentCells(centerKey, board, titansByCell, looseBlocks) {
+function getFreeAdjacentCells(centerKey, board, titansByCell) {
   const r0 = rowIndex(centerKey[0]);
   const c0 = Number(centerKey.slice(1));
   const cells = [];
@@ -4765,7 +4765,7 @@ function parcoursMouvement(startCell, maxRange, board, titansByCell, looseBlocks
             teleporters.forEach((exitKey) => {
               if (exitKey === key) return; // ne ressort pas sur lui-même
               // Ressort ADJACENT au téléporteur de sortie, jamais dessus (confirmé Nikola).
-              const exitCells = getFreeAdjacentCells(exitKey, board, titansByCell, looseBlocks);
+              const exitCells = getFreeAdjacentCells(exitKey, board, titansByCell);
               exitCells.forEach((adjKey) => {
                 const sk = `${adjKey}|1`;
                 if (!dist.has(sk) || dist.get(sk) > nd) {

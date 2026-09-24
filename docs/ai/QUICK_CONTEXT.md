@@ -9,14 +9,10 @@ Titan is a React/Vite game. The current repository is a refactor of the supplied
 - Application orchestration: `src/application/useBoardGeneratorController.jsx`
 - UI composition: `src/ui/GameView.jsx`
 - 3D rendering: `src/ui/board3d/Board3D.jsx`
-- AI state contract: `src/ai/state.js`
-- AI command contract: `src/ai/actions.js`
-- JSON contracts: `schemas/`
+- Robot Titans: `src/domain/aiPlanner.js` (search and decisions) and `src/domain/aiEvaluation.js` (scoring of positions), run in a Web Worker through `src/application/penseeIA.js`
 
 ## Dependency direction
 `ui -> application -> domain`
-
-`ai -> application/domain contracts`
 
 The domain must not import React, Three.js, DOM APIs, or UI modules.
 
@@ -24,11 +20,8 @@ The domain must not import React, Three.js, DOM APIs, or UI modules.
 Do not alter gameplay rules during cleanup/refactoring. A gameplay change requires an explicit specification change and a regression test.
 
 ## Where to work
-- Board generation/end-game rules: `src/domain/board.js` / `gameRules.js`
-- Cards: `src/domain/cards.js` / `gameRules.js`
-- Movement: `src/domain/movement.js` / `gameRules.js`
-- Turns/rest/recovery: `src/domain/turns.js` / `gameRules.js`
-- Scoring: `src/domain/scoring.js` / `gameRules.js`
+- Board, cards, movement, turns, scoring: `src/domain/gameRules.js`
+- Robot Titans: `src/domain/aiPlanner.js` / `aiEvaluation.js`; campaigns and duels: `src/domain/simulation.js`
 - Player flow/AI timing/UI callbacks: `src/application/useBoardGeneratorController.jsx`
 - Visual changes: `src/ui/`
 

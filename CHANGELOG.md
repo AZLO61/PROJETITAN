@@ -1,5 +1,42 @@
 # Changelog
 
+## Non publié — quarantième passe du 2026-09-24 (zéro ligne morte, puis optimisation)
+
+« Plus aucune ligne morte, et le plus optimisé possible. » Détection outillée
+(carte des exports et des imports, ESLint rejoué sur le JSX avec une règle qui
+voit les composants, champs du viewmodel lus par personne), par couches :
+chaque retrait en démasquait une autre. Empreinte de 12 parties semées
+identique avant/après (`6f07f1e058b91460`) : aucune décision du moteur ni de
+l'IA n'a changé.
+
+- **Échafaudage du commit initial jamais branché** : `src/ai/` (contrat d'état
+  et de commandes IA), `schemas/`, son test, et les cinq façades
+  `domain/{board,cards,movement,turns,scoring}.js`. L'IA réelle
+  (`aiPlanner`/`aiEvaluation`) n'est jamais passée par là ; `docs/AI.md` le
+  décrivait comme la règle. Docs réalignées.
+- **Contrôleur** : 40 noms destructurés du domaine jamais lus ; 55 champs du
+  viewmodel que ni l'interface ni les tests ne lisent ; et, derrière eux, des
+  états écrits mais jamais lus — `aiPlaying`, `aiStepLabel` (plus affiché depuis
+  le 18/08), `seedCount`, `distantFin`, `profilsImposes` — ainsi que
+  `phaseGuidance`, un `useMemo` recalculé à chaque rendu dont le panneau a été
+  retiré le 19/08. Chaque étape d'un tour d'IA relançait deux rendus complets
+  pour rien.
+- **`DELAI_IA_MS = 2600`** déclaré le 29/08 et jamais branché : le tour d'IA
+  tourne à 2 s depuis. Retiré, comportement vécu inchangé.
+- **Chat à distance** : câblé côté session et contrôleur le 30/08, jamais
+  affiché nulle part. Plomberie client retirée ; le relais le transporte
+  toujours (ses tests de livraison s'en servent).
+- **Interface** : 14 `import React` inutiles (runtime JSX automatique), imports,
+  props et variables jamais lus (`BoardPanel`, `RoundPanels`, `DilRageBanner`,
+  `Board3D`…).
+- **Domaine** : `getSeed` et `allProfiles` (plus d'appelant depuis le 28/08),
+  la graine courante de `rng.js` que plus rien ne relisait, deux paramètres
+  jamais lus du moteur, cinq `export` sans importeur.
+- **Non touché, à trancher par Nikola (DA)** : trois animations CSS jamais
+  branchées depuis la refonte du 25/08 (`titan-plate-rise`, `titan-coin-blink`,
+  `titan-impact`) et trois aides de style sans usage (`keyPressed`,
+  `meterSegments`, `hairline`).
+
 ## Non publié — trente-neuvième passe du 2026-09-24 (règles et équilibrage, point par point)
 
 Liste « à patcher » de Nikola, tranchée question par question. Un commit par

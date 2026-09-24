@@ -108,7 +108,7 @@ const ROUNDS_PAR_MANCHE = 3;
 const PORTEE_MOUVEMENT = 2;
 
 /** Profils tirés au sort pour une partie, un par Titan. */
-export function profilsAleatoires(nbJoueurs) {
+function profilsAleatoires(nbJoueurs) {
   const forces = Object.values(FORCES);
   const temperaments = Object.values(TEMPERAMENTS);
   const out = {};
@@ -483,7 +483,7 @@ export async function lancerCampagneCedante(options = {}) {
 }
 
 /** Regroupe les anomalies de toute une campagne, par type puis par cause. */
-export function agregerAnomalies(resultats) {
+function agregerAnomalies(resultats) {
   const parType = {};
   for (const r of resultats) {
     for (const a of r.anomalies || []) {

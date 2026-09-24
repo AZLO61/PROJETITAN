@@ -36,12 +36,11 @@
 ============================================================ */
 
 /** Types de messages que le relais sait router. Aucun n'est interprété par lui. */
-export const MESSAGE = {
+const MESSAGE = {
   ETAT: "etat",
   INTENTION: "intention",
   SIEGES: "sieges",
   PRIVE: "prive",
-  CHAT: "chat",
   PRESENCE: "presence",
   HOTE_PARTI: "hoteParti",
   /* Trois nouvelles du 2026-08-30, toutes de la même famille : dire ce qui
@@ -111,7 +110,7 @@ function construireSession({
 }) {
   const abonnes = {
     etat: new Set(), intention: new Set(), presence: new Set(),
-    prive: new Set(), chat: new Set(), fin: new Set(), erreur: new Set(),
+    prive: new Set(), fin: new Set(), erreur: new Set(),
     depart: new Set(), liaison: new Set(), retablie: new Set(),
     journal: new Set(),
   };
@@ -253,7 +252,6 @@ function construireSession({
             emettre("liaison", { message: "L'hôte est de retour, la partie reprend.", grave: false });
           } else if (m.t === MESSAGE.INTENTION) emettre("intention", m);
           else if (m.t === MESSAGE.PRIVE) emettre("prive", m.charge);
-          else if (m.t === MESSAGE.CHAT) emettre("chat", m);
           else if (m.t === MESSAGE.JOURNAL) emettre("journal", m);
         });
         if (coupe) { vivante = false; return; }
@@ -352,10 +350,6 @@ function construireSession({
         d'Adrénaline — que l'hôte doit adopter avant de jouer le coup. */
     envoyerIntention(fn, args = [], contexte = {}) {
       return envoyer({ t: MESSAGE.INTENTION, fn, args, contexte });
-    },
-
-    envoyerChat(texte) {
-      return envoyer({ t: MESSAGE.CHAT, texte });
     },
 
     estVivante() { return vivante; },

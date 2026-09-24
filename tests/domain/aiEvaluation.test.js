@@ -3,7 +3,6 @@ import {
   FORCES,
   FORCE_SETTINGS,
   TEMPERAMENTS,
-  allProfiles,
   bestVertAssignment,
   bestVertAssignments,
   chooseAmongBest,
@@ -395,7 +394,7 @@ describe("choix du coup — la molette de bruit", () => {
 describe("profils — inventaire", () => {
   it("expose les 12 combinaisons de niveau et de tempérament", () => {
     // Quatre niveaux de difficulté depuis le 2026-08-28, trois tempéraments.
-    expect(allProfiles()).toHaveLength(12);
+    expect(Object.keys(FORCES).length * Object.keys(TEMPERAMENTS).length).toBe(12);
   });
 
   it("s'affiche en clair pour la révélation en fin de partie", () => {

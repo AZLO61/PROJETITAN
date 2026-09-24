@@ -45,7 +45,6 @@ function sessionSimulee(siege, { ref, sieges = {} }) {
     diffuserJournal() { return Promise.resolve({}); },
     envoyerPrive() { return Promise.resolve({}); },
     publierSieges() { return Promise.resolve({}); },
-    envoyerChat() { return Promise.resolve({}); },
     resynchroniser: vi.fn(),
     quitter: vi.fn(() => Promise.resolve()),
     estVivante() { return true; },

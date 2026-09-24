@@ -1,10 +1,9 @@
 import React from "react";
 import CardVisual from "../cards/CardVisual.jsx";
 import { CARD_EFFECT } from "../cards/cardEffects.js";
-import TitanResourceBand from "../titans/TitanResourceBand.jsx";
 import { TitanIcon } from "../titans/TitanVisuals.jsx";
 import { TITAN_COLORS, accentDeplacement } from "../titans/constants.js";
-import { CARD_LABEL, CARD_FORCE, PHASE_LABELS } from "../../domain/index.js";
+import { CARD_LABEL, CARD_FORCE } from "../../domain/index.js";
 import { smallBtn, cancelBtn } from "../styles.js";
 import { T, marquee, readout, label, prose } from "../theme.js";
 import Icon, { AdrenalineIcon } from "../icons.jsx";
@@ -193,14 +192,9 @@ export default function BoardPanel({ vm }) {
   }, [vmActivePlayerId, vmPhase, vmSession, vmMonTitanDistant, vmTitanModes]);
   const {
     activePlayerId,
-    setActivePlayerId,
     titanModes,
     titanDisplayName,
     phase,
-    phaseValidated,
-    canValidatePhase,
-    getPhaseBlockReason,
-    validatePhase,
     selectedTitan,
     teaMode,
     setTeaMode,
@@ -242,7 +236,6 @@ export default function BoardPanel({ vm }) {
     pendingCardConfirm,
     setPendingCardConfirm,
     waitingNextTitan,
-    setWaitingNextTitan,
     passerAuTitanSuivant,
     canUseMovePassif,
     canUseRecupPassif,
@@ -250,7 +243,6 @@ export default function BoardPanel({ vm }) {
     undoStack,
     handleUndo,
     canPlayCard,
-    advanceActionRound,
     discardCurrentCard,
     canDiscardCard,
     teaTargets,
@@ -290,9 +282,6 @@ export default function BoardPanel({ vm }) {
   // jouer sa carte, ramasser. Le panneau empilait les trois d'un coup, dans
   // des cadres imbriqués, alors que deux d'entre elles n'étaient pas encore
   // jouables.
-  const carteJouee = selectedTitan
-    ? selectedTitan.playedThisManche.length > 0 || (selectedTitan.discardedHidden || []).length > 0
-    : false;
   // Le tour se lit par ROUND, pas par Manche. `canUseRecupPassif` est vrai
   // des qu'une carte a ete jouee dans la Manche : au round suivant, avant
   // meme d'avoir joue, le Ramassage s'affichait et masquait les cartes,

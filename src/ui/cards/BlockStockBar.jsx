@@ -1,4 +1,3 @@
-import React from "react";
 import { COLOR_HEX, STOCK_INITIAL } from "../../domain/gameRules.js";
 import { BLOCK_NAME, BLOCK_ORDER } from "../blockNames.js";
 import BlockIcon from "../BlockIcon.jsx";

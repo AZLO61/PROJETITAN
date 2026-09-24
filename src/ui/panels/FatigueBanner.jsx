@@ -1,4 +1,3 @@
-import React from "react";
 import { T, marquee } from "../theme.js";
 import { CARD_LABEL } from "../../domain/index.js";
 import { TitanIcon } from "../titans/TitanVisuals.jsx";

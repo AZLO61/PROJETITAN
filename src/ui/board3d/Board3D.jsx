@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { rowFromIndex, rowIndex, socleValue, isSocleMarker, COLOR_HEX } from "../../domain/gameRules.js";
 import {
@@ -148,11 +148,6 @@ export default function Board3D({ board, looseBlocks, titans, boardVersion, sele
     // Motifs de façade calqués sur les 5 icônes officielles (Bloc_*.png) :
     // chaque couleur a son propre pattern de fenêtres/rainures, pas un
     // brick pattern générique partagé.
-    function shadeColor(hex, factor) {
-      const c = new THREE.Color(hex);
-      c.multiplyScalar(factor);
-      return `#${c.getHexString()}`;
-    }
     function roundRectPath(ctx, x, y, w, h, r) {
       const rr = Math.min(r, w / 2, h / 2);
       ctx.beginPath();

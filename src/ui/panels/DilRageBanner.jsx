@@ -1,4 +1,3 @@
-import React from "react";
 import { COLOR_HEX, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions, optionsADesigner } from "../../domain/index.js";
 import { smallBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
@@ -41,8 +40,6 @@ function OptionIcon({ option, size = 30 }) {
 
 const optionAccent = (option) =>
   option === SOCLE_OPTION ? "#d8d8d8" : option === ADRENALINE_OPTION ? "#16E08C" : COLOR_HEX[option];
-const optionNom = (option) =>
-  option === SOCLE_OPTION ? "Socle" : option === ADRENALINE_OPTION ? "Adrénaline" : BLOCK_NAME[option];
 const compteOption = (defender, option) =>
   option === SOCLE_OPTION
     ? (defender.socles || []).length

@@ -1,4 +1,3 @@
-import React from "react";
 import { smallBtn } from "../styles.js";
 import { TitanIcon } from "../titans/TitanVisuals.jsx";
 

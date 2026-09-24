@@ -1,4 +1,3 @@
-import React from "react";
 import TitanResourceBand from "../titans/TitanResourceBand.jsx";
 import { profileLabel } from "../../domain/index.js";
 
@@ -43,7 +42,6 @@ export default function TitanBandPanel({ vm }) {
       profilsReveles={vm.profilsReveles}
       revelerProfil={vm.revelerProfil}
       profileLabel={profileLabel}
-      waitingNextTitan={vm.waitingNextTitan}
       titansEnAttente={vm.titansEnAttente}
       rainbowWinnerId={vm.rainbowWinnerId}
       scoresCourants={vm.scoresCourants}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getSeed, pick, random, randomInt, setSeed, shuffled } from "../../src/domain/rng.js";
+import { pick, random, randomInt, setSeed, shuffled } from "../../src/domain/rng.js";
 import { generateBoard, placeTitans } from "../../src/domain/gameRules.js";
 
 // Le générateur semé est la fondation de la simulation de masse : sans
@@ -24,9 +24,8 @@ describe("rng — reproductibilité", () => {
     expect(a).not.toEqual(b);
   });
 
-  it("setSeed retourne la graine appliquée et getSeed la relit", () => {
+  it("setSeed retourne la graine appliquée", () => {
     expect(setSeed(777)).toBe(777);
-    expect(getSeed()).toBe(777);
   });
 
   it("setSeed sans argument tire une graine imprévisible", () => {

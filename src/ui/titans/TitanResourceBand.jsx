@@ -1,5 +1,5 @@
 import React from "react";
-import { CARD_LABEL, CARD_FORCE } from "../../domain/cards.js";
+import { CARD_LABEL, CARD_FORCE } from "../../domain/index.js";
 import { TITAN_COLORS } from "./constants.js";
 import { TitanIcon } from "./TitanVisuals.jsx";
 import BlockIcon from "../BlockIcon.jsx";
@@ -201,7 +201,7 @@ function Piste({ icone, nom, valeur, meilleur, couleur, tour }) {
 export default function TitanResourceBand({
   titans, selectedTitanId, onSelect, activePlayerId, phase, titanDisplayName,
   titanModes = {}, titanProfiles = {}, profilsReveles = {}, revelerProfil, profileLabel,
-  waitingNextTitan = false, titansEnAttente = [], rainbowWinnerId = null, scoresCourants = null,
+  titansEnAttente = [], rainbowWinnerId = null, scoresCourants = null,
   phaseValidated = {}, ordreInitiative = [], detonateurId = null,
   validatePhase, canValidatePhase, getPhaseBlockReason,
 }) {

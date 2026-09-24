@@ -34,7 +34,6 @@ function sessionHote(id) {
     envoyerPrive() { return Promise.resolve({}); },
     publierSieges() { return Promise.resolve({}); },
     envoyerIntention() { return Promise.resolve({}); },
-    envoyerChat() { return Promise.resolve({}); },
     resynchroniser: vi.fn(),
     quitter: vi.fn(() => Promise.resolve()),
     estVivante() { return true; },

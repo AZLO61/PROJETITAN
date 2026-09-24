@@ -41,15 +41,15 @@ function mulberry32(seed) {
   };
 }
 
-let currentSeed = randomSeed();
-let next = mulberry32(currentSeed);
+let next = mulberry32(randomSeed());
 
 /** Fixe la graine et réinitialise l'état. Passer `undefined` retire le
- *  déterminisme en tirant une nouvelle graine imprévisible. */
+ *  déterminisme en tirant une nouvelle graine imprévisible. Rend la graine
+ *  appliquée, à journaliser pour pouvoir rejouer la partie. */
 export function setSeed(seed) {
-  currentSeed = seed === undefined ? randomSeed() : seed >>> 0;
-  next = mulberry32(currentSeed);
-  return currentSeed;
+  const graine = seed === undefined ? randomSeed() : seed >>> 0;
+  next = mulberry32(graine);
+  return graine;
 }
 
 /** Exécute `fn` sur un générateur semé à part, puis rend le courant intact.
@@ -59,20 +59,12 @@ export function setSeed(seed) {
  *  de la partie (cf. `src/application/penseeIA.js`). */
 export function avecGraine(graine, fn) {
   const suivant = next;
-  const graineCourante = currentSeed;
-  currentSeed = graine >>> 0;
-  next = mulberry32(currentSeed);
+  next = mulberry32(graine >>> 0);
   try {
     return fn();
   } finally {
     next = suivant;
-    currentSeed = graineCourante;
   }
-}
-
-/** La graine en cours, à journaliser pour pouvoir rejouer une partie. */
-export function getSeed() {
-  return currentSeed;
 }
 
 /** Flottant dans [0, 1). Remplace `Math.random()`. */

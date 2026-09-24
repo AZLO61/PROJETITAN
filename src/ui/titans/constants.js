@@ -19,7 +19,7 @@ export const TITAN_COLORS = {
 
    Une seule fonction pour les deux vues et le panneau, sinon elles finiront
    par diverger. Le repli cyan ne sert qu'aux cas sans Titan sélectionné. */
-export const ACCENT_DEPLACEMENT_DEFAUT = "#71dbff";
+const ACCENT_DEPLACEMENT_DEFAUT = "#71dbff";
 export function accentDeplacement(titanId) {
   return TITAN_COLORS[titanId]?.accent || ACCENT_DEPLACEMENT_DEFAUT;
 }

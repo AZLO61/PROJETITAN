@@ -4,8 +4,3 @@ export * from "./aiEvaluation.js";
 export * from "./aiPlanner.js";
 export * from "./simulation.js";
 export * from "./invariants.js";
-export * as board from "./board.js";
-export * as cards from "./cards.js";
-export * as movement from "./movement.js";
-export * as turns from "./turns.js";
-export * as scoring from "./scoring.js";

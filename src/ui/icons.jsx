@@ -246,8 +246,6 @@ const P = {
   ),
 };
 
-export const ICON_NAMES = Object.keys(P);
-
 /** Icône par nom. Hérite de `currentColor`, donc du signal qui l'entoure.
  *
  *  L'épaisseur du trait suit la taille : un trait de 2 sur une grille de 24

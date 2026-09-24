@@ -1,5 +1,5 @@
 # State model
 
-Le contrôleur React conserve l'état complet nécessaire à l'interface et au moteur. `src/ai/state.js` produit une projection compacte destinée à la prise de décision.
+Le contrôleur React conserve l'état complet nécessaire à l'interface et au moteur. L'IA reçoit une copie de cet état (`cloneEtat`, `src/domain/aiPlanner.js`) et simule ses coups dessus.
 
-Cette projection n'est jamais une seconde source de vérité.
+Cette copie n'est jamais une seconde source de vérité.

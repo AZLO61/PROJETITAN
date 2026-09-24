@@ -1,4 +1,3 @@
-import React from "react";
 import { T, marquee, readout, label } from "../theme.js";
 import Icon, { CARD_ICON } from "../icons.jsx";
 

@@ -1138,4 +1138,4 @@ if (lanceDirectement) {
   });
 }
 
-export { serveur, salles, compteursIp, menage, nettoyerPseudo, creerSalle, rejoindreSalle, parReseau };
+export { serveur, salles, compteursIp, menage, creerSalle, rejoindreSalle, parReseau };

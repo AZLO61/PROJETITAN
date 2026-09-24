@@ -5,9 +5,7 @@ const root = resolve(".");
 const required = [
   "package.json", "index.html", "vite.config.js", "src/main.jsx",
   "src/domain/index.js", "src/application/useBoardGeneratorController.jsx",
-  "src/ui/GameView.jsx", "src/ai/state.js", "src/ai/actions.js",
-  "schemas/ai-state.schema.json", "schemas/ai-command.schema.json",
-  ".github/workflows/ci.yml", "docs/ai/QUICK_CONTEXT.md"
+  "src/ui/GameView.jsx", ".github/workflows/ci.yml", "docs/ai/QUICK_CONTEXT.md"
 ];
 
 let failed = false;
@@ -16,7 +14,7 @@ for (const file of required) {
   catch { console.error(`Missing required file: ${file}`); failed = true; }
 }
 
-const sourceRoots = ["src/domain", "src/application", "src/ai", "src/ui"];
+const sourceRoots = ["src/domain", "src/application", "src/ui"];
 let files = 0;
 let bytes = 0;
 

@@ -34,16 +34,12 @@ UI (React / Three.js)
         ↓
 Application
         ↓
-Domain / règles du jeu
-        ↑
-AI contracts
+Domain / règles du jeu et Titans robots
 ```
 
-- `src/domain/` : règles canoniques du jeu.
+- `src/domain/` : règles canoniques du jeu, IA des Titans robots, simulateur.
 - `src/application/` : état React, séquencement et interactions.
-- `src/ai/` : état compact et commandes IA.
 - `src/ui/` : rendu et interactions visuelles.
-- `schemas/` : contrats machine-readable.
 - `docs/ai/` : point d'entrée pour les agents IA.
 
 ## Assets

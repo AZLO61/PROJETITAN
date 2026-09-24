@@ -1,6 +1,6 @@
 # IA
 
-L'IA doit consommer une projection de l'état via `createAiState` et produire une commande via `createAiCommand`.
+Les Titans robots vivent dans le domaine : `aiPlanner.js` énumère les coups légaux et les simule avec les vrais résolveurs, `aiEvaluation.js` note chaque position au score réel (`computeFinalScore`). Le contrôleur lance la recherche par `penser` (`src/application/penseeIA.js`), dans un Web Worker quand le navigateur en a un.
 
 Elle ne doit jamais dépendre de :
 

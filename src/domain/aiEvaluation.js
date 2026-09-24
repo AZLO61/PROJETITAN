@@ -1517,15 +1517,3 @@ export function chooseAmongBest(candidats, profile = makeProfile()) {
   }
   return fenetre[0];
 }
-
-/** Tous les profils possibles, pour le tirage à la mise en place et pour
- *  les campagnes de simulation qui balaient les combinaisons. */
-export function allProfiles() {
-  const out = [];
-  for (const force of Object.values(FORCES)) {
-    for (const temperament of Object.values(TEMPERAMENTS)) {
-      out.push(makeProfile(force, temperament));
-    }
-  }
-  return out;
-}

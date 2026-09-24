@@ -17,19 +17,17 @@ import { jouerJingleFin } from "../ui/audio.js";
    trentaine d'avertissements sans objet qui noyaient les vrais. Aucun
    identifiant ne change, seul leur emplacement bouge. */
 const {
-  STOCK_INITIAL, COULEURS, COLOR_HEX, ROWS, BUILDING_ROWS, BUILDING_COLS, socleMarker, isSocleMarker, socleValue, isBuildingCell,
-  countStandingBuildings, countColorOnBoard, countActiveTeleporters, checkEndGameTriggers, manchesMax, shuffle, buildBag, getQuadrant, generateBoard,
-  CORNERS, TITAN_GRADIENT, ACTION_CARDS, CARD_LABEL, PHASES, getActivePhases, PHASE_LABELS, EVENT_NAMES, placeTitans, getPlacementCells, placerTitanInitial, nextDetonateur,
-  rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, releaseSocle, projectInDirection, estSurLePlateau, indexerTitans, rentrerEnJeu,
-  resolveToutCasserBatiments, resolveToutCasserBlocs,
-  resolveToutCasserTitans, resolveToutCasserAmas, resolveToutCasser, releverPercussion, listerCiblesToutCasser, resolveToutCasserCase, computeEnergieParDistance, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
-  scanGraouhhhAxis, advanceGraouhhh, isLanterneRouge, getJeNePartagePasPool, getJeNePartagePasCount, resolveJeNePartagePasElement, deplacerSiDerniereCaseLibre, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
+  checkEndGameTriggers, manchesMax, generateBoard,
+  CARD_LABEL, getActivePhases, PHASE_LABELS, EVENT_NAMES, placeTitans, getPlacementCells, placerTitanInitial, nextDetonateur,
+  rowIndex, rowFromIndex, getPerimeter, computeEnergyToutCasser, estSurLePlateau, indexerTitans, rentrerEnJeu,
+  resolveToutCasser, releverPercussion, listerCiblesToutCasser, resolveToutCasserCase, PORTEE_TETE_EN_AVANT, resolveTeteEnAvant,
+  scanGraouhhhAxis, advanceGraouhhh, getJeNePartagePasPool, getJeNePartagePasCount, resolveJeNePartagePasElement, deplacerSiDerniereCaseLibre, resolveJeNePartagePas, PORTEE_BOING_BOING, getBoingBoingReach, resolveBoingBoing,
   appliquerReplElement, marquerDebutDeCarte, basculerToursSousTitans,
-  canRage, canDil, optionsADesigner, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions, makeDecisionRequest, getEcroulementCells, resolveEcroulementAmas,
-  getActiveTeleporterCells, getFreeAdjacentCells, getMovementReachable, getMovePath, resolveFreeMovement,
-  getRecuperationPool, resolveRecuperation, retirerPileVide, programCards, ensureProgrammableHand, discardCardHidden, getNonPlayedPool, sendCardToOwnRepos, resolveVolPhaseRepos,
-  resolveFatigue, refuserFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, resolveFautPasMeChauffer, BAREME, BAREME_ORANGE_PAIRES, STANDARD_COLORS,
-  scoreBareme, PODIUM_POINTS, rankWithTies, countRepaireColors, computeFinalScore, classementFinal,
+  canRage, canDil, optionsADesigner, SOCLE_OPTION, ADRENALINE_OPTION, getDilOptions, getEcroulementCells, resolveEcroulementAmas,
+  getActiveTeleporterCells, getMovementReachable, getMovePath, resolveFreeMovement,
+  getRecuperationPool, resolveRecuperation, programCards, ensureProgrammableHand, discardCardHidden, resolveVolPhaseRepos,
+  refuserFatigue, applyRestitution, getProgrammedSum, getFPMCTargets, resolveFautPasMeChauffer, STANDARD_COLORS,
+  computeFinalScore, classementFinal,
   pick,
   setSeed,
   // IA : profils et choix de coup (cf. src/domain/aiEvaluation.js et aiPlanner.js)
@@ -50,10 +48,6 @@ const {
    simulateur, qui en appliquait donc d'autres : le contrôleur et les
    campagnes exécutent maintenant le même code. */
 
-/* Adopte le brouillon d'un invité : seules les clés PROPRES de la table dont
-   la valeur est une vraie fonction sont posées (cf. l'étape « siege » plus
-   bas pour l'attaque par `__proto__`). Exporté pour que le test
-   `intention-hostile` éprouve CE code, pas une copie. Rend les clés posées. */
 /* ── LA SAUVEGARDE DE L'HÔTE, POUR SURVIVRE À UN F5 (2026-09-24) ──
    Le relais ne garde qu'un plateau PUBLIC (mains retirées) : un hôte qui
    rechargeait sa page perdait la partie. GitHub Pages ne stocke rien ; le seul
@@ -70,6 +64,10 @@ function lireSauvegardeHote(tableId) {
   } catch { return null; }
 }
 
+/* Adopte le brouillon d'un invité : seules les clés PROPRES de la table dont
+   la valeur est une vraie fonction sont posées (cf. l'étape « siege » plus
+   bas pour l'attaque par `__proto__`). Exporté pour que le test
+   `intention-hostile` éprouve CE code, pas une copie. Rend les clés posées. */
 export function adopterContexte(table, contexte) {
   const posees = [];
   Object.entries(contexte || {}).forEach(([cle, valeur]) => {
@@ -124,7 +122,6 @@ export function useBoardGeneratorController() {
   const [toutCasserFile, setToutCasserFile] = useState(null);
   const currentDecision = decisionQueue[0] || null;
   const currentRepli = repliQueue[0] || null;
-  const [seedCount, setSeedCount] = useState(1);
   /* ── UNE PARTIE CHASSE L'AUTRE, Y COMPRIS DANS LES MINUTEURS EN VOL ──
      Défaut trouvé à l'audit du 2026-09-03. Deux familles de minuteurs
      survivent à « Nouvelle partie », et rien ne les arrêtait :
@@ -174,12 +171,7 @@ export function useBoardGeneratorController() {
   // le joueur ne le demande pas (cf. profilsReveles) : deux parties de
   // suite avec les mêmes adversaires ne doivent pas se ressembler, et
   // savoir qui est l'Expert d'avance retirerait tout l'intérêt.
-  // `profilsImposes` permet de figer les profils pour les campagnes de
-  // simulation, où un tirage aléatoire rendrait les résultats
-  // ininterprétables (on ne saurait plus si un Titan perd à cause de sa
-  // position ou parce qu'il a tiré Novice trois fois de suite).
   const [titanProfiles, setTitanProfiles] = useState({});
-  const [profilsImposes, setProfilsImposes] = useState(null);
   /* DIFFICULTÉ DE LA PARTIE — Nikola, 2026-08-28 : « j'aimerais avoir
      4 niveaux de difficulté clairement distincts ».
 
@@ -213,7 +205,6 @@ export function useBoardGeneratorController() {
   }, []);
 
   const tirerProfils = useCallback((modes, nb) => {
-    if (profilsImposes) return { ...profilsImposes };
     // La FORCE vient du niveau choisi, la même pour toutes les IA : c'est
     // ce que « quatre niveaux de difficulté » veut dire. Seul le
     // TEMPÉRAMENT est tiré au sort — il change la façon de jouer, jamais la
@@ -225,7 +216,7 @@ export function useBoardGeneratorController() {
       out[id] = makeProfile(difficulte, pick(temperaments));
     }
     return out;
-  }, [profilsImposes, difficulte]);
+  }, [difficulte]);
 
   // { 1: "Max", 2: "Étagère", ... } — nom personnalisé choisi en config
   // (session, demande Nikola : "j'ai le droit de choisir mon nom"). Vide
@@ -236,16 +227,9 @@ export function useBoardGeneratorController() {
     (id) => (titanNames[id] && titanNames[id].trim()) || `Titan ${id}`,
     [titanNames]
   );
-  // Version compacte pour les contextes à espace réduit (colonnes de
-  // tableau, badges) — mêmes règles, fallback "T{id}".
-  const titanShort = useCallback(
-    (id) => (titanNames[id] && titanNames[id].trim()) || `T${id}`,
-    [titanNames]
-  );
-  const [aiPlaying, setAiPlaying] = useState(false); // true pendant qu'une IA joue
-  const [aiStepLabel, setAiStepLabel] = useState(""); // étape visible dans l'UI
+  // true pendant qu'une IA joue : une ref, lue par les effets de tour, jamais affichée.
   const aiPlayingRef = useRef(false);
-  const setAiPlayingSync = (val) => { aiPlayingRef.current = val; setAiPlaying(val); if (!val) setAiStepLabel(""); };
+  const setAiPlayingSync = (val) => { aiPlayingRef.current = val; };
 
   const [phase, setPhase] = useState("evenement");
   const [phaseValidated, setPhaseValidated] = useState({});
@@ -324,8 +308,6 @@ export function useBoardGeneratorController() {
   /* `setupDone` lu depuis un callback réseau : la version d'état y serait
      figée au rendu qui a créé le callback. */
   const setupDoneRef = useRef(false);
-  const [distantFin, setDistantFin] = useState(null);       // partie terminée côté réseau
-  const [distantChat, setDistantChat] = useState([]);
   /* ── QUI VIENT D'ARRIVER, QUI VIENT DE PARTIR ──
      Nikola, 2026-09-01 : « si un joueur quitte la partie il faut un petit
      panneau bien lisible pour ne pas le rater, pareil s'il rejoint ».
@@ -512,7 +494,6 @@ export function useBoardGeneratorController() {
        en secondes. */
     partieRef.current += 1;
     setPartieId(partieRef.current);
-    setAiStepLabel("");
     /* La graine est posee AVANT toute generation : le plateau, la position des
        Titans, l'ordre de jeu, le Detonateur et les profils d'IA en dependent
        tous. Passer `undefined` tire une graine imprevisible, comme une partie
@@ -531,7 +512,6 @@ export function useBoardGeneratorController() {
     setPlacementRestant(newTitans.ordrePlacement || []);
     setState(newState);
     setTitanState(newTitans);
-    setSeedCount((n) => n + 1);
     // Nouvelle partie : le podium redevient ouvrable.
     podiumDejaOuvert.current = false;
     setShowPodium(false);
@@ -2171,7 +2151,6 @@ export function useBoardGeneratorController() {
     setSession(nouvelle);
     setDistantJoueurs(nouvelle.joueurs || []);
     setDistantSieges(nouvelle.sieges || {});
-    setDistantFin(null);
     setDistantAvis(null);
     /* Une AUTRE table repart sans garde-fou (2026-09-14) : levé pour une table
        précédente — un F5 de l'hôte —, il coupait en silence la diffusion de la
@@ -2244,7 +2223,6 @@ export function useBoardGeneratorController() {
        traitement demande trois rendus (cf. la machine ci-dessus), et un
        abonnement réseau n'est pas un endroit d'où piloter React. */
     nouvelle.sur("intention", (m) => setFileIntentions((f) => [...f, m]));
-    nouvelle.sur("chat", (m) => setDistantChat((prev) => [...prev.slice(-40), m]));
     /* L'avis de coupure s'efface quand la liaison revient (2026-09-14) — mais
        seulement s'il est encore affiché : un avis plus récent (l'hôte s'est
        tu, par exemple) ne doit pas disparaître avec lui. */
@@ -2260,7 +2238,7 @@ export function useBoardGeneratorController() {
        réseau. Confier un Titan à l'IA touche à quatre morceaux d'état, ce n'est
        pas un geste à faire depuis un callback de socket. */
     nouvelle.sur("depart", (m) => setFileDeparts((f) => [...f, m]));
-    nouvelle.sur("fin", ({ raison }) => { setDistantFin(raison); setDistantAvis(raison); });
+    nouvelle.sur("fin", ({ raison }) => setDistantAvis(raison));
 
     // Un invité qui arrive en cours de partie reçoit l'état courant d'emblée,
     // sans attendre le prochain coup de l'hôte.
@@ -3005,7 +2983,6 @@ export function useBoardGeneratorController() {
     const playerId = activePlayerId;
 
     setAiPlayingSync(true);
-    setAiStepLabel("🦶 Déplacement…");
 
     // Fin de tour IA : joue la carte, puis avance RÉELLEMENT au Titan suivant.
     // Deux bugs corrigés ici (session) :
@@ -3034,7 +3011,7 @@ export function useBoardGeneratorController() {
         markCardPlayed(playerId, cardId);
       }
       setTitanState((p) => ({ ...p, players: [...p.players] }));
-      setAiPlayingSync(false); // réinitialise aussi aiStepLabel via setAiPlayingSync
+      setAiPlayingSync(false);
       setWaitingNextTitan(false);
       if (aiNextPlayerRef.current != null) {
         setActivePlayerId(aiNextPlayerRef.current);
@@ -3053,16 +3030,6 @@ export function useBoardGeneratorController() {
       }
       // Sinon (null) : fin de Phase Action déjà gérée par advanceActionRound.
     };
-
-    /* ── LE TOUR D'UNE IA PREND LE TEMPS QU'ON LE VOIE ──
-       2 000 ms suffisaient tant que rien ne s'animait. Depuis que les IA
-       tracent leurs chemins comme le joueur (Nikola, 2026-08-29 : « quitte à
-       ralentir un peu la vitesse de leur tour »), il faut au moins la durée
-       d'une traînée — 110 ms par case plus 1,5 s de tenue — avant que l'étape
-       suivante n'efface la précédente. À quatre Titans dont trois IA, chaque
-       tranche de 600 ms coûte presque deux secondes par round : on ajoute le
-       minimum qui rende la trace lisible, pas plus. */
-    const DELAI_IA_MS = 2600;
 
     /* La partie à laquelle CE tour appartient. Chaque étape la revérifie
        avant d'agir : une régénération incrémente `partieRef`, et la cascade
@@ -3181,7 +3148,6 @@ export function useBoardGeneratorController() {
     function etapeCarte() {
       const t2 = setTimeout(() => {
         if (partieAbandonnee()) return;
-        setAiStepLabel("🃏 Joue une carte…");
         // Le coup a déjà été choisi avec le déplacement (cf. étape 1) : le
         // rechercher ici depuis un autre état lui ferait perdre le placement.
         const joint = coupJointRef.current;
@@ -3412,11 +3378,9 @@ export function useBoardGeneratorController() {
       // ── ÉTAPE 3 : RÉCUPÉRATION PASSIVE ──
       const t3 = setTimeout(() => {
         if (partieAbandonnee()) return;
-        setAiStepLabel("📦 Récupération…");
         const curTitanState3 = aiTitanStateRef.current;
         const curLooseBlocks3 = aiLooseBlocksRef.current;
         const curPassifUsed3 = aiPassifUsedRef.current;
-        const curTitanModes3 = aiTitanModesRef.current;
 
         if (!curPassifUsed3[playerId]?.recup) {
           // L'ancienne version prenait la première case contenant un
@@ -3437,12 +3401,6 @@ export function useBoardGeneratorController() {
             setPassifUsed((prev) => ({ ...prev, [playerId]: { ...(prev[playerId] || {}), recup: true } }));
           }
         }
-
-        const needsHuman = newDecisions.some((d) => {
-          const atk = curTitanModes3[d.attackerId];
-          const def = curTitanModes3[d.defenderId];
-          return atk === "humain" || def === "humain";
-        });
 
         enqueueDecisions(newDecisions);
         // Dans les deux cas, le tour avance immédiatement (comme pour un joueur
@@ -6243,64 +6201,6 @@ export function useBoardGeneratorController() {
     return { stats: counts, occupiedCount: occupied };
   }, [state]);
 
-  // -- CONSIGNE DU MOMENT --
-  // Un joueur qui decouvre le jeu ne sait pas ce que la Phase en cours
-  // attend de lui. `what` explique la Phase, `you` dit l'action concrete a
-  // faire tout de suite. Purement descriptif : aucune regle n'est decidee
-  // ici, on ne fait que formuler ce que le moteur applique deja.
-  // Place avec les autres valeurs derivees, donc AVANT le retour anticipe de
-  // l'ecran de configuration : l'ordre des hooks doit rester constant.
-  const phaseGuidance = useMemo(() => {
-    if (currentDecision) {
-      const mode = currentDecision.type === "RAGE" ? "RAGE" : "DIL";
-      return {
-        what: `Decision ${mode} en cours - le reste du jeu est en pause tant qu'elle n'est pas resolue.`,
-        you: mode === "RAGE"
-          ? "L'attaquant prend 1 ressource dans le Repaire de sa cible."
-          : "L'attaquant designe 2 options (ou la seule que la cible possede, sur un Dilemme au sol), la cible choisit ce qu'elle perd (ou paie 1 Adrenaline pour annuler).",
-      };
-    }
-    const me = selectedTitan;
-    const validated = me ? phaseValidated[me.id] : false;
-    if (phase === "evenement") {
-      return {
-        what: "Phase 1 - Evenement : un Evenement est tire pour toute la Manche.",
-        you: validated ? "Tu as valide, on attend les autres Titans." : "Prends-en connaissance, puis valide ta Phase.",
-      };
-    }
-    if (phase === "declenchement") {
-      return {
-        what: "Phase 2 - Declenchement : l'Evenement de la Manche prend effet.",
-        you: validated ? "Tu as valide, on attend les autres Titans." : "Valide ta Phase pour continuer.",
-      };
-    }
-    if (phase === "programmation") {
-      const n = me ? me.programmed.length : 0;
-      return {
-        what: "Phase 3 - Programmation : chacun choisit en secret 3 cartes parmi les 6 de sa main.",
-        you: n === 3
-          ? "Tes 3 cartes sont programmees, on attend les autres Titans."
-          : "Clique 3 cartes ci-dessous. Tu les joueras une par une en Phase Action, dans l'ordre que tu veux.",
-      };
-    }
-    if (phase === "action") {
-      // Silence volontaire. En Phase Action, le bandeau du Titan actif, juste
-      // au-dessus, annonce deja qui joue, combien de cartes il lui reste et
-      // quoi faire. Trois panneaux voisins disaient la meme chose ; celui-ci
-      // se tait au profit du plus contextuel.
-      return { what: "", you: "" };
-    }
-    if (phase === "repos") {
-      return {
-        what: "Phase 5 - Repos : un vol de carte en chaine, puis la Manche suivante demarre.",
-        you: volDirection
-          ? "Sens choisi, la chaine de vol se resout automatiquement."
-          : "Le Detonateur choisit le sens de rotation du vol pour toute la chaine.",
-      };
-    }
-    return { what: "", you: "" };
-  }, [phase, currentDecision, selectedTitan, phaseValidated, volDirection]);
-
   // ── ÉCRAN CONFIG ──
   /* ── SIGNALER CE QUI VIENT DE SE PASSER (Nikola, 2026-08-24) ──
      « Aujourd'hui tu me decris de memoire » : un retour de table arrivait sous
@@ -6445,45 +6345,27 @@ export function useBoardGeneratorController() {
        du jeu l'ignore complètement : un panneau qui affiche le plateau ne sait
        pas s'il regarde une partie locale ou distante, et c'est voulu. */
     session,
-    distantInvite,
-    distantHote,
     monTitanDistant,
-    distantJoueurs,
     distantSieges,
     distantAvis,
     distantDiffusionBloquee,
     reprendreDiffusion,
-    distantFin,
-    distantChat,
     brancherSession,
-    quitterSessionDistante,
-    publierSieges: (sieges) => {
-      setDistantSieges(sieges);
-      return sessionRef.current?.publierSieges(sieges);
-    },
-    envoyerChatDistant: (texte) => sessionRef.current?.envoyerChat(texte),
     distantMouvements,
 
     nbJoueurs,
-    setNbJoueurs,
     // Le nombre de Manches de la partie vient du domaine (manchesMax), qui
     // en est propriétaire. Il était recopié en dur à deux endroits de
     // l'interface — un `nbJoueurs === 4 ? 4 : 6` qui aurait silencieusement
     // divergé le jour où la durée d'une partie change.
     manchesMaxPartie: manchesMax(nbJoueurs),
     setupDone,
-    setSetupDone,
     eventsEnabled,
-    setEventsEnabled,
     state,
     setState,
     titanState,
     setTitanState,
-    seedCount,
-    setSeedCount,
     gameSeed,
-    seedInput,
-    setSeedInput,
     telechargerRapport,
     showJournal,
     setShowJournal,
@@ -6498,29 +6380,16 @@ export function useBoardGeneratorController() {
     setTitanModes,
     titanProfiles,
     setTitanProfiles,
-    profilsImposes,
-    setProfilsImposes,
     profilsReveles,
     revelerProfil,
     profileLabel,
-    titanNames,
-    setTitanNames,
     titanDisplayName,
-    titanShort,
-    aiPlaying,
-    setAiPlaying,
-    aiStepLabel,
-    setAiStepLabel,
-    aiPlayingRef,
-    setAiPlayingSync,
     phase,
     setPhase,
     phaseValidated,
     setPhaseValidated,
     currentEvent,
-    setCurrentEvent,
     rainbowWinnerId,
-    setRainbowWinnerId,
     showScoring,
     setShowScoring,
     scoresCourants,
@@ -6532,12 +6401,10 @@ export function useBoardGeneratorController() {
     showTutoriel,
     setShowTutoriel,
     vertAssignments,
-    setVertAssignments,
     vertsValides,
     validerVerts,
     preScoreSansVerts,
     apocalypseThreshold,
-    setApocalypseThreshold,
     regenerate,
     advanceManche,
     canValidatePhase,
@@ -6550,7 +6417,6 @@ export function useBoardGeneratorController() {
     setSelectedTitanId: selectionnerTitanDepuisInterface,
     selectedTitan,
     titansByCell,
-    effectivePlayers,
     titansEnAttente,
     titanCorners,
     actionLog,
@@ -6582,7 +6448,6 @@ export function useBoardGeneratorController() {
     setGraouMode,
     bbBudgetUsed,
     bbNextClickable,
-    bbNextRoutes,
     bbSurvol,
     bbPathClick,
     bbUndoLastCell,
@@ -6611,23 +6476,15 @@ export function useBoardGeneratorController() {
     volDirection,
     volResume,
     modeVolRepos,
-    setVolDirection,
     fpmcPendingIds,
-    setFpmcPendingIds,
-    fpmcNTargets,
-    setFpmcNTargets,
     fpmcAttackerId,
-    setFpmcAttackerId,
     fpmcAttackerBase,
-    setFpmcAttackerBase,
     fpmcCurrent,
-    setFpmcCurrent,
     moveMode,
     setMoveMode,
     moveAdrenaline,
     setMoveAdrenaline,
     recupMode,
-    setRecupMode,
     passifUsed,
     setPassifUsed,
     animating,
@@ -6639,26 +6496,15 @@ export function useBoardGeneratorController() {
     pendingCardConfirm,
     setPendingCardConfirm,
     waitingNextTitan,
-    setWaitingNextTitan,
     passerAuTitanSuivant,
     undoStack,
     undoTick,
-    setUndoStack,
     captureSnapshot,
     /* Le même instantané, sans l'empiler. `captureSnapshot` sert à l'annulation,
        celui-ci à décrire l'état courant — c'est ce que l'hôte diffuse à chaque
        coup, et ce que les tests de partie à distance rejouent. */
     instantaneCourant,
-    prevActivePlayerRef,
     handleUndo,
-    aiTrigger,
-    setAiTrigger,
-    aiNextPlayerRef,
-    aiStateRef,
-    aiTitanStateRef,
-    aiLooseBlocksRef,
-    aiPassifUsedRef,
-    aiTitanModesRef,
     canUseMovePassif,
     canUseRecupPassif,
     autoResolveIaDecisions,
@@ -6677,10 +6523,8 @@ export function useBoardGeneratorController() {
     canPlayCard,
     canDiscardCard,
     getPlayBlockReason,
-    advanceActionRound,
     markCardPlayed,
     discardCurrentCard,
-    teaMaxRange,
     teaTargets,
     toggleTeaMode,
     graouMode,
@@ -6689,7 +6533,6 @@ export function useBoardGeneratorController() {
     jouerGraouhhh,
     bbMaxRange,
     bbReachable,
-    bbReach,
     toggleBbMode,
     jouerBoingBoing,
     moveMaxRange,
@@ -6737,7 +6580,6 @@ export function useBoardGeneratorController() {
     energie,
     stats,
     occupiedCount,
-    phaseGuidance,
     decisionBloquante,
     fatigueEnAttente,
     refuserFatigueEnCours,

@@ -4,7 +4,6 @@ import React, { Suspense, lazy } from "react";
 // télécharge jamais Three.js. Aucun changement de rendu, seul le moment du
 // téléchargement bouge.
 const Board3D = lazy(() => import("../board3d/Board3D.jsx"));
-import TitanResourceBand from "../titans/TitanResourceBand.jsx";
 import { TitanIcon, TitanBadge } from "../titans/TitanVisuals.jsx";
 import { TITAN_COLORS, accentDeplacement, accentDeplacement3D } from "../titans/constants.js";
 import { COLOR_HEX, ROWS, isBuildingCell, isSocleMarker, socleValue } from "../../domain/index.js";
@@ -188,7 +187,6 @@ export default function RoundPanels({ vm, entete = null }) {
     setHoverCell(key);
   };
   const {
-    manchesMaxPartie,
     titansEnAttente,
     ecroulement,
     ecroulementCells,
@@ -197,13 +195,8 @@ export default function RoundPanels({ vm, entete = null }) {
     ecroulementPoserDebris,
     state,
     titanState,
-    mancheNumber,
-    activePlayerId,
-    titanModes,
     titanDisplayName,
-    phase,
     show3D,
-    apocalypseThreshold,
     selectedTitanId,
     setSelectedTitanId,
     titansByCell,
@@ -221,11 +214,6 @@ export default function RoundPanels({ vm, entete = null }) {
     moveMode,
     recupMode,
     traceVol,
-    waitingNextTitan,
-    titanProfiles,
-    profilsReveles,
-    revelerProfil,
-    profileLabel,
     teaTargets,
     jouerTeteEnAvant,
     bbReachable,
@@ -240,8 +228,6 @@ export default function RoundPanels({ vm, entete = null }) {
     jnpPickCell,
     boardSignature3D,
     perimeterKeys,
-    energie,
-    occupiedCount,
     tcSel,
   } = vm;
 
@@ -1191,8 +1177,6 @@ export default function RoundPanels({ vm, entete = null }) {
                     const stack = looseBlocks[key];
                     const colorBlocks = stack.filter(c => !isSocleMarker(c));
                     const hasSocle = stack.some(isSocleMarker);
-                    const total = stack.length;
-                    const preview = stack.slice(-2); // 2 derniers
                     /* ── LES DEUX BADGES DU SOL SE MESURENT À LA CASE ──
                        Nikola, 2026-09-19 : « sur mobile la zone de valeur de
                        quantité de bloc sur le sol (pas sur un bâtiment) ou
