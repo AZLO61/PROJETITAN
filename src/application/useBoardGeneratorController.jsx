@@ -282,6 +282,8 @@ export function useBoardGeneratorController() {
   const [distantJoueurs, setDistantJoueurs] = useState([]);
   const [distantSieges, setDistantSieges] = useState({});   // { titanId: refInvite }
   const [distantAvis, setDistantAvis] = useState(null);     // message d'état de la liaison
+  // Un envoi « tire et oublie » qui échoue le dit dans le bandeau de liaison.
+  const avisEnvoiRate = (quoi) => (e) => setDistantAvis(`${quoi} n'est pas partie : ${e?.message || "liaison coupée"}`);
   /* Garde-fou du F5 de l'hôte : quand cette page rejoint une table qui a déjà
      une partie alors qu'elle-même n'en a pas, elle ne publie RIEN — sans quoi
      son plateau neuf écraserait celui de toute la table (cf. `brancherSession`).
@@ -2020,7 +2022,7 @@ export function useBoardGeneratorController() {
       sieges[voulu] = intention.de;
       distantSiegesRef.current = sieges;
       setDistantSieges(sieges);
-      sessionRef.current?.publierSieges(sieges);
+      sessionRef.current?.publierSieges(sieges)?.catch(avisEnvoiRate("La table des sièges"));
       if (aiTitanModesRef.current[voulu] !== "ia") {
         setActionLog((prev) => [...prev, `🎮 ${intention.pseudo} prend le Titan ${voulu}.`]);
       }
@@ -2174,7 +2176,13 @@ export function useBoardGeneratorController() {
            arrivées, pas à chaque coup. */
         if (nouvelle.siege === "hote") {
           const nouveaux = arrivants.filter((j) => !refsAvant.has(j.ref));
-          if (nouveaux.length > 0) nouvelle.diffuserJournal({ complet: actionLogRef.current });
+          if (nouveaux.length > 0) {
+            nouvelle.diffuserJournal({ complet: actionLogRef.current }).catch(() => {
+              // Raté : le prochain envoi repartira du journal complet.
+              dernierEnvoiJournalRef.current = 0;
+              setTimeout(() => setRelanceDiffusion((n) => n + 1), 2000);
+            });
+          }
         }
         /* Même contenu, même référence (2026-09-14) : chaque relève redonne la
            présence, et un objet neuf relançait le rendu du contrôleur entier
@@ -4206,7 +4214,8 @@ export function useBoardGeneratorController() {
          programmées. */
       if (distantInviteRef.current) {
         if (choix.length === 3) {
-          sessionRef.current?.envoyerIntention("confirmProgrammation", [], { progSelection: choix });
+          sessionRef.current?.envoyerIntention("confirmProgrammation", [], { progSelection: choix })
+            ?.catch(avisEnvoiRate("Ta programmation"));
         }
         return;
       }
@@ -6351,13 +6360,13 @@ export function useBoardGeneratorController() {
         onQuitterSession={quitterSessionDistante}
         onPublierSieges={(sieges) => {
           setDistantSieges(sieges);
-          sessionRef.current?.publierSieges(sieges);
+          sessionRef.current?.publierSieges(sieges)?.catch(avisEnvoiRate("La table des sièges"));
         }}
         /* Un invité prend un Titan libre lui-même (Nikola, 2026-08-30). La
            demande part en intention comme le reste : l'hôte reste l'arbitre,
            il refuse un siège déjà pris ou confié à l'IA. */
         monTitanDistant={monTitanDistant}
-        onDemanderSiege={(titanId) => sessionRef.current?.envoyerIntention("demanderSiege", [titanId], {})}
+        onDemanderSiege={(titanId) => sessionRef.current?.envoyerIntention("demanderSiege", [titanId], {})?.catch(avisEnvoiRate("Ta demande de siège"))}
       />
     );
   }
@@ -6801,7 +6810,7 @@ export function useBoardGeneratorController() {
     /* Choisir son Titan dans le salon. Ce n'est pas une action de jeu — l'hôte
        la traite avant sa liste blanche — mais elle voyage par le même canal :
        un invité ne dispose de rien d'autre pour se faire entendre. */
-    vm.demanderSiege = (titanId) => sessionRef.current?.envoyerIntention("demanderSiege", [titanId], {});
+    vm.demanderSiege = (titanId) => sessionRef.current?.envoyerIntention("demanderSiege", [titanId], {})?.catch(avisEnvoiRate("Ta demande de siège"));
   }
 
   return vm;

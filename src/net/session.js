@@ -134,7 +134,10 @@ function construireSession({
   };
 
   async function envoyer(message) {
-    if (!vivante) return null;
+    /* Une table fermée REJETTE (audit du 2026-09-24) : rendre `null` faisait
+       passer l'envoi pour réussi, et l'appelant marquait « bien envoyé » un
+       état, une main ou un coup que le relais n'avait jamais reçu. */
+    if (!vivante) throw new Error("La table est fermée.");
     return appeler(`${base}/api/envoyer`, {
       method: "POST",
       /* Le relais lit ces deux en-têtes AVANT le corps, pour savoir quel

@@ -78,3 +78,13 @@ describe("Une table branchée pour de vrai", () => {
     }
   });
 });
+
+describe("Une table fermée ne fait pas semblant d'envoyer", () => {
+  it("un envoi après quitter() est rejeté, pas résolu comme un succès", async () => {
+    /* Audit du 2026-09-24 : `envoyer` rendait `null`, et l'appelant marquait
+       « bien envoyé » un état que le relais n'avait jamais reçu. */
+    const hote = await creerSession({ urlRelais: base, pseudo: "Hôte" });
+    await hote.quitter();
+    await expect(hote.diffuserEtat({ tour: 1 })).rejects.toThrow(/fermée/);
+  });
+});
