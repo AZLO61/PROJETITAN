@@ -141,7 +141,7 @@ function EcranManche() {
   const phases = [
     { cle: "programmation", texte: "Chacun choisit SECRÈTEMENT 3 cartes parmi les 6 de sa main. Ce seront ses trois coups de la Manche, dans l'ordre qu'il voudra." },
     { cle: "action", texte: "Chacun joue UNE carte par round, à son tour, en commençant par le Détonateur. Trois rounds, donc trois cartes." },
-    { cle: "repos", texte: "Chacun pioche à l'aveugle une carte chez son voisin. Elle lui est retirée pour la Manche suivante." },
+    { cle: "repos", texte: "Chacun pioche à l'aveugle une carte chez son voisin. Elle lui est retirée pour la Manche suivante — en Zone Repos, ou dans la main du voleur selon le réglage de la table." },
   ].map(({ cle, texte }) => ({ ...TON_DE_PHASE[cle], texte }));
   return (
     <>
@@ -279,7 +279,8 @@ function EcranPistes() {
       <Plaque accent={T.rule}>
         <Point icone={<AdrenalineIcon size={17} />} titre="Adrénaline" ton={T.go}>
           +1 à chaque fin de Manche. Elle s&apos;échange contre de la portée, une case de
-          déplacement, une mise cachée — ou le droit de refuser une Fatigue.
+          déplacement, une mise cachée — ou le droit d&apos;annuler un Dilemme ou de
+          refuser une Fatigue.
         </Point>
         <Point icone={<Icon name="brawl" size={16} />} titre="Bagarre" ton={T.stop}>
           +1 par Titan distinct que tu déplaces avec une carte. Elle rapporte des points

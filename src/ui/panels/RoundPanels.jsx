@@ -984,7 +984,7 @@ export default function RoundPanels({ vm, entete = null }) {
                     : bbInPath
                     ? `${key} — déjà dans ton chemin, reclique ici pour revenir à ce point`
                     : bbSelectable && titansByCell[key]
-                    ? `${key} — sauter sur ce Titan : Dilemme, projection et +1 Bagarre`
+                    ? `${key} — sauter sur ce Titan : Dilemme (RAGE au Seuil 4), projection et +1 Bagarre`
                     : bbSelectable
                     ? `${key} — case suivante possible`
                     : cellData && cellData.blocks.length > 0
