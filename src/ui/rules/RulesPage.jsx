@@ -331,6 +331,7 @@ function SectionManche() {
         <strong style={{ color: C.m1 }}>⚠️ Carte inapplicable —</strong> si une carte programmée ne peut
         pas être exécutée, ou si tu ne veux finalement pas l'utiliser, elle reste face cachée. Aucune
         information n'est donnée aux adversaires, mais elle compte comme ta carte du tour.
+        Avec l'option de table « Adrénaline à la défausse », elle te rapporte 1 Adrénaline.
       </Panel>
     </>
   );

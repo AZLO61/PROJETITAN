@@ -5042,14 +5042,20 @@ function programCards(titanId, cardIds, gameStateTitans) {
    - reste éligible au Vol Phase Repos au même titre qu'une carte
      jouée (voir resolveVolPhaseRepos) — stockée dans discardedHidden,
      jamais dans playedThisManche (qui resterait un tell involontaire).
+   Option de table « Adrénaline à la défausse » (Nikola, 24/09) : la
+   défausse rapporte +1 Adrénaline. Décochée par défaut.
 ============================================================ */
-function discardCardHidden(titanId, cardId, gameStateTitans) {
+function discardCardHidden(titanId, cardId, gameStateTitans, { adrenaline = false } = {}) {
   const titan = gameStateTitans.find((t) => t.id === titanId);
   const idx = titan.programmed.indexOf(cardId);
   if (idx === -1) return { ok: false, reason: `${CARD_LABEL[cardId]} n'est pas programmée.` };
   titan.programmed.splice(idx, 1);
   if (!titan.discardedHidden) titan.discardedHidden = [];
   titan.discardedHidden.push(cardId);
+  if (adrenaline) {
+    titan.adrenaline = (titan.adrenaline || 0) + 1;
+    return { ok: true, log: `Titan ${titanId} défausse une carte face cachée et gagne 1 Adrénaline — rien révélé aux adversaires.` };
+  }
   return { ok: true, log: `Titan ${titanId} défausse une carte face cachée — action jugée non intéressante, aucun effet, rien révélé aux adversaires.` };
 }
 

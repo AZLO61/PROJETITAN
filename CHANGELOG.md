@@ -1,5 +1,19 @@
 # Changelog
 
+## Non publié — option de table « Adrénaline à la défausse » (2026-09-24)
+
+« Rajoute un mode si on défausse une carte ça donne une adrénaline. » Case à
+cocher dans les réglages de partie, décochée par défaut. Cochée, toute défausse
+face cachée — joueur, invité ou IA — rapporte +1 Adrénaline. La règle vit dans
+`discardCardHidden` (option `adrenaline`) ; le réglage voyage dans l'instantané
+de table comme ses voisins. Glossaire et page Règles mis à jour ; livret
+inchangé (variante de l'application, comme les Égalités en Lanterne Rouge).
+Test : `tests/application/adrenaline-defausse.test.jsx`.
+
+Limite connue : l'IA ne défausse toujours qu'à défaut de coup jouable. Elle
+touche l'Adrénaline quand elle défausse, mais ne choisit pas de défausser pour
+la gagner, et le simulateur ignore l'option.
+
 ## Non publié — quarantième passe du 2026-09-24 (zéro ligne morte, puis optimisation)
 
 « Plus aucune ligne morte, et le plus optimisé possible. » Détection outillée

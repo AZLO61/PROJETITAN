@@ -220,6 +220,7 @@ function ReglagesDeParties({
   modeVolRepos, setModeVolRepos,
   egalitesLanterneRouge, setEgalitesLanterneRouge,
   scoresVisibles, setScoresVisibles,
+  adrenalineDefausse, setAdrenalineDefausse,
   apocalypseThreshold, setApocalypseThreshold,
   seedInput, setSeedInput,
   champ,
@@ -372,6 +373,33 @@ function ReglagesDeParties({
         </span>
       </label>
 
+      {/* Adrénaline à la défausse (Nikola, 24/09) : décochée par défaut. */}
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 11,
+          border: `2px solid ${adrenalineDefausse ? T.warn : T.rule}`,
+          borderRadius: T.rChip,
+          padding: "11px 13px",
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          name="adrenaline-defausse"
+          checked={adrenalineDefausse}
+          onChange={(e) => setAdrenalineDefausse(e.target.checked)}
+          style={{ marginTop: 3, accentColor: T.warn, width: 17, height: 17 }}
+        />
+        <span>
+          <span style={label(adrenalineDefausse ? T.warn : T.dim, T.small)}>Adrénaline à la défausse</span>
+          <span style={{ ...prose(T.faint, T.micro), display: "block", marginTop: 3 }}>
+            Défausser une carte programmée au lieu de la jouer rapporte 1 Adrénaline.
+          </span>
+        </span>
+      </label>
+
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "11px 13px" }}>
         <label style={label(T.dim, T.small)} htmlFor="seuil-apo">
           Seuil Apocalypse
@@ -429,6 +457,7 @@ export default function SetupScreen({
      `undefined` sur une case à cocher React la rendrait non contrôlée. */
   egalitesLanterneRouge = true, setEgalitesLanterneRouge = () => {},
   scoresVisibles = false, setScoresVisibles = () => {},
+  adrenalineDefausse = false, setAdrenalineDefausse = () => {},
   apocalypseThreshold, setApocalypseThreshold,
   seedInput, setSeedInput,
   onLancer,
@@ -595,6 +624,7 @@ export default function SetupScreen({
                 ["Vol de Phase Repos", modeVolRepos === "main" ? "Emprunt" : "Mise au repos"],
                 ["Égalités en Lanterne Rouge", egalitesLanterneRouge ? "comptent" : "il faut être seul dernier"],
                 ["Scores", scoresVisibles ? "visibles" : "cachés"],
+                ["Adrénaline à la défausse", adrenalineDefausse ? "oui" : "non"],
                 ["Seuil Apocalypse", `${apocalypseThreshold} bâtiments`],
               ].map(([nom, valeur]) => (
                 <div key={nom} style={{
@@ -859,6 +889,7 @@ export default function SetupScreen({
                     eventsEnabled ? "Événements ✓" : null,
                     egalitesLanterneRouge ? null : "Égalités ✗",
                     scoresVisibles ? "Scores ✓" : null,
+                    adrenalineDefausse ? "Défausse +1 Adré ✓" : null,
                   ].filter(Boolean).map((puce) => (
                     <span
                       key={puce}
@@ -878,6 +909,7 @@ export default function SetupScreen({
                   modeVolRepos={modeVolRepos} setModeVolRepos={setModeVolRepos}
                   egalitesLanterneRouge={egalitesLanterneRouge} setEgalitesLanterneRouge={setEgalitesLanterneRouge}
                   scoresVisibles={scoresVisibles} setScoresVisibles={setScoresVisibles}
+                  adrenalineDefausse={adrenalineDefausse} setAdrenalineDefausse={setAdrenalineDefausse}
                   apocalypseThreshold={apocalypseThreshold} setApocalypseThreshold={setApocalypseThreshold}
                   seedInput={seedInput} setSeedInput={setSeedInput}
                   champ={champ}
@@ -890,6 +922,7 @@ export default function SetupScreen({
               modeVolRepos={modeVolRepos} setModeVolRepos={setModeVolRepos}
               egalitesLanterneRouge={egalitesLanterneRouge} setEgalitesLanterneRouge={setEgalitesLanterneRouge}
               scoresVisibles={scoresVisibles} setScoresVisibles={setScoresVisibles}
+              adrenalineDefausse={adrenalineDefausse} setAdrenalineDefausse={setAdrenalineDefausse}
               apocalypseThreshold={apocalypseThreshold} setApocalypseThreshold={setApocalypseThreshold}
               seedInput={seedInput} setSeedInput={setSeedInput}
               champ={champ}

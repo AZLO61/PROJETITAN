@@ -472,6 +472,10 @@ export function useBoardGeneratorController() {
      chaque Titan (sans Verts, donc sans secret) affiché dans sa bande. Faux
      par défaut : à la table physique, on ne sait pas qui mène. */
   const [scoresVisibles, setScoresVisibles] = useState(false);
+  /* Option de table « Adrénaline à la défausse » (Nikola, 24/09) : défausser
+     une carte programmée rapporte +1 Adrénaline. La règle vit dans le moteur
+     (`discardCardHidden`) ; ce champ ne fait que la lui transmettre. */
+  const [adrenalineDefausse, setAdrenalineDefausse] = useState(false);
 
   const regenerate = useCallback((graineVoulue) => {
     // Chez un invité, la partie appartient à l'hôte : un plateau neuf tiré ici
@@ -1463,12 +1467,13 @@ export function useBoardGeneratorController() {
         difficulte,
         egalitesLanterneRouge,
         scoresVisibles,
+        adrenalineDefausse,
       },
     };
     return snapshot;
   }, [
     partieId, setupDone, placementRestant, nbJoueurs, titanModes, titanNames, titanProfiles,
-    eventsEnabled, modeVolRepos, gameSeed, apocalypseThreshold, difficulte, egalitesLanterneRouge, scoresVisibles,
+    eventsEnabled, modeVolRepos, gameSeed, apocalypseThreshold, difficulte, egalitesLanterneRouge, scoresVisibles, adrenalineDefausse,
     state, titanState, looseBlocks, activePlayerId, phase, passifUsed, actionLog, waitingNextTitan, volResume,
     decisionQueue, repliQueue, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcNTargets,
     fpmcAttackerBase, fpmcCurrent, mancheNumber, phaseValidated, volDirection, currentEvent,
@@ -1624,6 +1629,7 @@ export function useBoardGeneratorController() {
       // `!== undefined` et non un `||` : la valeur utile est justement `false`.
       if (snap.table.egalitesLanterneRouge !== undefined) setEgalitesLanterneRouge(Boolean(snap.table.egalitesLanterneRouge));
       if (snap.table.scoresVisibles !== undefined) setScoresVisibles(Boolean(snap.table.scoresVisibles));
+      if (snap.table.adrenalineDefausse !== undefined) setAdrenalineDefausse(Boolean(snap.table.adrenalineDefausse));
     }
     /* `undoTick` fait remettre aux panneaux LEUR état local d'étape (le
        « Passer aux cartes » de BoardPanel, notamment). Le bousculer à chaque
@@ -3002,7 +3008,7 @@ export function useBoardGeneratorController() {
          (audit du 2026-09-23) : rangée comme jouée, elle nommait la carte à
          toute la table. Le round avance de la même façon. */
       if (defausse) {
-        const res = discardCardHidden(playerId, cardId, aiTitanStateRef.current.players);
+        const res = discardCardHidden(playerId, cardId, aiTitanStateRef.current.players, { adrenaline: adrenalineDefausse });
         if (res.ok) {
           setActionLog((prev) => [...prev, res.log]);
           advanceActionRound(playerId);
@@ -4770,7 +4776,7 @@ export function useBoardGeneratorController() {
         const updatedPlayers = prev.players.map((t) => {
           if (t.id !== titanId) return t;
           const clone = { ...t, programmed: [...t.programmed], discardedHidden: [...(t.discardedHidden || [])] };
-          const res = discardCardHidden(titanId, cardId, [clone]);
+          const res = discardCardHidden(titanId, cardId, [clone], { adrenaline: adrenalineDefausse });
           if (res.ok) logMsg = res.log;
           return clone;
         });
@@ -4781,7 +4787,7 @@ export function useBoardGeneratorController() {
         advanceActionRound(titanId);
       }
     },
-    [advanceActionRound, captureSnapshot, titanState.players, selectedTitanId, canDiscardCard]
+    [advanceActionRound, captureSnapshot, titanState.players, selectedTitanId, canDiscardCard, adrenalineDefausse]
   );
 
   // ── TEA : calcul des cibles disponibles ──────────────────────────────────
@@ -6312,6 +6318,8 @@ export function useBoardGeneratorController() {
         setEgalitesLanterneRouge={setEgalitesLanterneRouge}
         scoresVisibles={scoresVisibles}
         setScoresVisibles={setScoresVisibles}
+        adrenalineDefausse={adrenalineDefausse}
+        setAdrenalineDefausse={setAdrenalineDefausse}
         modeVolRepos={modeVolRepos}
         setModeVolRepos={setModeVolRepos}
         apocalypseThreshold={apocalypseThreshold}
