@@ -219,6 +219,7 @@ function ReglagesDeParties({
   eventsEnabled, setEventsEnabled,
   modeVolRepos, setModeVolRepos,
   egalitesLanterneRouge, setEgalitesLanterneRouge,
+  scoresVisibles, setScoresVisibles,
   apocalypseThreshold, setApocalypseThreshold,
   seedInput, setSeedInput,
   champ,
@@ -342,6 +343,35 @@ function ReglagesDeParties({
         </span>
       </label>
 
+      {/* Scores visibles (Nikola, 24/09) : décoché par défaut, comme à la
+          table physique où l'on ne sait pas qui mène. */}
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 11,
+          border: `2px solid ${scoresVisibles ? T.go : T.rule}`,
+          borderRadius: T.rChip,
+          padding: "11px 13px",
+          cursor: "pointer",
+        }}
+      >
+        <input
+          type="checkbox"
+          name="scores-visibles"
+          checked={scoresVisibles}
+          onChange={(e) => setScoresVisibles(e.target.checked)}
+          style={{ marginTop: 3, accentColor: T.go, width: 17, height: 17 }}
+        />
+        <span>
+          <span style={label(scoresVisibles ? T.go : T.dim, T.small)}>Scores visibles</span>
+          <span style={{ ...prose(T.faint, T.micro), display: "block", marginTop: 3 }}>
+            Le score de chaque Titan, si la partie s'arrêtait maintenant, s'affiche
+            en permanence dans sa bande (Blocs Verts non comptés).
+          </span>
+        </span>
+      </label>
+
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", border: `2px solid ${T.rule}`, borderRadius: T.rChip, padding: "11px 13px" }}>
         <label style={label(T.dim, T.small)} htmlFor="seuil-apo">
           Seuil Apocalypse
@@ -398,6 +428,7 @@ export default function SetupScreen({
   /* Défauts fournis : plusieurs tests montent cet écran sans ces deux props, et
      `undefined` sur une case à cocher React la rendrait non contrôlée. */
   egalitesLanterneRouge = true, setEgalitesLanterneRouge = () => {},
+  scoresVisibles = false, setScoresVisibles = () => {},
   apocalypseThreshold, setApocalypseThreshold,
   seedInput, setSeedInput,
   onLancer,
@@ -563,6 +594,7 @@ export default function SetupScreen({
                 ["Événements", eventsEnabled ? "activés" : "désactivés"],
                 ["Vol de Phase Repos", modeVolRepos === "main" ? "Emprunt" : "Mise au repos"],
                 ["Égalités en Lanterne Rouge", egalitesLanterneRouge ? "comptent" : "il faut être seul dernier"],
+                ["Scores", scoresVisibles ? "visibles" : "cachés"],
                 ["Seuil Apocalypse", `${apocalypseThreshold} bâtiments`],
               ].map(([nom, valeur]) => (
                 <div key={nom} style={{
@@ -826,6 +858,7 @@ export default function SetupScreen({
                   {[
                     eventsEnabled ? "Événements ✓" : null,
                     egalitesLanterneRouge ? null : "Égalités ✗",
+                    scoresVisibles ? "Scores ✓" : null,
                   ].filter(Boolean).map((puce) => (
                     <span
                       key={puce}
@@ -844,6 +877,7 @@ export default function SetupScreen({
                   eventsEnabled={eventsEnabled} setEventsEnabled={setEventsEnabled}
                   modeVolRepos={modeVolRepos} setModeVolRepos={setModeVolRepos}
                   egalitesLanterneRouge={egalitesLanterneRouge} setEgalitesLanterneRouge={setEgalitesLanterneRouge}
+                  scoresVisibles={scoresVisibles} setScoresVisibles={setScoresVisibles}
                   apocalypseThreshold={apocalypseThreshold} setApocalypseThreshold={setApocalypseThreshold}
                   seedInput={seedInput} setSeedInput={setSeedInput}
                   champ={champ}
@@ -855,6 +889,7 @@ export default function SetupScreen({
               eventsEnabled={eventsEnabled} setEventsEnabled={setEventsEnabled}
               modeVolRepos={modeVolRepos} setModeVolRepos={setModeVolRepos}
               egalitesLanterneRouge={egalitesLanterneRouge} setEgalitesLanterneRouge={setEgalitesLanterneRouge}
+              scoresVisibles={scoresVisibles} setScoresVisibles={setScoresVisibles}
               apocalypseThreshold={apocalypseThreshold} setApocalypseThreshold={setApocalypseThreshold}
               seedInput={seedInput} setSeedInput={setSeedInput}
               champ={champ}

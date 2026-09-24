@@ -486,6 +486,10 @@ export function useBoardGeneratorController() {
      égalité, personne. La règle elle-même vit dans le moteur
      (`isLanterneRouge`) ; ce champ ne fait que la lui transmettre. */
   const [egalitesLanterneRouge, setEgalitesLanterneRouge] = useState(true);
+  /* Option de table « Scores visibles » (Nikola, 24/09) : le pré-score de
+     chaque Titan (sans Verts, donc sans secret) affiché dans sa bande. Faux
+     par défaut : à la table physique, on ne sait pas qui mène. */
+  const [scoresVisibles, setScoresVisibles] = useState(false);
 
   const regenerate = useCallback((graineVoulue) => {
     // Chez un invité, la partie appartient à l'hôte : un plateau neuf tiré ici
@@ -1478,12 +1482,13 @@ export function useBoardGeneratorController() {
            on y remet ce qui s'y trouvait déjà. */
         difficulte,
         egalitesLanterneRouge,
+        scoresVisibles,
       },
     };
     return snapshot;
   }, [
     partieId, setupDone, placementRestant, nbJoueurs, titanModes, titanNames, titanProfiles,
-    eventsEnabled, modeVolRepos, gameSeed, apocalypseThreshold, difficulte, egalitesLanterneRouge,
+    eventsEnabled, modeVolRepos, gameSeed, apocalypseThreshold, difficulte, egalitesLanterneRouge, scoresVisibles,
     state, titanState, looseBlocks, activePlayerId, phase, passifUsed, actionLog, waitingNextTitan, volResume,
     decisionQueue, repliQueue, ecroulement, fpmcAttackerId, fpmcPendingIds, fpmcNTargets,
     fpmcAttackerBase, fpmcCurrent, mancheNumber, phaseValidated, volDirection, currentEvent,
@@ -1638,6 +1643,7 @@ export function useBoardGeneratorController() {
       if (snap.table.difficulte) setDifficulte(snap.table.difficulte);
       // `!== undefined` et non un `||` : la valeur utile est justement `false`.
       if (snap.table.egalitesLanterneRouge !== undefined) setEgalitesLanterneRouge(Boolean(snap.table.egalitesLanterneRouge));
+      if (snap.table.scoresVisibles !== undefined) setScoresVisibles(Boolean(snap.table.scoresVisibles));
     }
     /* `undoTick` fait remettre aux panneaux LEUR état local d'étape (le
        « Passer aux cartes » de BoardPanel, notamment). Le bousculer à chaque
@@ -6043,6 +6049,13 @@ export function useBoardGeneratorController() {
     ? computeFinalScore(titanState.players, {}, rainbowWinnerId)
     : null;
 
+  // Option « Scores visibles » : le même pré-score, en permanence dans la bande
+  // (`{ [titanId]: { total, bareme, … } }`).
+  const scoresCourants = useMemo(
+    () => (scoresVisibles ? computeFinalScore(titanState.players, {}, rainbowWinnerId).totals : null),
+    [scoresVisibles, titanState.players, rainbowWinnerId],
+  );
+
   // Le tableau de scoring affichait une colonne par Titan et un total, sans
   // jamais désigner de vainqueur : au joueur de comparer les chiffres à
   // l'œil. Le classement est calculé ici, départage compris (Adrénaline,
@@ -6388,6 +6401,8 @@ export function useBoardGeneratorController() {
         setDifficulte={setDifficulte}
         egalitesLanterneRouge={egalitesLanterneRouge}
         setEgalitesLanterneRouge={setEgalitesLanterneRouge}
+        scoresVisibles={scoresVisibles}
+        setScoresVisibles={setScoresVisibles}
         modeVolRepos={modeVolRepos}
         setModeVolRepos={setModeVolRepos}
         apocalypseThreshold={apocalypseThreshold}
@@ -6508,6 +6523,7 @@ export function useBoardGeneratorController() {
     setRainbowWinnerId,
     showScoring,
     setShowScoring,
+    scoresCourants,
     gameOver,
     show3D,
     setShow3D,

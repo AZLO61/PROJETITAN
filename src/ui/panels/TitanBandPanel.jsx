@@ -46,6 +46,7 @@ export default function TitanBandPanel({ vm }) {
       waitingNextTitan={vm.waitingNextTitan}
       titansEnAttente={vm.titansEnAttente}
       rainbowWinnerId={vm.rainbowWinnerId}
+      scoresCourants={vm.scoresCourants}
       phaseValidated={vm.phaseValidated}
       ordreInitiative={ordreInitiative}
       detonateurId={titanState.detonateur}

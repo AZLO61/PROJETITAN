@@ -201,7 +201,7 @@ function Piste({ icone, nom, valeur, meilleur, couleur, tour }) {
 export default function TitanResourceBand({
   titans, selectedTitanId, onSelect, activePlayerId, phase, titanDisplayName,
   titanModes = {}, titanProfiles = {}, profilsReveles = {}, revelerProfil, profileLabel,
-  waitingNextTitan = false, titansEnAttente = [], rainbowWinnerId = null,
+  waitingNextTitan = false, titansEnAttente = [], rainbowWinnerId = null, scoresCourants = null,
   phaseValidated = {}, ordreInitiative = [], detonateurId = null,
   validatePhase, canValidatePhase, getPhaseBlockReason,
 }) {
@@ -652,6 +652,16 @@ export default function TitanResourceBand({
                   }}
                 >
                   <RainbowIcon size={14} /> +5
+                </span>
+              )}
+
+              {/* Option de table « Scores visibles » : le pré-score, Verts non comptés. */}
+              {scoresCourants && (
+                <span
+                  title="Score si la partie s'arrêtait maintenant (Blocs Verts non comptés)"
+                  style={{ ...readout(T.micro, T.text), cursor: "help" }}
+                >
+                  {scoresCourants[t.id]?.total ?? 0} pts
                 </span>
               )}
 
