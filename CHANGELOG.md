@@ -62,6 +62,12 @@ l'IA n'a changé.
     JSX compris, grâce à une règle `jsx-uses-vars` écrite dans
     `eslint.config.js` (sans plugin de plus) ; paramètres finaux inutilisés
     compris. Le chat à distance et l'élagage de l'IA restent en attente.
+  - **et ce qu'ESLint ne voit pas aussi** : `scripts/code-mort.mjs`, lancé par
+    `npm run audit` (donc la CI), refuse un export que rien n'importe, un
+    module de `src/` que le jeu n'atteint pas, et un champ du viewmodel lu par
+    personne. Rejoué sur le commit d'avant cette passe, il en trouve 68.
+  - Essayé et rejeté, faute de gain au-delà du bruit de mesure (±5 %) :
+    mémo par couleur et coordonnées précalculées dans `valeurAPortee`.
 
 ## Non publié — trente-neuvième passe du 2026-09-24 (règles et équilibrage, point par point)
 

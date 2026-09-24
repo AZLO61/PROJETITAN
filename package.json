@@ -8,7 +8,7 @@
     "build": "vite build",
     "test": "vitest run",
     "lint": "eslint .",
-    "audit": "node scripts/audit-structure.mjs",
+    "audit": "node scripts/audit-structure.mjs && node scripts/code-mort.mjs",
     "simulate": "node scripts/simulate.mjs",
     "diagnose": "node scripts/diagnose.mjs",
     "ecarts": "node scripts/mesure-ecarts.mjs",
