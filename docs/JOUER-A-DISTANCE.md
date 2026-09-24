@@ -169,8 +169,8 @@ que quatre écrans ne divergent jamais.
 
 **Si tu fermes ton onglet, la partie s'arrête** pour tout le monde. Les invités
 l'apprennent au bout de deux minutes, le temps que le relais constate ton
-absence. Une **coupure réseau** se rattrape (voir plus bas), un **rechargement
-de page** non : le moteur et les mains partent avec l'onglet.
+absence. Une **coupure réseau** comme un **rechargement de page (F5)** se
+rattrapent (voir plus bas) ; seul l'onglet fermé pour de bon arrête la table.
 
 **Chacun ne voit que sa main.** Le plateau part en clair à toute la table, les
 cartes de chacun lui partent à part. Un joueur qui ouvre la console de son
@@ -183,10 +183,13 @@ reprendre le moteur après une coupure longue, il rejoint sa propre table
 (identifiant + mot de passe) en dépliant **« Tu es l'hôte et tu reprends ta
 table ? »** et en collant la clé du relais.
 
-> Une limite qui reste, et elle est structurelle : si l'hôte **recharge sa
-> page**, le moteur part avec elle. Le relais ne garde qu'un plateau PUBLIC,
-> mains retirées — il ne peut pas rendre les cartes de chacun. La reprise sert
-> aux coupures réseau, pas aux F5.
+**Un F5 de l'hôte se rattrape aussi** (depuis le 24/09/2026). Le relais ne garde
+qu'un plateau PUBLIC, mains retirées ; c'est donc la page de l'hôte qui range la
+partie complète dans son propre navigateur, un instant après chaque coup. Après
+un F5, il rejoint sa table comme ci-dessus : la page retrouve la sauvegarde de
+CETTE table et la partie continue, mains comprises. Rien ne quitte sa machine.
+La sauvegarde est effacée quand il quitte la table, et ne sert qu'au même
+navigateur — changer d'ordinateur en pleine partie reste impossible.
 
 **Un invité qui recharge sa page** revient dans la partie : il redonne
 l'identifiant et le mot de passe (ou reclique le lien d'invitation), et reprend

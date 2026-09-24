@@ -54,6 +54,22 @@ const {
    la valeur est une vraie fonction sont posées (cf. l'étape « siege » plus
    bas pour l'attaque par `__proto__`). Exporté pour que le test
    `intention-hostile` éprouve CE code, pas une copie. Rend les clés posées. */
+/* ── LA SAUVEGARDE DE L'HÔTE, POUR SURVIVRE À UN F5 (2026-09-24) ──
+   Le relais ne garde qu'un plateau PUBLIC (mains retirées) : un hôte qui
+   rechargeait sa page perdait la partie. GitHub Pages ne stocke rien ; le seul
+   endroit qui survit à un rechargement sans serveur est le navigateur de
+   l'hôte lui-même. Sa page y range donc l'instantané COMPLET, mains comprises,
+   étiqueté par la table ; en la rejoignant après un F5, il le retrouve.
+   Rien ne quitte sa machine, et c'est l'appareil qui fait déjà tourner le
+   moteur : il ne voit rien de plus qu'avant. */
+const CLE_SAUVEGARDE_HOTE = "titan.hote.partie";
+function lireSauvegardeHote(tableId) {
+  try {
+    const s = JSON.parse(localStorage.getItem(CLE_SAUVEGARDE_HOTE) || "null");
+    return s && s.tableId === tableId && s.instantane ? s.instantane : null;
+  } catch { return null; }
+}
+
 export function adopterContexte(table, contexte) {
   const posees = [];
   Object.entries(contexte || {}).forEach(([cle, valeur]) => {
@@ -2257,9 +2273,9 @@ export function useBoardGeneratorController() {
        que le premier envoi reparte à coup sûr, même si rien n'a bougé pendant
        l'absence.
 
-       Ce qui n'est PAS rattrapable, et le livret le dit : un hôte qui RECHARGE
-       sa page perd le moteur avec elle. Le relais ne garde qu'un plateau public,
-       il ne peut pas rendre les mains. La reprise sert aux coupures, pas aux F5. */
+       Un hôte qui RECHARGE sa page perdait le moteur avec elle : le relais ne
+       garde qu'un plateau public. Depuis le 2026-09-24, sa page garde sa propre
+       sauvegarde (`CLE_SAUVEGARDE_HOTE`), relue juste en dessous. */
     if (nouvelle.siege === "hote") {
       dernierEnvoiRef.current = "";
       dernieresMainsRef.current = {};
@@ -2282,10 +2298,17 @@ export function useBoardGeneratorController() {
          plateau des autres reste intact, et l'hôte peut encore récupérer son
          onglet d'origine s'il est ouvert quelque part.
 
-         Ce n'est pas une reprise : c'est un garde-fou. La vraie reprise après
-         F5 demanderait de persister la session ET les mains, ce que le relais
-         ne stocke pas — c'est noté comme tel dans JOUER-A-DISTANCE.md. */
-      if (nouvelle.etatInitial && !setupDoneRef.current) {
+         Ce garde-fou ne sert plus que si cette page n'a PAS de sauvegarde de
+         cette table (autre navigateur, sauvegarde effacée) ; sinon elle reprend
+         sa partie (2026-09-24, cf. JOUER-A-DISTANCE.md). */
+      const sauvegarde = nouvelle.etatInitial && !setupDoneRef.current ? lireSauvegardeHote(nouvelle.id) : null;
+      if (sauvegarde) {
+        // Cette page a déjà mené CETTE table : elle reprend sa propre partie.
+        restaurerInstantane(sauvegarde);
+        setupDoneRef.current = true;
+        setSetupDone(true);
+        setDistantAvis("Partie reprise depuis la sauvegarde de cette page — la table continue.");
+      } else if (nouvelle.etatInitial && !setupDoneRef.current) {
         diffusionBloqueeRef.current = nouvelle.id; // la table visée, cf. le début de `brancherSession`
         setDistantDiffusionBloquee(true);
         setDistantAvis(
@@ -2295,7 +2318,7 @@ export function useBoardGeneratorController() {
       }
     }
     return nouvelle;
-  }, [signalerMouvement]);
+  }, [signalerMouvement, restaurerInstantane]);
 
   const quitterSessionDistante = useCallback(async () => {
     const s = sessionRef.current;
@@ -2307,6 +2330,8 @@ export function useBoardGeneratorController() {
     // La table suivante repart d'un cadre vierge : ses brouillons survivaient au
     // changement de table quand la Manche, la Phase et le tour coïncidaient.
     dernierCadreDistantRef.current = "";
+    // Quitter sa table pour de bon : sa sauvegarde n'a plus rien à reprendre.
+    try { localStorage.removeItem(CLE_SAUVEGARDE_HOTE); } catch { /* stockage indisponible */ }
     if (s) await s.quitter();
   }, []);
 
@@ -2442,6 +2467,20 @@ export function useBoardGeneratorController() {
      de redemander un plateau déjà en vol. */
   const derniereDemandeRef = useRef("");
   const [relanceDiffusion, setRelanceDiffusion] = useState(0);
+  /* La sauvegarde de l'hôte (cf. `CLE_SAUVEGARDE_HOTE`) : un instant après
+     chaque changement, tant que cette page arbitre une partie lancée. */
+  useEffect(() => {
+    if (!distantHote || !setupDone || distantDiffusionBloquee || !session?.id) return undefined;
+    const minuteur = setTimeout(() => {
+      try {
+        localStorage.setItem(CLE_SAUVEGARDE_HOTE, JSON.stringify({ tableId: session.id, le: Date.now(), instantane: instantaneCourant() }));
+      } catch (e) {
+        console.warn("[distant] sauvegarde de l'hôte impossible — un F5 perdrait la partie", e);
+      }
+    }, 400);
+    return () => clearTimeout(minuteur);
+  }, [distantHote, setupDone, distantDiffusionBloquee, session, instantaneCourant]);
+
   const AVIS_DIFFUSION = "Diffusion impossible, reprise…";
   const AVIS_MAIN = "Envoi d'une main impossible, nouvelle tentative…";
   useEffect(() => {
