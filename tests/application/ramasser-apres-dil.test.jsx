@@ -56,6 +56,12 @@ describe("Ramassage après un DIL tranché", () => {
       target.cell = "E6"; // adjacent à l'attaquant, dans l'axe est
       target.repaire = ["bleu", "rose"]; // exactement 2 couleurs → DIL sans étape ATTACKER_PICK
       vmCourant.setLooseBlocks({ E6: ["orange"] }); // débris qui cohabite avec la cible
+      /* E7 debout : la cible reste sur sa case, avec son débris. Le plateau est
+         tiré au hasard, et sur ~9 % des tirages E7 est vide — la cible avance
+         alors, et son débris la suit (ruling du 2026-09-19) : le test échouait
+         sans qu'aucun code soit en cause (40e passe, 400 graines rejouées). */
+      const e7 = vmCourant.state.board.E7;
+      if (!(e7?.blocks.length > 0)) vmCourant.state.board.E7 = { ...e7, blocks: ["bleu"] };
       vmCourant.setTitanState((p) => ({ ...p, players: [...p.players] }));
     });
 

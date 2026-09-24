@@ -303,18 +303,13 @@ function countStandingBuildings(board) {
   return Object.values(board).filter((b) => b.blocks.length > 0).length;
 }
 
-function countColorOnBoard(color, board, looseBlocks) {
-  let total = 0;
-  Object.values(board).forEach((b) => {
-    b.blocks.forEach((c) => {
-      if (c === color) total++;
-    });
-  });
-  Object.values(looseBlocks).forEach((stack) => {
-    stack.forEach((c) => {
-      if (c === color) total++;
-    });
-  });
+/* Blocs de chaque couleur encore en jeu (bâtiments + sol), toutes couleurs en
+   UN passage : l'IA le demande à chaque position évaluée (cf.
+   `gestesAvantLaFin`), et un parcours par couleur en coûtait quatre. */
+function compterCouleursSurPlateau(board, looseBlocks) {
+  const total = { bleu: 0, rose: 0, orange: 0, rouge: 0 }; // COULEURS, forme fixe
+  for (const k in board) for (const c of board[k].blocks) if (total[c] !== undefined) total[c]++;
+  for (const k in looseBlocks) for (const c of looseBlocks[k]) if (total[c] !== undefined) total[c]++;
   return total;
 }
 
@@ -348,8 +343,9 @@ function checkEndGameTriggers(board, looseBlocks, apocalypseThreshold, mancheNum
   if (standing <= apocalypseThreshold) {
     reasons.push(`🏙️ Apocalypse Urbaine : ${standing} bâtiment(s) encore debout (seuil ${apocalypseThreshold}).`);
   }
+  const parCouleur = compterCouleursSurPlateau(board, looseBlocks);
   COULEURS.forEach((color) => {
-    const reste = countColorOnBoard(color, board, looseBlocks);
+    const reste = parCouleur[color];
     if (reste <= SEUIL_PENURIE) {
       reasons.push(`📦 Pénurie : ${reste === 0 ? "plus aucun bloc" : `plus qu'${reste} bloc`} ${color} sur le plateau.`);
     }
@@ -3652,17 +3648,6 @@ function chebyshevDistance(r1, c1, r2, c2) {
    ATTERRIR. Un bâtiment encore debout est exclu (saute-mouton autorisé en
    vol, jamais d'arrêt dessus) ; une case portant un Titan reste incluse,
    c'est tout l'objet de la carte (DIL, projection, +1 Bagarre). */
-// Partagé avec le tracé manuel du chemin (contrôleur, `bbNextRoutes`) : le tracé manuel du
-// chemin (demande Nikola, cf. plus bas) doit appliquer EXACTEMENT la même
-// notion d'obstacle que le calcul automatique, sous peine de laisser le
-// joueur dessiner un trajet que le moteur refuserait.
-function isBoingBoingObstacle(key, { board, looseBlocks = {}, titans = [] }) {
-  const b = board[key];
-  if (b && b.blocks.length > 0) return true;
-  if ((looseBlocks[key] || []).length > 0) return true;
-  return titans.some((t) => estSurLePlateau(t) && t.cell === key);
-}
-
 function isStandingBuilding(key, board) {
   const b = board[key];
   return Boolean(b && b.blocks.length > 0);
@@ -3689,7 +3674,29 @@ function isStandingBuilding(key, board) {
    volontairement ». Les deux cases sont proposees — celle du debris, et celle
    juste derriere — et elles coutent la meme chose. Le choix est au joueur, pas
    au moteur. */
+/* Clés de case précalculées, `CLES_CASES[ligne][colonne]` : ce parcours tourne
+   une fois par saut simulé, des centaines de fois par tour d'IA, et
+   reconstruire « C9 » à chaque pas en était le premier coût. */
+const CLES_CASES = ROWS.map((row) => Array.from({ length: 10 }, (_, c) => row + c));
+
+/* La portée ne dépend que de ce que sa clé relève : case de départ, portée, et
+   cases des bâtiments debout, du sol encombré et des Titans (clés de deux
+   caractères, donc sans ambiguïté). La recherche de l'IA la redemandait pour
+   chacun de ses ~130 sauts candidats, sur le même plateau. Map partagée : ses
+   lecteurs (IA, résolveur, interface) la lisent, aucun ne la modifie. */
+const cachePortees = new Map();
+const CACHE_PORTEES_MAX = 2000; // ponytail: vidé d'un coup une fois plein, un LRU si la mémoire compte
+
 function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, titans = [] }) {
+  let cle = `${startCell}|${maxRange}|`;
+  for (const k in board) if (board[k].blocks.length > 0) cle += k;
+  cle += "|";
+  for (const k in looseBlocks) if ((looseBlocks[k] || []).length > 0) cle += k;
+  cle += "|";
+  for (const t of titans) if (estSurLePlateau(t)) cle += t.cell;
+  const connue = cachePortees.get(cle);
+  if (connue) return connue;
+
   /* SEUL LE BÂTIMENT DEBOUT INTERDIT L'ATTERRISSAGE. Un Amas non : sauter
      dessus est justement le geste qui déclenche l'Écroulement (ruling du
      2026-08-16), et le Titan ne reste sur la tour que le temps de la
@@ -3697,13 +3704,19 @@ function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, tita
      sauter — c'est même le seul moyen qu'il a de la faire tomber sans
      charger dedans. */
   const estBatimentDebout = (key) => isStandingBuilding(key, board);
-  const estObstacle = (key) => isBoingBoingObstacle(key, { board, looseBlocks, titans });
+  /* Tout obstacle bloquant (arbitrage du 2026-08-17) : bâtiment debout, débris,
+     Amas ou Socle au sol, et Titan. Les cases des Titans sont relevées une
+     fois : elles ne bougent pas pendant le parcours. */
+  const casesTitans = new Set();
+  for (const t of titans) if (estSurLePlateau(t)) casesTitans.add(t.cell);
+  const estObstacle = (key) => estBatimentDebout(key) || (looseBlocks[key] || []).length > 0 || casesTitans.has(key);
 
   const dist = new Map([[startCell, 0]]);
   const file = [startCell];
 
-  while (file.length > 0) {
-    const cell = file.shift();
+  // Un index plutôt que `shift()` : même ordre de visite, sans décaler la file.
+  for (let i = 0; i < file.length; i++) {
+    const cell = file[i];
     const d = dist.get(cell);
     if (d >= maxRange) continue;
     const r = rowIndex(cell[0]);
@@ -3718,7 +3731,7 @@ function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, tita
         let nr = r + dr;
         let nc = c + dc;
         while (nr >= 0 && nr <= 8 && nc >= 1 && nc <= 9) {
-          const key = rowFromIndex(nr) + nc;
+          const key = CLES_CASES[nr][nc];
           const posable = !estBatimentDebout(key);
           if (posable) {
             const nd = d + 1;
@@ -3745,6 +3758,8 @@ function getBoingBoingReach(startCell, maxRange, { board, looseBlocks = {}, tita
     if (estBatimentDebout(key)) return; // atterrissage interdit sur un batiment debout
     reach.set(key, d);
   });
+  if (cachePortees.size >= CACHE_PORTEES_MAX) cachePortees.clear();
+  cachePortees.set(cle, reach);
   return reach;
 }
 
@@ -5870,7 +5885,7 @@ export {
   rentrerEnJeu,
   isBuildingCell,
   countStandingBuildings,
-  countColorOnBoard,
+  compterCouleursSurPlateau,
   SEUIL_PENURIE,
   SEUIL_4,
   MANCHES_PAR_NB_JOUEURS,

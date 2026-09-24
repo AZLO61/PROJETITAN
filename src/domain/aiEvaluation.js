@@ -69,7 +69,7 @@
 import {
   COULEURS,
   computeFinalScore,
-  countColorOnBoard,
+  compterCouleursSurPlateau,
   SEUIL_PENURIE,
   isSocleMarker,
   manchesMax,
@@ -671,9 +671,15 @@ export function scoreComplet(titans) {
 function signatureScore(titans) {
   let s = "";
   for (const t of titans) {
-    const c = { bleu: 0, rose: 0, orange: 0, rouge: 0, vert: 0 };
-    for (const x of t.repaire || []) if (c[x] !== undefined) c[x] += 1;
-    s += `${t.id}:${c.bleu},${c.rose},${c.orange},${c.rouge},${c.vert}:${t.bagarre || 0}:${t.destruction || 0}:${t.adrenaline || 0}:${(t.socles || []).join(",")};`;
+    let bleu = 0, rose = 0, orange = 0, rouge = 0, vert = 0;
+    for (const x of t.repaire || []) {
+      if (x === "bleu") bleu++;
+      else if (x === "rose") rose++;
+      else if (x === "orange") orange++;
+      else if (x === "rouge") rouge++;
+      else if (x === "vert") vert++;
+    }
+    s += `${t.id}:${bleu},${rose},${orange},${rouge},${vert}:${t.bagarre || 0}:${t.destruction || 0}:${t.adrenaline || 0}:${(t.socles || []).join(",")};`;
   }
   return s;
 }
@@ -1062,23 +1068,29 @@ const PORTEE_FIN_DE_PARTIE = 3;
    rasé ou un Téléporteur éteint coûte désormais autant de gestes qu'il porte
    de blocs — les plus petits d'abord, c'est le chemin le plus court.
    Mesuré au duel : neutre (−0,01 pt, 480 parties), gardé pour la cohérence. */
-const blocsDesPlusPetits = (batiments, n) => batiments
-  .map((b) => b.blocks.length).sort((a, b) => a - b).slice(0, n).reduce((s, x) => s + x, 0);
+const blocsDesPlusPetits = (hauteurs, n) => hauteurs.sort((a, b) => a - b).slice(0, n).reduce((s, x) => s + x, 0);
 
 function gestesAvantLaFin(gameState) {
   const { board = {}, looseBlocks = {}, finDePartie } = gameState;
   const seuil = finDePartie?.apocalypseThreshold ?? 5;
-  const debout = Object.values(board).filter((b) => b.blocks.length > 0);
-  const actifs = debout.filter((b) => b.isTeleporter);
+  // Hauteurs des bâtiments debout, et des Téléporteurs actifs parmi eux.
+  const debout = [], actifs = [];
+  for (const k in board) {
+    const n = board[k].blocks.length;
+    if (n === 0) continue;
+    debout.push(n);
+    if (board[k].isTeleporter) actifs.push(n);
+  }
 
   // Apocalypse Urbaine : bâtiments encore debout au-dessus du seuil.
   const apocalypse = blocsDesPlusPetits(debout, Math.max(0, debout.length - seuil));
   // Vide Spatial : Téléporteurs actifs au-dessus du dernier.
   const vide = blocsDesPlusPetits(actifs, Math.max(0, actifs.length - 1));
   // Pénurie : la couleur la plus proche de disparaître du plateau.
+  const parCouleur = compterCouleursSurPlateau(board, looseBlocks);
   let penurie = Infinity;
   COULEURS.forEach((c) => {
-    penurie = Math.min(penurie, Math.max(0, countColorOnBoard(c, board, looseBlocks) - SEUIL_PENURIE));
+    penurie = Math.min(penurie, Math.max(0, parCouleur[c] - SEUIL_PENURIE));
   });
 
   /* ── LA DERNIÈRE MANCHE EST UN DÉCLENCHEUR CERTAIN, PAS UNE SUPPOSITION ──
@@ -1125,7 +1137,7 @@ function distanceEntreCases(a, b) {
   );
 }
 
-function valeurAbriDuMeneur(titanId, gameState, scores) {
+function valeurAbriDuMeneur(titanId, gameState, scores, gestes) {
   const { titans = [] } = gameState;
   const surLePlateau = titans.filter((t) => !t.horsPlateau && !t.aPlacer && t.cell);
   if (surLePlateau.length < 2) return 0;
@@ -1161,15 +1173,15 @@ function valeurAbriDuMeneur(titanId, gameState, scores) {
   const isolement = Math.min(plusProche, PORTEE_MENACE) / PORTEE_MENACE;
   // Même horizon que `valeurFinDePartie` : ça ne pèse que quand le classement
   // est sur le point de se figer.
-  const restant = gestesAvantLaFin(gameState);
+  const restant = gestes();
   if (restant > PORTEE_FIN_DE_PARTIE) return 0;
   const proximite = (PORTEE_FIN_DE_PARTIE + 1 - restant) / (PORTEE_FIN_DE_PARTIE + 1);
 
   return avance * isolement * proximite * POIDS_ABRI_MENEUR;
 }
 
-function valeurFinDePartie(titanId, gameState, scores) {
-  const restant = gestesAvantLaFin(gameState);
+function valeurFinDePartie(titanId, gameState, scores, gestes) {
+  const restant = gestes();
   if (restant > PORTEE_FIN_DE_PARTIE) return 0;
 
   const { titans = [] } = gameState;
@@ -1217,6 +1229,9 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
   const scores = scoreComplet(titans);
   const mien = scores.totals[titanId];
   if (!mien) return 0;
+  // Jusqu'à trois termes lisent l'horizon de fin : calculé une fois, au besoin.
+  let gestesConnus;
+  const gestes = () => (gestesConnus ??= gestesAvantLaFin(gameState));
 
   const noteDe = (detail) => {
     if (!detail) return 0;
@@ -1284,8 +1299,8 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
        mesure que la fin approche. Il ne remplace pas `valeurFinDePartie`, qui
        dit s'il faut PRESSER ou RETARDER la fin : celui-ci dit seulement de
        cesser de compter ce qu'on n'aura pas le temps de prendre. */
-    const gestes = gestesAvantLaFin(gameState);
-    const horizon = Number.isFinite(gestes) ? Math.min(1, (gestes + 1) / 4) : 1;
+    const restant = gestes();
+    const horizon = Number.isFinite(restant) ? Math.min(1, (restant + 1) / 4) : 1;
     note += valeurAPortee(moi, gameState, reglages.rayonPortee ?? 2, {
       auScoreComplet: reglages.voitPorteeAuScore ?? false,
       voitConcurrence: reglages.voitConcurrence ?? false,
@@ -1360,7 +1375,7 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
      c'est l'ÉCART qui en porte le signe. */
   const poidsFin = reglages.poidsFinDePartie ?? 0;
   if (poidsFin > 0 && reglages.voitAdversaires) {
-    note += valeurFinDePartie(titanId, gameState, scores) * poidsFin;
+    note += valeurFinDePartie(titanId, gameState, scores, gestes) * poidsFin;
   }
 
   /* ── METTRE LE MENEUR À L'ABRI EST UN SERVICE QU'ON LUI REND ──
@@ -1390,7 +1405,7 @@ export function evaluatePosition(titanId, gameState, profile = makeProfile()) {
      approche ». Réservé aux forces qui lisent le score de leurs adversaires :
      sans cette lecture, il n'y a pas de meneur à connaître. */
   if (reglages.voitAdversaires) {
-    note -= valeurAbriDuMeneur(titanId, gameState, scores) * (reglages.poidsAdversaires ?? 0) * poids.adn;
+    note -= valeurAbriDuMeneur(titanId, gameState, scores, gestes) * (reglages.poidsAdversaires ?? 0) * poids.adn;
   }
 
   /* ── LA NUISANCE, REMISE — ET LA MESURE QUI L'AVAIT CONDAMNEE ──

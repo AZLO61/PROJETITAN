@@ -32,6 +32,23 @@ l'IA n'a changé.
 - **Domaine** : `getSeed` et `allProfiles` (plus d'appelant depuis le 28/08),
   la graine courante de `rng.js` que plus rien ne relisait, deux paramètres
   jamais lus du moteur, cinq `export` sans importeur.
+- **IA ×2,7 plus rapide, décisions identiques.** Profil CPU d'abord : 38 % du
+  temps passait dans la portée de Boing Boing, recalculée pour chacun des ~130
+  sauts candidats sur le même plateau. Elle est mise en cache (clé : départ,
+  portée, cases des bâtiments debout, du sol encombré et des Titans — **un champ
+  neuf lu par la portée doit entrer dans cette clé**), et son parcours ne
+  reconstruit plus les clés de case ni ne rebalaie les Titans à chaque pas.
+  L'horizon de fin de partie n'est plus calculé trois fois par position, les
+  couleurs se comptent en un passage. 12 parties mêlées : 37,4 s → 13,1 s ;
+  6 parties à 4 Experts : 42,8 s → 16,1 s. Empreintes identiques à `HEAD`
+  (`6f07f1e058b91460`, `7ba84537d42b5bf0`). Essayé et retiré faute de gain
+  mesurable : coordonnées précalculées dans `valeurAPortee`. Effet de bord : la
+  suite de tests passe de ~150 s à ~75 s.
+- **Test instable trouvé et corrigé** : `ramasser-apres-dil` tirait un plateau
+  au hasard et échouait sur ~9 % des tirages (35 graines sur 400, identiques
+  avant et après cette passe) — quand E7 est vide, la cible avance et son
+  débris la suit (ruling du 19/09), ce que le test, écrit le 24/08, ignorait.
+  Il pose désormais E7 debout : 0 échec sur 400.
 - **Non touché, à trancher par Nikola (DA)** : trois animations CSS jamais
   branchées depuis la refonte du 25/08 (`titan-plate-rise`, `titan-coin-blink`,
   `titan-impact`) et trois aides de style sans usage (`keyPressed`,
