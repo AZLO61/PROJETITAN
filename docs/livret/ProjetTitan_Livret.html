@@ -154,10 +154,10 @@
   </div>
 
   <div class="material-grid" style="margin-top:14px">
-    <div class="mat" data-c="bleu"><img src="Bloc_bleu_256.png" alt="Bloc Bleu" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty">19</div><div class="nm">Bleu — Habitation</div><div class="det">Barème progressif</div></div>
-    <div class="mat" data-c="rose"><img src="Bloc_rose_256.png" alt="Bloc Rose" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty">12</div><div class="nm">Rose — Boutique</div><div class="det">Barème + bonus +10 pts</div></div>
-    <div class="mat" data-c="orange"><img src="Bloc_Jaune_256.png" alt="Bloc Orange" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty">11</div><div class="nm">Orange — Loisir</div><div class="det">Score par paires exactes</div></div>
-    <div class="mat" data-c="rouge"><img src="Bloc_rouge_256.png" alt="Bloc Rouge" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty">7</div><div class="nm">Rouge — Supermarché</div><div class="det">Barème progressif</div></div>
+    <div class="mat" data-c="bleu"><img src="Bloc_bleu_256.png" alt="Bloc Bleu" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty" data-const="STOCK_INITIAL.bleu">19</div><div class="nm">Bleu — Habitation</div><div class="det">Barème progressif</div></div>
+    <div class="mat" data-c="rose"><img src="Bloc_rose_256.png" alt="Bloc Rose" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty" data-const="STOCK_INITIAL.rose">12</div><div class="nm">Rose — Boutique</div><div class="det">Barème + bonus +10 pts</div></div>
+    <div class="mat" data-c="orange"><img src="Bloc_Jaune_256.png" alt="Bloc Orange" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty" data-const="STOCK_INITIAL.orange">11</div><div class="nm">Orange — Loisir</div><div class="det">Score par paires exactes</div></div>
+    <div class="mat" data-c="rouge"><img src="Bloc_rouge_256.png" alt="Bloc Rouge" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty" data-const="STOCK_INITIAL.rouge">7</div><div class="nm">Rouge — Supermarché</div><div class="det">Barème progressif</div></div>
     <div class="mat" data-c="vert"><img src="Bloc_Vert_256.png" alt="Bloc Vert" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="qty">5</div><div class="nm">Vert — Téleporteur</div><div class="det">Placement secret en fin</div></div>
     <div class="mat"><div class="qty">20</div><div class="nm">Adrénaline</div><img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="det">Distribués à certaines manches</div></div>
     <div class="mat"><div class="qty">1</div><div class="nm">Jeton Détonateur</div><img src="Jeton_détonateur_256.png" alt="Jeton Détonateur" class="icon-img--sm" style="position:absolute;top:14px;right:14px"><div class="det">Désigne le starter · tourne</div></div>
@@ -448,7 +448,7 @@
     <div class="gloss"><div class="gloss-tag fat-icon"><img src="Fatigue_256.png" alt="Fatigue" class="icon-img"></div><div><h5>Fatigue</h5><p>Effet de Boing Boing et Graouhhh. L'attaquant pioche au hasard 1 carte <strong style="color:var(--y1)">de la MAIN</strong> de la cible et la place face cachée dans sa zone Repos. <strong>Jamais une des 3 cartes de la Manche en cours</strong> — celles-ci sont engagées, même celles qui ne sont pas encore résolues. La carte volée est indisponible pendant toute la Manche suivante. La cible peut la consulter — pas les autres. <strong style="color:var(--y1)">S'ajoute au vol normal de Phase 3</strong>. Défense : 1 <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">adrénaline.</p></div></div>
     <div class="gloss"><div class="gloss-tag e"><img src="Energie_256.png" alt="Énergie" class="icon-img"></div><div><h5>Énergie</h5><p>Détermine le seuil actif de l'action jouée au moment de l'action.</p></div></div>
     <div class="gloss"><div class="gloss-tag p adr-icon"><img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img"></div><div><h5>L'adrénaline</h5><p>Permet de modifier la valeur d'énergie.</p></div></div>
-    <div class="gloss"><div class="gloss-tag seuil4-icon"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img"></div><div><h5>Seuil 4</h5><p>Palier déclenché quand l'énergie restante au moment de l'impact atteint <strong style="color:var(--y1)">4 ou plus</strong>. Active l'effet le plus fort de la carte jouée — essentiellement le passage du Dilemme à la RAGE. En dessous de 4, c'est l'effet de base qui s'applique. <strong style="color:var(--y1)">Le Patatras n'en dépend plus</strong> : percuter un tas de débris le fait basculer quelle que soit l'énergie.</p></div></div>
+    <div class="gloss"><div class="gloss-tag seuil4-icon"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img"></div><div><h5>Seuil 4</h5><p>Palier déclenché quand l'énergie restante au moment de l'impact atteint <strong style="color:var(--y1)" data-const="SEUIL_4">4 ou plus</strong>. Active l'effet le plus fort de la carte jouée — essentiellement le passage du Dilemme à la RAGE. En dessous de 4, c'est l'effet de base qui s'applique. <strong style="color:var(--y1)">Le Patatras n'en dépend plus</strong> : percuter un tas de débris le fait basculer quelle que soit l'énergie.</p></div></div>
   </div>
 
   <div class="callout warn" style="margin-top:16px">
@@ -493,7 +493,7 @@
     </table>
   </div>
   <div class="callout warn"><strong>INTERDITS :</strong> impossible d'utiliser <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle"> sur Je Ne Partage Pas ou Graouhhh.</div>
-  <div class="callout"><strong style="color:var(--g1)">📦 Accumulation :</strong> se conserve d'une manche à l'autre. Un joueur peut donc en accumuler plusieurs et les dépenser en rafale. <strong style="color:var(--y1)">Barème progressif en fin de partie : 1 · 3 · 5 · 8 · 12 · 17 · 22 · 28 points pour 1 à 8 <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">restantes.</strong></div>
+  <div class="callout"><strong style="color:var(--g1)">📦 Accumulation :</strong> se conserve d'une manche à l'autre. Un joueur peut donc en accumuler plusieurs et les dépenser en rafale. <strong style="color:var(--y1)">Barème progressif en fin de partie : <span data-const="BAREME_ADRENALINE">1 · 3 · 5 · 8 · 12 · 17 · 22 · 28</span> points pour 1 à 8 <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">restantes.</strong></div>
 </section>
 
 <!-- STRUCTURE -->
@@ -543,7 +543,7 @@
 
       <!-- 01 TOUT CASSER -->
       <tbody>
-        <tr class="cm-head" style="--card-c1:#FF6B1A;--card-c2:#FF2E63"><td colspan="3"><span>01 · TOUT CASSER</span><span class="cm-force">⚡ Force 1</span></td></tr>
+        <tr class="cm-head" style="--card-c1:#FF6B1A;--card-c2:#FF2E63"><td colspan="3"><span>01 · TOUT CASSER</span><span class="cm-force" data-const="CARD_FORCE.tout_casser">⚡ Force 1</span></td></tr>
         <tr class="cm-note"><td colspan="3"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm" style="vertical-align:middle"> <strong>Énergie</strong> = cases occupées dans ton <img src="Périmètre_128.png" alt="Périmètre" class="icon-img--sm" style="vertical-align:middle">périmètre (max 8).</td></tr>
         <tr class="cm-cols"><th class="cm-elem">Élément</th><th class="cm-cond">Cond.</th><th>Effet</th></tr>
         <tr class="cm-row"><td class="cm-elem"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></td><td>Casse 1 bloc du haut · projeté · <strong style="color:#e07e16">+1 Destruction</strong></td></tr>
@@ -557,8 +557,8 @@
 
       <!-- 02 TÊTE EN AVANT -->
       <tbody>
-        <tr class="cm-head" style="--card-c1:#9333EA;--card-c2:#5421A0"><td colspan="3"><span>02 · TÊTE EN AVANT</span><span class="cm-force">⚡ Force 2</span></td></tr>
-        <tr class="cm-note"><td colspan="3">Fonce en ligne droite sur <strong>3 cases</strong> (<strong style="color:var(--y1)">+1 par <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">adrénaline</strong>).</td></tr>
+        <tr class="cm-head" style="--card-c1:#9333EA;--card-c2:#5421A0"><td colspan="3"><span>02 · TÊTE EN AVANT</span><span class="cm-force" data-const="CARD_FORCE.tete_en_avant">⚡ Force 2</span></td></tr>
+        <tr class="cm-note"><td colspan="3">Fonce en ligne droite sur <strong data-const="PORTEE_TETE_EN_AVANT">3 cases</strong> (<strong style="color:var(--y1)">+1 par <img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">adrénaline</strong>).</td></tr>
         <tr class="cm-cols"><th class="cm-elem">Élément</th><th class="cm-cond">Cond.</th><th>Effet</th></tr>
         <tr class="cm-row"><td class="cm-elem"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Energie_256.png" alt="Énergie" class="icon-img--sm"></td><td>1 bloc <img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">arrêt · <strong style="color:#e07e16">+1 Destruction</strong></td></tr>
         <tr class="cm-row"><td class="cm-elem"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><img src="Seuil_4_256.png" alt="Seuil 4" class="icon-img--sm"></td><td>1 bloc <img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">· celui du dessous projeté dans l'axe de la charge · <strong style="color:#e07e16">+1 Destruction</strong> (par case touchée, pas par bloc)</td></tr>
@@ -571,7 +571,7 @@
 
       <!-- 03 GRAOUHHH -->
       <tbody>
-        <tr class="cm-head" style="--card-c1:#2DD4BF;--card-c2:#0E7C7B"><td colspan="3"><span>03 · GRAOUHHH</span><span class="cm-force">⚡ Force 2</span></td></tr>
+        <tr class="cm-head" style="--card-c1:#2DD4BF;--card-c2:#0E7C7B"><td colspan="3"><span>03 · GRAOUHHH</span><span class="cm-force" data-const="CARD_FORCE.graouhhh">⚡ Force 2</span></td></tr>
         <tr class="cm-note"><td colspan="3"><img src="Bâtiment_128.png" alt="Bâtiment" class="icon-img--sm" style="vertical-align:middle">sur l'axe = <strong style="color:var(--y1)">mur</strong> · les <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle">derrière sont protégés.</td></tr>
         <tr class="cm-cols"><th class="cm-elem">Élément</th><th class="cm-cond">Cond.</th><th>Effet</th></tr>
         <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond">1 axe</td><td><img src="Fatigue_256.png" alt="Fatigue" class="icon-img--sm" style="vertical-align:middle"> <span class="badge b-dil">DIL</span> · recule · <strong style="color:var(--m1)">+1 Bagarre</strong> par Titan touché</td></tr>
@@ -580,8 +580,8 @@
 
       <!-- 04 BOING BOING -->
       <tbody>
-        <tr class="cm-head" style="--card-c1:#FFD93D;--card-c2:#FF6B1A"><td colspan="3"><span>04 · BOING BOING</span><span class="cm-force">⚡ Force 2</span></td></tr>
-        <tr class="cm-note"><td colspan="3">Destination au choix · <strong>3 cases max</strong> · tous azimuts. <span class="badge b-auto">Saute-mouton</span> Chaque obstacle se saute gratuitement, seules les cases libres comptent dans les 3.</td></tr>
+        <tr class="cm-head" style="--card-c1:#FFD93D;--card-c2:#FF6B1A"><td colspan="3"><span>04 · BOING BOING</span><span class="cm-force" data-const="CARD_FORCE.boing_boing">⚡ Force 2</span></td></tr>
+        <tr class="cm-note"><td colspan="3">Destination au choix · <strong data-const="PORTEE_BOING_BOING">3 cases max</strong> · tous azimuts. <span class="badge b-auto">Saute-mouton</span> Chaque obstacle se saute gratuitement, seules les cases libres comptent dans les 3.</td></tr>
         <tr class="cm-cols"><th class="cm-elem">Élément</th><th class="cm-cond">Cond.</th><th>Effet</th></tr>
         <tr class="cm-row"><td class="cm-elem"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"></td><td><img src="Repaire_256.png" alt="Repaire" class="icon-img--sm" style="vertical-align:middle">Ramassé</td></tr>
         <tr class="cm-row"><td class="cm-elem"><img src="Amas_de_béton_256.png" alt="Amas de béton" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"></td><td>Écroulement · <img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">distribués sur cases adjacentes</td></tr>
@@ -592,7 +592,7 @@
 
       <!-- 05 FAUT PAS ME CHAUFFER -->
       <tbody>
-        <tr class="cm-head" style="--card-c1:#F44336;--card-c2:#C2185B"><td colspan="3"><span>05 · FAUT PAS ME CHAUFFER</span><span class="cm-force">⚡ Force 3</span></td></tr>
+        <tr class="cm-head" style="--card-c1:#F44336;--card-c2:#C2185B"><td colspan="3"><span>05 · FAUT PAS ME CHAUFFER</span><span class="cm-force" data-const="CARD_FORCE.faut_pas_me_chauffer">⚡ Force 3</span></td></tr>
         <tr class="cm-note"><td colspan="3">Cible les <img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle">dans ton <img src="Périmètre_128.png" alt="Périmètre" class="icon-img--sm" style="vertical-align:middle">· somme de tes <strong style="color:var(--y1)">3 cartes programmées</strong> vs somme de la cible. <strong style="color:var(--y1)">Attaquant et cible</strong> peuvent chacun ajouter en <strong style="color:var(--adrenaline)">mise cachée</strong> autant d'<img src="Adrénaline_256.png" alt="Adrénaline" class="icon-img--sm" style="vertical-align:middle">qu'ils souhaitent.</td></tr>
         <tr class="cm-cols"><th class="cm-elem">Élément</th><th class="cm-cond">Cond.</th><th>Effet</th></tr>
         <tr class="cm-row"><td class="cm-elem"><img src="Titan_256.png" alt="Titan" class="icon-img--sm" style="vertical-align:middle"></td><td class="cm-cond"><span style="color:var(--g1)">Victoire</span></td><td><span class="badge b-rage">RAGE</span> · <strong style="color:var(--m1)">+1 Bagarre</strong> · perdants projetés (n+1 cases)</td></tr>
@@ -603,7 +603,7 @@
 
       <!-- 06 JE NE PARTAGE PAS -->
       <tbody>
-        <tr class="cm-head" style="--card-c1:#2D8DF5;--card-c2:#1E3A8A"><td colspan="3"><span>06 · JE NE PARTAGE PAS</span><span class="cm-force">⚡ Force 3</span></td></tr>
+        <tr class="cm-head" style="--card-c1:#2D8DF5;--card-c2:#1E3A8A"><td colspan="3"><span>06 · JE NE PARTAGE PAS</span><span class="cm-force" data-const="CARD_FORCE.je_ne_partage_pas">⚡ Force 3</span></td></tr>
         <tr class="cm-note"><td colspan="3">Ramasse <strong style="color:var(--y1)"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle"><img src="Bloc_de_béton_256.png" alt="Bloc de béton" class="icon-img--sm" style="vertical-align:middle">au choix</strong> dans ton <img src="Périmètre_128.png" alt="Périmètre" class="icon-img--sm" style="vertical-align:middle">périmètre. Aucune condition sur la hauteur ou la couleur.</td></tr>
         <tr class="cm-cols"><th class="cm-elem">Condition</th><th class="cm-cond"></th><th>Effet</th></tr>
         <tr class="cm-row"><td class="cm-elem"><span style="color:var(--y1)">🏆 Lanterne Rouge</span></td><td class="cm-cond"></td><td>Si tu as autant ou moins de blocs que le moins doté → <strong>3 blocs</strong> au lieu de 2</td></tr>
@@ -659,10 +659,10 @@
 
   <h3 class="sub">🎨 Barème par couleur</h3>
   <div class="score-elements">
-    <div class="scel bleu"><div class="nm"><img src="Bloc_bleu_256.png" alt="Bloc Bleu" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Bleu — Habitation</div><div class="scale">1·3·5·7·10·15·20·25·30</div><div class="det">19 blocs · barème progressif</div></div>
-    <div class="scel rose"><div class="nm"><img src="Bloc_rose_256.png" alt="Bloc Rose" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rose — Boutique</div><div class="scale">2·4·6·8·11·14·17·20</div><div class="det">12 blocs · +10 pts au plus grand · égalité = divisé</div></div>
-    <div class="scel orange"><div class="nm"><img src="Bloc_Jaune_256.png" alt="Bloc Orange" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Orange — Loisir</div><div class="scale">1p=5 · 2p=11 · 3p=18 · 4p=26</div><div class="det">11 blocs · paires exactes · impair = 0</div></div>
-    <div class="scel rouge"><div class="nm"><img src="Bloc_rouge_256.png" alt="Bloc Rouge" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rouge — Supermarché</div><div class="scale">3·7·11·16·22</div><div class="det">7 blocs · barème progressif</div></div>
+    <div class="scel bleu"><div class="nm"><img src="Bloc_bleu_256.png" alt="Bloc Bleu" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Bleu — Habitation</div><div class="scale" data-const="BAREME.bleu">1·3·5·7·10·15·20·25·30</div><div class="det">19 blocs · barème progressif</div></div>
+    <div class="scel rose"><div class="nm"><img src="Bloc_rose_256.png" alt="Bloc Rose" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rose — Boutique</div><div class="scale" data-const="BAREME.rose">2·4·6·8·11·14·17·20</div><div class="det">12 blocs · +10 pts au plus grand · égalité = divisé</div></div>
+    <div class="scel orange"><div class="nm"><img src="Bloc_Jaune_256.png" alt="Bloc Orange" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Orange — Loisir</div><div class="scale">1p=<span data-const="BAREME_ORANGE_PAIRES.0">5</span> · 2p=<span data-const="BAREME_ORANGE_PAIRES.1">11</span> · 3p=<span data-const="BAREME_ORANGE_PAIRES.2">18</span> · 4p=<span data-const="BAREME_ORANGE_PAIRES.3">26</span></div><div class="det">11 blocs · paires exactes · impair = 0</div></div>
+    <div class="scel rouge"><div class="nm"><img src="Bloc_rouge_256.png" alt="Bloc Rouge" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Rouge — Supermarché</div><div class="scale" data-const="BAREME.rouge">3·7·11·16·22</div><div class="det">7 blocs · barème progressif</div></div>
     <div class="scel vert"><div class="nm"><img src="Bloc_Vert_256.png" alt="Bloc Vert" class="icon-img--sm" style="vertical-align:middle;margin-right:6px">Vert — Téleporteur</div><div class="scale">+1 case (barème <em>ou</em> ADN)</div><div class="det">5 blocs · placement secret · choix par bloc · ne dépasse pas le max</div></div>
   </div>
 
@@ -700,10 +700,10 @@
 
   <h3 class="sub">🧬 Pistes ADN — classement final</h3>
   <div class="podium">
-    <div class="pod pod-or"><div class="rk">🥇 1ER</div><div class="pts">+7</div></div>
-    <div class="pod pod-argent"><div class="rk">🥈 2E</div><div class="pts">+3</div></div>
-    <div class="pod pod-bronze"><div class="rk">🥉 3E</div><div class="pts">+1</div></div>
-    <div class="pod"><div class="rk">4E</div><div class="pts">0</div></div>
+    <div class="pod pod-or"><div class="rk">🥇 1ER</div><div class="pts" data-const="PODIUM_POINTS.0">+7</div></div>
+    <div class="pod pod-argent"><div class="rk">🥈 2E</div><div class="pts" data-const="PODIUM_POINTS.1">+3</div></div>
+    <div class="pod pod-bronze"><div class="rk">🥉 3E</div><div class="pts" data-const="PODIUM_POINTS.2">+1</div></div>
+    <div class="pod"><div class="rk">4E</div><div class="pts" data-const="PODIUM_POINTS.3">0</div></div>
   </div>
   <div class="callout warn"><strong>⚖️ Classements séparés :</strong> Les pistes Bagarre et Destruction sont classées indépendamment l'une de l'autre. <strong>Égalité :</strong> si deux titans ou plus terminent au même niveau sur une piste, ils obtiennent tous les points du rang inférieur partagé. Ex : deux 1ers ex aequo → ils reçoivent chacun <strong>+3</strong> (points du 2e rang), pas +7.</div>
   <div class="callout warn" style="margin-top:12px"><strong style="color:var(--o1)">🚫 Une piste à zéro rapporte zéro :</strong> un Titan qui n'a jamais avancé sur une piste ne marque <strong>aucun point</strong> dessus, quel que soit son rang. Sans cette règle, une partie à 3 Titans où personne ne fait la moindre Bagarre laissait les trois ex aequo au dernier rang — c'est-à-dire le 3e, qui vaut +1 — et chacun repartait avec un point pour n'avoir rien accompli.</div>
@@ -735,7 +735,7 @@
 <section class="block" id="finpartie">
   <span class="eyebrow">🛑 Quand ça s'arrête</span>
   <h2 class="title">FIN DE <em>PARTIE</em></h2>
-  <p class="lede">La partie s'arrête à la fin de la Manche en cours si le nombre maximal de Manches est atteint (<strong style="color:var(--y1)">4 Manches à 4 joueurs · 6 Manches à 3 joueurs</strong>), ou <strong style="color:var(--m1)">à la fin de manche </strong> si l'une des conditions suivantes est remplie sur le plateau.</p>
+  <p class="lede">La partie s'arrête à la fin de la Manche en cours si le nombre maximal de Manches est atteint (<strong style="color:var(--y1)"><span data-const="MANCHES_PAR_NB_JOUEURS.4">4</span> Manches à 4 joueurs · <span data-const="MANCHES_PAR_NB_JOUEURS.3">6</span> Manches à 3 joueurs</strong>), ou <strong style="color:var(--m1)">à la fin de manche </strong> si l'une des conditions suivantes est remplie sur le plateau.</p>
   <div class="grid-3">
     <div class="panel">
       <h4 class="kicker">🏙️ Apocalypse Urbaine</h4>
@@ -743,7 +743,7 @@
     </div>
     <div class="panel">
       <h4 class="kicker">📦 Pénurie</h4>
-      <p>Il ne reste plus qu'<strong style="color:var(--y1)">un seul bloc</strong> (ou aucun) d'une couleur sur le plateau, bâtiments et sol compris.</p>
+      <p>Il ne reste plus qu'<strong style="color:var(--y1)" data-const="SEUIL_PENURIE">un seul bloc</strong> (ou aucun) d'une couleur sur le plateau, bâtiments et sol compris.</p>
     </div>
     <div class="panel">
       <h4 class="kicker">🌀 Vide Spatial</h4>

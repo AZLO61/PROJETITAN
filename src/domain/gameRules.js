@@ -5876,6 +5876,8 @@ export {
   countStandingBuildings,
   countColorOnBoard,
   SEUIL_PENURIE,
+  SEUIL_4,
+  MANCHES_PAR_NB_JOUEURS,
   countActiveTeleporters,
   checkEndGameTriggers,
   manchesMax,
