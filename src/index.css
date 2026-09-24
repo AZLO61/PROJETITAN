@@ -298,6 +298,22 @@ button {
   animation: titan-impact 420ms var(--ease-out) both;
 }
 
+/* ESSAI (2026-09-24, cf. ANIMER_TRAVERSEE dans RoundPanels.jsx) : un Titan
+   poussé hors de BIG CITY traverse la Faille. Son icône s'ouvre en iris dans
+   sa gouttière, une fois, en décélérant — pas de rebond, pas de boucle. */
+@keyframes titan-faille {
+  from {
+    clip-path: circle(0% at 50% 50%);
+    filter: blur(4px);
+    transform: scale(0.55) rotate(-90deg);
+  }
+  to {
+    clip-path: circle(75% at 50% 50%);
+    filter: blur(0);
+    transform: scale(1) rotate(0deg);
+  }
+}
+
 /* ── GRILLE 9×9 SUR PETIT ÉCRAN ──
    Bug remonté par Nikola le 2026-08-17 : « le rendu n'est pas bon en mode
    développeur navigateur sur mobile et tablette ».

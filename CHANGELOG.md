@@ -1,5 +1,33 @@
 # Changelog
 
+## Non publié — trente-huitième passe du 2026-09-24 (les derniers points ouverts)
+
+« Règle tous les points que tu peux faire seul, au fur et à mesure. » Un
+commit par point.
+
+- **Un F5 de l'hôte ne perd plus la partie.** GitHub Pages ne stocke rien et le
+  relais ne garde qu'un plateau public : la page de l'hôte range l'instantané
+  complet dans son propre navigateur, et le retrouve en rejoignant la même
+  table. Sans sauvegarde de cette table, le garde-fou du 07/09 tient.
+- **Un envoi sur une table fermée échoue** au lieu de réussir en silence, et
+  les envois « tire et oublie » le disent (programmation d'un invité, sièges).
+- **Tests** : une partie à 4 IA jouée dans le vrai contrôleur jusqu'au podium,
+  invariants contrôlés à chaque étape (il a trouvé un faux positif de
+  l'invariant de conservation, corrigé) ; la garde d'`intention-hostile` est
+  celle du contrôleur (`adopterContexte`), plus une copie ; le test de
+  démarrage vérifie enfin le plateau.
+- **Textes** relus (Tutoriel, panneaux) : l'Adrénaline annule aussi un
+  Dilemme, le Vol dépend du réglage de table, Boing Boing fait une RAGE au
+  Seuil 4.
+- **Fluidité mesurée** : 60 s de partie à 4 IA, une seule tâche longue (88 ms,
+  au lancement). Aucune réécriture de l'interface ne se justifie.
+- **Essai d'animation** (réversible, `ANIMER_TRAVERSEE` dans RoundPanels.jsx) :
+  un Titan poussé hors de BIG CITY apparaît dans sa gouttière en iris, 640 ms,
+  une fois. Vue 2D seulement.
+- **Hiérarchie des IA remesurée** : Facile 65 %, Moyen 78 %, Difficile 101 % du
+  score de l'Expert (86-97 % le 21/09) — le Difficile a rattrapé l'Expert après
+  les réglages du jour. Question d'équilibrage posée à Nikola.
+
 ## Non publié — trente-septième passe du 2026-09-24 (ce que la 36e avait laissé)
 
 « Corrige tous les points que tu n'as pas faits. » Trois questions posées

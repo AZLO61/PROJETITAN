@@ -8,12 +8,20 @@ import TitanResourceBand from "../titans/TitanResourceBand.jsx";
 import { TitanIcon, TitanBadge } from "../titans/TitanVisuals.jsx";
 import { TITAN_COLORS, accentDeplacement, accentDeplacement3D } from "../titans/constants.js";
 import { COLOR_HEX, ROWS, isBuildingCell, isSocleMarker, socleValue } from "../../domain/index.js";
+
 import { BLOCK_NAME } from "../blockNames.js";
 import { btnStyle, cancelBtn } from "../styles.js";
 import BlockIcon from "../BlockIcon.jsx";
 // Le Socle n'a pas d'icône de bloc : il porte la sienne, celle du jeu de traits.
 import Icon from "../icons.jsx";
 import { T, readout, eclaircir, ECLAT_2D, BLOC_SANS_RETOUCHE } from "../theme.js";
+
+/* ANIMATION D'ESSAI (Nikola, 2026-09-24 : « une petite animation peut être
+   sympa mais pas sûr qu'on la garde, c'est un test »). Un Titan qui quitte
+   BIG CITY apparaît dans sa gouttière en traversant la Faille. Pour la
+   retirer : `false` ici, puis supprimer `@keyframes titan-faille` (index.css)
+   et `arriveesFailleRef`. */
+const ANIMER_TRAVERSEE = true;
 
 /* ── EST-CE QU'ON JOUE SUR UN TÉLÉPHONE ? ──────────────────
    Nikola, 2026-08-30 : « dans la version mobile le triple débris sur une case
@@ -101,6 +109,8 @@ export default function RoundPanels({ vm, entete = null }) {
   // fixe, au-dessus de tout, avec les coordonnees de la case cliquee.
   const [hoverCell, setHoverCell] = React.useState(null);
   const [hoverPos, setHoverPos] = React.useState(null);
+  // Instant d'arrivée de chaque Titan dans une gouttière (cf. ANIMER_TRAVERSEE).
+  const arriveesFailleRef = React.useRef({});
   /* Comment la fiche a ete ouverte : "clic" ou "survol".
 
      Demande de Nikola du 2026-08-19 : « corrige le hover sur batiment et
@@ -671,6 +681,19 @@ export default function RoundPanels({ vm, entete = null }) {
            de 68, le Titan qui attend son retour se lisait comme une vignette
            décorative alors que c'est une information de tour. */
         const piste = (zone) => (zonesOccupees.has(zone) ? 34 : 12);
+        /* `Gouttiere` est redéfinie à chaque rendu, donc son contenu est
+           remonté à chaque coup : une animation « au montage » rejouerait sans
+           fin. On retient l'instant d'arrivée du Titan, et l'animation part
+           avec un délai NÉGATIF — un remontage la reprend où elle en est, et
+           une fois finie elle reste finie. */
+        const maintenant = performance.now();
+        const arrivees = arriveesFailleRef.current;
+        const enAttente = new Set((titansEnAttente || []).map((t) => t.id));
+        Object.keys(arrivees).forEach((id) => { if (!enAttente.has(Number(id))) delete arrivees[id]; });
+        enAttente.forEach((id) => { if (!(id in arrivees)) arrivees[id] = maintenant; });
+        const traversee = (id) => (ANIMER_TRAVERSEE
+          ? { animation: "titan-faille 640ms var(--ease-out) both", animationDelay: `${Math.round(arrivees[id] - maintenant)}ms` }
+          : null);
         const Gouttiere = ({ cle, zone }) => {
           const attendants = attenteParCase[cle];
           if (!attendants || attendants.length === 0 || zoneDe(cle) !== zone) return <div />;
@@ -707,7 +730,7 @@ export default function RoundPanels({ vm, entete = null }) {
               }}
             >
               {attendants.map((t, i) => (
-                <span key={t.id} style={{ marginLeft: i === 0 ? 0 : (ecranEtroit ? -5 : -10), display: "inline-flex" }}>
+                <span key={t.id} style={{ marginLeft: i === 0 ? 0 : (ecranEtroit ? -5 : -10), display: "inline-flex", ...traversee(t.id) }}>
                   <TitanIcon titanId={t.id} size={tailleAttente} />
                 </span>
               ))}
