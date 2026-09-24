@@ -3444,16 +3444,12 @@ function getJeNePartagePasCount(titanId, gameState) {
   return isLanterneRouge(titanId, gameState) ? 3 : 2;
 }
 
-/* ---- RAMASSAGE SEQUENTIEL, UN ELEMENT A LA FOIS ----------------
-   Ruling Nikola du 2026-08-19, marque WIP (pas encore definitif, peut
-   evoluer) : le ramassage se resout element par element. Des qu'un premier
-   debris est choisi, le Titan s'y deplace, et les debris suivants doivent
-   etre a portee depuis CETTE NOUVELLE position, pas depuis la position
-   d'origine.
-
-   Consequence assumee par Nikola, et c'est elle qui reste WIP : des debris
-   qui etaient dans le Perimetre de depart peuvent devenir inaccessibles
-   apres le premier ramassage.
+/* ---- RAMASSAGE ELEMENT PAR ELEMENT ------------------------------
+   Le ramassage se resout element par element, TOUS dans le Perimetre de
+   DEPART : le Titan ne bouge qu'a la fin, sur la derniere case choisie si
+   elle s'est videe (Nikola, 19/08, reconfirme le 24/09 — la premiere
+   version du 19/08, qui deplacait le Titan des le premier element, est
+   abandonnee ; cf. le commentaire « PAS DE DEPLACEMENT » plus bas).
 
    Seconde correction, celle du bug remonte : l'ancienne version exigeait des
    cases DISTINCTES, ce qui rendait impossible de ramasser deux debris empiles
