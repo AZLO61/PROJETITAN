@@ -189,6 +189,6 @@ export const PISTES_ADN = [
 
 export const FINS_PARTIE = [
   { icon: "🏙️", nom: "Apocalypse Urbaine", def: "Il ne reste qu'un nombre défini de bâtiments encore debout. Le seuil est fixé sur l'écran de configuration, avant le lancement, puis verrouillé." },
-  { icon: "📦", nom: "Pénurie", def: "Une couleur de bloc standard a entièrement disparu du plateau. Les exemplaires restés dans le sac ne comptent pas." },
+  { icon: "📦", nom: "Pénurie", def: "Il ne reste plus qu'un bloc (ou aucun) d'une couleur standard sur le plateau. Les exemplaires restés dans le sac ne comptent pas." },
   { icon: "🌀", nom: "Vide Spatial", def: "Il ne reste plus qu'un seul Téléporteur actif, c'est-à-dire dont le bloc Vert de base n'a pas encore été collecté." },
 ];

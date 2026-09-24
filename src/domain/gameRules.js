@@ -291,10 +291,10 @@ function retirerPileVide(looseBlocks, key) {
      partie et VERROUILLÉ ensuite (confirmé Nikola, session) : plus de
      champ éditable en cours de jeu, pour éliminer le levier de triche
      qu'offrait un seuil modifiable à tout moment.
-   - 📦 Pénurie : une couleur de bloc standard a entièrement disparu DU
-     PLATEAU (bâtiments + blocs libres) — les exemplaires restés dans le
-     sac (jamais posés) ne comptent pas, ils sont hors-jeu depuis la mise
-     en place.
+   - 📦 Pénurie : il ne reste plus qu'UN bloc (ou aucun) d'une couleur
+     standard SUR LE PLATEAU (bâtiments + blocs libres) — les exemplaires
+     restés dans le sac (jamais posés) ne comptent pas, ils sont hors-jeu
+     depuis la mise en place.
    - 🌀 Vide Spatial : il ne reste plus qu'1 seul Téléporteur ACTIF (son
      bloc Vert, posé à la BASE de la pile, pas encore collecté — un
      bâtiment Téléporteur totalement détruit = Téléporteur consommé).
@@ -319,10 +319,12 @@ function countColorOnBoard(color, board, looseBlocks) {
 }
 
 // Pénurie : la partie s'arrête quand une couleur tombe à ce nombre de blocs
-// ou moins sur le plateau (bâtiments + sol). 0 = la règle du livret V36.2.
-// Nikola, 21/09 : la Pénurie ne mord presque jamais (masquée par la dernière
-// Manche) — seuil à 2 en cours de mesure, NON adopté.
-const SEUIL_PENURIE = 0;
+// ou moins sur le plateau (bâtiments + sol). Nikola, 24/09 : passé de 0 à 1.
+// À 0 elle ne mordait presque jamais (13-18 % des parties, masquée par la
+// dernière Manche) ; à 1 elle devient la fin principale (48-62 %) pour une
+// demi-Manche de moins en moyenne. Le seuil 2 finissait des parties dès la
+// Manche 1 (mesure du 21-22/09, 200 parties par cas).
+const SEUIL_PENURIE = 1;
 
 function countActiveTeleporters(board) {
   return Object.values(board).filter((b) => b.isTeleporter && b.blocks.length > 0).length;
@@ -347,8 +349,9 @@ function checkEndGameTriggers(board, looseBlocks, apocalypseThreshold, mancheNum
     reasons.push(`🏙️ Apocalypse Urbaine : ${standing} bâtiment(s) encore debout (seuil ${apocalypseThreshold}).`);
   }
   COULEURS.forEach((color) => {
-    if (countColorOnBoard(color, board, looseBlocks) <= SEUIL_PENURIE) {
-      reasons.push(`📦 Pénurie : plus aucun bloc ${color} disponible sur le plateau.`);
+    const reste = countColorOnBoard(color, board, looseBlocks);
+    if (reste <= SEUIL_PENURIE) {
+      reasons.push(`📦 Pénurie : ${reste === 0 ? "plus aucun bloc" : `plus qu'${reste} bloc`} ${color} sur le plateau.`);
     }
   });
   const activeTeleporters = countActiveTeleporters(board);

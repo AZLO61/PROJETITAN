@@ -309,7 +309,7 @@ function EcranFin({ onOuvrirRegles }) {
       <Plaque accent={T.stop} style={{ marginBottom: 12 }}>
         <div style={{ ...prose(T.dim, T.micro), lineHeight: 1.6 }}>
           🏁 Dernière Manche atteinte · 🏙️ trop peu de bâtiments encore debout ·
-          📦 une couleur a entièrement disparu du plateau · 🌀 il ne reste qu&apos;un
+          📦 il ne reste qu&apos;un bloc d&apos;une couleur sur le plateau ·🌀 il ne reste qu&apos;un
           Téléporteur actif.
         </div>
       </Plaque>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  checkEndGameTriggers,
   projectInDirection,
   resolveBoingBoing,
   resolveTeteEnAvant,
@@ -115,3 +116,29 @@ describe("Boing Boing : chaque Adrénaline allonge la projection d'une case", ()
     expect(arrivee(2)).toBe("E9");
   });
 });
+
+/* Pénurie au seuil 1 (Nikola, 24/09) : la partie s'arrête quand il ne reste
+   plus qu'UN bloc d'une couleur sur le plateau, bâtiments et sol compris. */
+describe("Pénurie — seuil 1", () => {
+  const penurie = (board, sol = {}) =>
+    checkEndGameTriggers(board, sol, 0).filter((r) => r.includes("Pénurie"));
+  const plateau = (rouges) => ({
+    A1: { blocks: ["bleu", "bleu", "rose", "rose"] },
+    A2: { blocks: ["orange", "orange", ...Array(rouges).fill("rouge")] },
+    B1: { blocks: ["vert"], isTeleporter: true },
+    B2: { blocks: ["vert"], isTeleporter: true },
+  });
+
+  it("deux blocs d'une couleur : la partie continue", () => {
+    expect(penurie(plateau(2))).toEqual([]);
+  });
+
+  it("un seul bloc restant : Pénurie", () => {
+    expect(penurie(plateau(1))).toHaveLength(1);
+  });
+
+  it("le bloc au sol compte : 1 en bâtiment + 1 au sol = pas de Pénurie", () => {
+    expect(penurie(plateau(1), { C3: ["rouge"] })).toEqual([]);
+  });
+});
+
