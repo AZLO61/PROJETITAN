@@ -50,6 +50,20 @@ const {
    simulateur, qui en appliquait donc d'autres : le contrôleur et les
    campagnes exécutent maintenant le même code. */
 
+/* Adopte le brouillon d'un invité : seules les clés PROPRES de la table dont
+   la valeur est une vraie fonction sont posées (cf. l'étape « siege » plus
+   bas pour l'attaque par `__proto__`). Exporté pour que le test
+   `intention-hostile` éprouve CE code, pas une copie. Rend les clés posées. */
+export function adopterContexte(table, contexte) {
+  const posees = [];
+  Object.entries(contexte || {}).forEach(([cle, valeur]) => {
+    if (!Object.prototype.hasOwnProperty.call(table, cle)) return;
+    const poser = table[cle];
+    if (typeof poser === "function") { poser(valeur); posees.push(cle); }
+  });
+  return posees;
+}
+
 export function useBoardGeneratorController() {
   const [nbJoueurs, setNbJoueurs] = useState(4);
   const [setupDone, setSetupDone] = useState(false);
@@ -2088,11 +2102,7 @@ export function useBoardGeneratorController() {
          préparait pour son propre tour (audit du 24/09, C15). */
       const aux = portee === "actif" || portee === "soi" || portee === "placement";
       try {
-        if (aux) Object.entries(intention.contexte || {}).forEach(([cle, valeur]) => {
-          if (!Object.prototype.hasOwnProperty.call(CONTEXTE_DISTANT, cle)) return;
-          const poser = CONTEXTE_DISTANT[cle];
-          if (typeof poser === "function") poser(valeur);
-        });
+        if (aux) adopterContexte(CONTEXTE_DISTANT, intention.contexte);
       } catch (e) {
         console.error("[distant] contexte refusé", e);
         rejeter("réglages non reconnus.");

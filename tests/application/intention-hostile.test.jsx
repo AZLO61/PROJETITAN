@@ -23,6 +23,7 @@
    React, qu'il faudrait monter avec un vrai réseau pour rejouer la scène.
 ============================================================ */
 import { describe, expect, it } from "vitest";
+import { adopterContexte } from "../../src/application/useBoardGeneratorController.jsx";
 
 describe("La clé piégée qui rendait l'attaque possible", () => {
   it("`__proto__` venu de JSON est bien une propriété PROPRE, pas le prototype", () => {
@@ -45,19 +46,10 @@ describe("La clé piégée qui rendait l'attaque possible", () => {
 });
 
 describe("La garde qui la referme", () => {
-  /* Exactement la forme retenue dans le contrôleur : propriété PROPRE, ET
-     valeur qui est une vraie fonction. Chacun des deux verrous suffirait ici ;
-     les deux ensemble tiennent aussi le jour où la table gagnerait une valeur
-     non-fonction. */
-  const appliquer = (table, contexte) => {
-    const appliquees = [];
-    Object.entries(contexte || {}).forEach(([cle, valeur]) => {
-      if (!Object.prototype.hasOwnProperty.call(table, cle)) return;
-      const poser = table[cle];
-      if (typeof poser === "function") { poser(valeur); appliquees.push(cle); }
-    });
-    return appliquees;
-  };
+  /* La garde du contrôleur elle-même (`adopterContexte`), plus une copie
+     (audit des tests du 2026-09-24) : propriété PROPRE, ET valeur qui est une
+     vraie fonction. Si la garde réelle change, ces tests le voient. */
+  const appliquer = adopterContexte;
 
   const tableExemple = () => {
     const vus = {};

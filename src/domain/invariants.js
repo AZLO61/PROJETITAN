@@ -150,14 +150,17 @@ export function verifierInvariants(etat, contexte = "") {
   for (const pile of Object.values(looseBlocks)) for (const b of pile || []) if (isSocleMarker(b)) socles++;
   const depart = departs.get(titans);
   if (!depart) {
-    departs.set(titans, { blocs, avecSocle: Object.keys(board).filter((k) => board[k]?.blocks?.length > 0) });
+    /* Les Socles DÉJÀ au sol comptent dans le relevé : dans le contrôleur, le
+       tableau des Titans est recopié à chaque coup, et le relevé se refait en
+       pleine partie, bâtiments déjà rasés compris. */
+    departs.set(titans, { blocs, socles, avecSocle: Object.keys(board).filter((k) => board[k]?.blocks?.length > 0) });
   } else {
     if (blocs !== depart.blocs) {
       signaler("blocs-perdus-ou-crees", `${depart.blocs} blocs au départ, ${blocs} en jeu`);
     }
     const rases = depart.avecSocle.filter((k) => !(board[k]?.blocks?.length > 0)).length;
-    if (socles !== rases) {
-      signaler("socles-perdus-ou-crees", `${rases} bâtiment(s) rasé(s), ${socles} Socle(s) en jeu`);
+    if (socles !== depart.socles + rases) {
+      signaler("socles-perdus-ou-crees", `${depart.socles} Socle(s) au relevé + ${rases} bâtiment(s) rasé(s) depuis, ${socles} en jeu`);
     }
   }
 
